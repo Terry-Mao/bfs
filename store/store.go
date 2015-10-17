@@ -8,17 +8,17 @@ import (
 	"strings"
 )
 
-// store get all volume meta data from a index file. index contains volume id,
+// Store get all volume meta data from a index file. index contains volume id,
 // volume file path, the super block file index ends with ".idx" if the super
 // block is /bfs/super_block_1, then the super block index file is
 // /bfs/super_block_1.idx.
 //
 // volume index file format:
-// /----------------------------\
+//  ----------------------------
 // | super_block_path,volume_id |
 // | /bfs/super_block_1,1\r     |
 // | /bfs/super_block_2,2\r     |
-// \----------------------------/
+//  ----------------------------
 
 const (
 	volumeIndexComma   = ","
@@ -117,6 +117,7 @@ func (s *Store) parseIndex() (volumeIds []int32, files []string, err error) {
 	return
 }
 
+// saveIndex save volumes index info to disk.
 func (s *Store) saveIndex() {
 	// sort the volumes map
 	// write file

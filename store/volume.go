@@ -19,8 +19,12 @@ type Volume struct {
 	indexer *Indexer
 	needles map[int64]NeedleCache
 	// TODO status
+	readOnly bool
+	bulk     bool
+	compress bool
 }
 
+// NewVolume new a volume and init it.
 func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 	v = &Volume{}
 	v.Id = id
@@ -37,6 +41,7 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 	return
 }
 
+// init recovery super block from index or super block.
 func (v *Volume) init() (err error) {
 	var offset uint32
 	// recovery from index
@@ -51,6 +56,7 @@ func (v *Volume) init() (err error) {
 	return
 }
 
+// Get get a needle by key.
 func (v *Volume) Get(key, cookie int64) (data []byte, err error) {
 	var (
 		ok          bool
@@ -83,6 +89,7 @@ func (v *Volume) Get(key, cookie int64) (data []byte, err error) {
 	}
 	v.rlock.Unlock()
 	// parse needle
+	// TODO repair
 	if err = ParseNeedleHeader(buf[:NeedleHeaderSize], needle); err != nil {
 		return
 	}
@@ -111,19 +118,17 @@ func (v *Volume) Get(key, cookie int64) (data []byte, err error) {
 	return
 }
 
+// Add add a new needle, if key exists append to super block, then update
+// needle cache offset to new offset.
 func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 	var (
-		ok     bool
-		size   int32
-		offset uint32
+		ok              bool
+		size, osize     int32
+		offset, ooffset uint32
+		needleCache     NeedleCache
 	)
 	v.wlock.Lock()
-	// TODO update needlecache
-	if _, ok = v.needles[key]; ok {
-		err = ErrNeedleAlreadyExists
-		v.wlock.Unlock()
-		return
-	}
+	needleCache, ok = v.needles[key]
 	// superblock append
 	if size, offset, err = v.block.Append(key, cookie, data); err != nil {
 		v.wlock.Unlock()
@@ -137,6 +142,11 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 		return
 	}
 	v.wlock.Unlock()
+	if ok {
+		osize, ooffset = needleCache.Value()
+		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
+		// TODO set old file delete?
+	}
 	return
 }
 
@@ -148,6 +158,8 @@ func (v *Volume) MultiAdd(keys, cookies []int64, data [][]byte) (offsets []int64
 	return
 }
 
+// Del logical delete a needle, update disk needle flag and memory needle
+// cache offset to zero.
 func (v *Volume) Del(key int64) (err error) {
 	var (
 		ok          bool
@@ -170,7 +182,10 @@ func (v *Volume) Del(key int64) (err error) {
 	return
 }
 
+// Compress copy the super block to another space, and drop the "delete"
+// needle, so this can reduce disk space cost.
 func (v *Volume) Compress() (err error) {
+	// TODO
 	// scan the whole super block, skip the del needle.
 	// copy to dst
 	// update needles

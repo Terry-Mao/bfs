@@ -7,6 +7,26 @@ import (
 	"os"
 )
 
+// Index for fast recovery super block needle cache in memory, index is async
+// append the needle meta data.
+//
+// index file format:
+//  ---------------
+// | super   block |
+//  ---------------
+// |     needle    |		   ----------------
+// |     needle    |          |  key (int64)   |
+// |     needle    | ---->    |  offset (uint) |
+// |     needle    |          |  size (int32)  |
+// |     ......    |           ----------------
+// |     ......    |             int bigendian
+//
+// field     | explanation
+// --------------------------------------------------
+// key       | needle key (photo id)
+// offset    | needle offset in super block (aligned)
+// size      | needle data size
+
 const (
 	// signal command
 	signalNum   = 1
@@ -23,6 +43,7 @@ const (
 	indexSizeOffset   = indexOffsetOffset + indexOffsetSize
 )
 
+// Indexer used for fast recovery super block needle cache.
 type Indexer struct {
 	f       *os.File
 	bw      *bufio.Writer
@@ -31,6 +52,7 @@ type Indexer struct {
 	ring    *Ring
 }
 
+// Index index data.
 type Index struct {
 	Key    int64
 	Offset uint32
@@ -47,6 +69,7 @@ Size:           %d
 	`, i.Key, i.Offset, i.Size)
 }
 
+// NewIndexer new a indexer for async merge index data to disk.
 func NewIndexer(file string, chNum, buf int) (indexer *Indexer, err error) {
 	indexer = &Indexer{}
 	indexer.signal = make(chan int, signalNum)
@@ -60,10 +83,12 @@ func NewIndexer(file string, chNum, buf int) (indexer *Indexer, err error) {
 	return
 }
 
+// Ready wake up indexer write goroutine if ready.
 func (i *Indexer) Ready() bool {
 	return (<-i.signal) == indexReady
 }
 
+// Signal wake up indexer write goroutine merge index data.
 func (i *Indexer) Signal() {
 	// just ignore duplication signal
 	select {
@@ -71,6 +96,8 @@ func (i *Indexer) Signal() {
 	default:
 	}
 }
+
+// TODO MultiAdd
 
 // Add add a index data to ring, signal bg goroutine merge to disk.
 func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
@@ -124,6 +151,8 @@ func (i *Indexer) write() {
 	return
 }
 
+// Recovery recovery needle cache meta data in memory, index file  will stop
+// at the right parse data offset.
 func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err error) {
 	var (
 		rd     *bufio.Reader
@@ -162,7 +191,7 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		noffset = ix.Offset + NeedleOffset(int(ix.Size))
 	}
 	// reset b.w offset, discard left space which can't parse to a needle
-	log.V(1).Infof("index seek offset: %d\n", offset)
+	log.V(1).Infof("right index seek offset: %d\n", offset)
 	if _, err = i.f.Seek(offset, os.SEEK_SET); err != nil {
 		return
 	}

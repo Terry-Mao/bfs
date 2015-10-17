@@ -50,20 +50,24 @@ var (
 	NeedleStatusDelBytes = []byte{NeedleStatusDel}
 )
 
+// NeedleCache needle meta data in memory.
 // high 32bit = Offset
 // medium 16bit noused
 // low 16bit = size
 type NeedleCache int64
 
+// NewNeedleCache new a needle cache.
 func NewNeedleCache(size int32, offset uint32) NeedleCache {
 	return NeedleCache(int64(offset)<<needleOffsetBit + int64(size))
 }
 
+// Value get needle meta data.
 func (n NeedleCache) Value() (size int32, offset uint32) {
 	size, offset = int32(int64(n)&needleSizeMask), uint32(n>>needleOffsetBit)
 	return
 }
 
+// Needle
 type Needle struct {
 	HeaderMagic []byte
 	Cookie      int64
@@ -129,6 +133,7 @@ func FillNeedleBuf(key, cookie int64, data, buf []byte) (size int32) {
 	return
 }
 
+// ParseNeedleHeader parse a needle header part.
 func ParseNeedleHeader(buf []byte, n *Needle) (err error) {
 	var bn int
 	n.HeaderMagic = buf[:needleMagicSize]
