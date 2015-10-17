@@ -2,8 +2,8 @@ package main
 
 import (
 	"bufio"
+	log "github.com/golang/glog"
 	"io"
-	"log"
 	"os"
 )
 
@@ -100,7 +100,7 @@ func (b *SuperBlock) Dump() (err error) {
 		if _, err = rd.Discard(n.DataSize); err != nil {
 			break
 		}
-		log.Print(n.String())
+		log.Info(n.String())
 	}
 	if err == io.EOF {
 		err = nil
@@ -117,7 +117,7 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 		noffset uint32
 		n       = &Needle{}
 	)
-	log.Printf("start super block recovery, offset: %d\n", offset)
+	log.Infof("start super block recovery, offset: %d\n", offset)
 	if _, err = b.r.Seek(offset, os.SEEK_SET); err != nil {
 		return
 	}
@@ -143,7 +143,7 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 		if _, err = rd.Discard(n.DataSize); err != nil {
 			break
 		}
-		log.Print(n.String())
+		log.Info(n.String())
 		size = int32(NeedleHeaderSize + n.DataSize)
 		noffset += NeedleOffset(int(size))
 		needles[n.Key] = NewNeedleCache(size, noffset)

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	log "github.com/golang/glog"
 	"sync"
 )
 
@@ -41,9 +41,9 @@ func (v *Volume) init() (err error) {
 	var offset uint32
 	// recovery from index
 	if offset, err = v.indexer.Recovery(v.needles); err != nil {
-		log.Printf("%v\n", err)
+		log.Infof("%v\n", err)
 	}
-	log.Printf("recovery offset: %d\n", offset)
+	log.Infof("recovery offset: %d\n", offset)
 	// recovery from super block
 	if err = v.block.Recovery(v.needles, v.indexer, BlockOffset(offset)); err != nil {
 		return
@@ -60,7 +60,7 @@ func (v *Volume) Get(key, cookie int64) (data []byte, err error) {
 		needleCache NeedleCache
 		needle      = &Needle{}
 	)
-	log.Printf("get needle, key: %d, cookie: %d", key, cookie)
+	log.Infof("get needle, key: %d, cookie: %d", key, cookie)
 	// get a needle
 	v.wlock.Lock()
 	if needleCache, ok = v.needles[key]; !ok {
@@ -89,7 +89,7 @@ func (v *Volume) Get(key, cookie int64) (data []byte, err error) {
 	if err = ParseNeedleData(buf[NeedleHeaderSize:], needle); err != nil {
 		return
 	}
-	log.Printf("%v\n", needle)
+	log.Infof("%v\n", needle)
 	// check needle
 	if needle.Key != key {
 		err = ErrNeedleKeyNotMatch

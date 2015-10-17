@@ -1,7 +1,8 @@
 package main
 
 import (
-	"log"
+	"flag"
+	log "github.com/golang/glog"
 )
 
 func main() {
@@ -11,18 +12,26 @@ func main() {
 		d   []byte
 		err error
 	)
-	s = NewStore()
-	if v, err = s.AddVolume(1, "/tmp/hijohn_1", "/tmp/hijohn_1.idx"); err != nil {
+	flag.Parse()
+	defer log.Flush()
+	log.Infof("bfs store[%s] start", Ver)
+	if s, err = NewStore("/tmp/hijohn.idx"); err != nil {
+		log.Errorf("store init error(%v)", err)
 		return
 	}
+	//if v, err = s.AddVolume(2, "/tmp/hijohn_2", "/tmp/hijohn_2.idx"); err != nil {
+	//	return
+	//}
 	//v.Add(1, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
 	//v.Add(2, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
 	//v.Add(3, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
 	//v.Add(4, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
-	//v.block.Dump()
+	//// v.block.Dump()
+	if v = s.Volume(1); v == nil {
+		log.Errorf("volume_id: %d not exist", 1)
+	}
 	if d, err = v.Get(3, 1); err != nil {
-		log.Printf("%v\n", err)
 		return
 	}
-	log.Printf("%s\n", d)
+	log.V(1).Infof("get: %s", d)
 }

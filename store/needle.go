@@ -3,8 +3,8 @@ package main
 import (
 	"bytes"
 	"fmt"
+	log "github.com/golang/glog"
 	"hash/crc32"
-	"log"
 )
 
 const (
@@ -180,7 +180,7 @@ func ParseNeedleData(buf []byte, n *Needle) (err error) {
 	}
 	bn += needleChecksumSize
 	n.Padding = buf[bn : bn+n.PaddingSize]
-	log.Printf("padding: %d, %v vs %v\n", n.PaddingSize, n.Padding, needlePadding[n.PaddingSize])
+	log.Infof("padding: %d, %v vs %v\n", n.PaddingSize, n.Padding, needlePadding[n.PaddingSize])
 	if bytes.Compare(n.Padding, needlePadding[n.PaddingSize]) != 0 {
 		err = ErrNeedlePaddingNotMatch
 		return

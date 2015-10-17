@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
+	log "github.com/golang/glog"
 	"os"
 )
 
@@ -155,14 +155,14 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		if _, err = rd.Discard(indexSize); err != nil {
 			break
 		}
-		log.Print(ix.String())
+		log.Info(ix.String())
 		offset += int64(indexSize)
 		needles[ix.Key] = NewNeedleCache(ix.Size, ix.Offset)
 		// save this for recovery supper block
 		noffset = ix.Offset + NeedleOffset(int(ix.Size))
 	}
 	// reset b.w offset, discard left space which can't parse to a needle
-	log.Printf("seek offset: %d\n", offset)
+	log.V(1).Infof("index seek offset: %d\n", offset)
 	if _, err = i.f.Seek(offset, os.SEEK_SET); err != nil {
 		return
 	}
