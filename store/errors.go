@@ -20,9 +20,6 @@ var (
 	// ring
 	ErrRingEmpty = errors.New("ring buffer empty")
 	ErrRingFull  = errors.New("ring buffer full")
-	// index
-	ErrIndexOffset = errors.New("index offset error")
-	ErrIndexSize   = errors.New("index size error")
 	// store
 	ErrStoreVolumeIndex = errors.New("store volume index error")
 )

@@ -29,6 +29,7 @@ func main() {
 	//// v.block.Dump()
 	if v = s.Volume(1); v == nil {
 		log.Errorf("volume_id: %d not exist", 1)
+		return
 	}
 	if d, err = v.Get(3, 1); err != nil {
 		return

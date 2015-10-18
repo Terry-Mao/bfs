@@ -7,7 +7,40 @@ import (
 	"hash/crc32"
 )
 
+// Needle stored int super block, aligned to 8bytes.
+//
+// needle file format:
+//  ---------------
+// | super   block |
+//  ---------------
+// |     needle    |		   ----------------
+// |     needle    |          |  magic (int32) |
+// |     needle    | ---->    |  cookie (int32)|
+// |     needle    |          |  key (int64)   |
+// |     needle    |          |  flag (byte)   |
+// |     needle    |          |  size (int32)  |
+// |     needle    |          |  data (bytes)  |
+// |     needle    |          |  magic (int32) |
+// |     needle    |          | checksum(int32)|
+// |     needle    |          | padding (bytes)|
+// |     ......    |           ----------------
+// |     ......    |             int bigendian
+//
+// field     | explanation
+// ---------------------------------------------------------
+// magic     | header magic number used for checksum
+// cookie    | random number to mitigate brute force lookups
+// key       | 64bit photo id
+// flag      | signifies deleted status
+// size      | data size
+// data      | the actual photo data
+// magic     | footer magic number used for checksum
+// checksum  | used to check integrity
+// padding   | total needle size is aligned to 8 bytes
+
 const (
+	NeedleMaxSize = 10 * 1024 * 1024 // 10MB
+
 	needleCookieSize = 8
 	needleKeySize    = 8
 	needleFlagSize   = 1
@@ -18,7 +51,6 @@ const (
 	NeedleFlagOffset   = needleCookieSize + needleKeySize
 	needleChecksumSize = 4
 	NeedleFooterSize   = needleMagicSize + needleChecksumSize // +padding
-	NeedleMaxSize      = 10 * 1024 * 1024
 	needleSizeMask     = int64(0xFF)
 	needleOffsetBit    = 32
 	// our offset is aligned with padding size(8)
@@ -67,7 +99,7 @@ func (n NeedleCache) Value() (size int32, offset uint32) {
 	return
 }
 
-// Needle
+// Needle is a photo data stored in disk.
 type Needle struct {
 	HeaderMagic []byte
 	Cookie      int64

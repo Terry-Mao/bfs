@@ -15,7 +15,7 @@ const (
 type SuperBlock struct {
 	r        *os.File
 	w        *os.File
-	file     string
+	File     string
 	offset   uint32
 	MagicNum int32
 	Version  byte
@@ -23,9 +23,10 @@ type SuperBlock struct {
 	// TODO stat
 }
 
+// NewSuperBlock new a super block struct.
 func NewSuperBlock(file string) (s *SuperBlock, err error) {
 	s = &SuperBlock{}
-	s.file = file
+	s.File = file
 	if s.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
 		return
 	}
@@ -44,6 +45,18 @@ func (b *SuperBlock) Append(key, cookie int64, data []byte) (size int32, offset 
 	}
 	offset = b.offset
 	b.offset += NeedleOffset(n)
+	// TODO append N times call flush then clean the os page cache
+	// page cache no used here...
+	// after upload a photo, we cache in user-level.
+	return
+}
+
+// Repair repair the specified offset needle without update current offset.
+func (b *SuperBlock) Repair(key, cookie int64, offset uint32, data []byte) (err error) {
+	var size = FillNeedleBuf(key, cookie, data, b.buf[:])
+	if _, err = b.w.WriteAt(b.buf[:size], BlockOffset(offset)); err != nil {
+		return
+	}
 	// TODO append N times call flush then clean the os page cache
 	// page cache no used here...
 	// after upload a photo, we cache in user-level.
@@ -119,6 +132,7 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 	)
 	log.Infof("start super block recovery, offset: %d\n", offset)
 	if _, err = b.r.Seek(offset, os.SEEK_SET); err != nil {
+		log.Errorf("block: %s seek error(%v)", b.File)
 		return
 	}
 	rd = bufio.NewReaderSize(b.r, NeedleMaxSize)
@@ -154,7 +168,22 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 	}
 	// reset b.w offset, discard left space which can't parse to a needle
 	if _, err = b.w.Seek(BlockOffset(noffset), os.SEEK_SET); err != nil {
+		log.Errorf("reset block: %s offset error(%v)", b.File, err)
 		return
+	}
+	return
+}
+
+func (b *SuperBlock) Close() {
+	var err error
+	if err = b.w.Sync(); err != nil {
+		log.Errorf("super block file sync error(%v)", err)
+	}
+	if err = b.w.Close(); err != nil {
+		log.Errorf("super block file close error(%v)", err)
+	}
+	if err = b.r.Close(); err != nil {
+		log.Errorf("super block file close error(%v)", err)
 	}
 	return
 }
