@@ -18,9 +18,7 @@ type Volume struct {
 	indexer *Indexer
 	needles map[int64]NeedleCache
 	// TODO status
-	readOnly bool
-	bulk     bool
-	compress bool
+	ReadOnly bool
 
 	// flag used in store control
 	Store int
@@ -50,20 +48,20 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 func (v *Volume) init() (err error) {
 	var offset uint32
 	// recovery from index
-	log.Info("try recovery from index: %s", v.indexer.File)
+	log.Infof("try recovery from index: %s", v.indexer.File)
 	if offset, err = v.indexer.Recovery(v.needles); err != nil {
 		log.Info("recovery from index: %s error(%v)", v.indexer.File, err)
 		return
 	}
-	log.Info("finish recovery from index: %s", v.indexer.File)
+	log.Infof("finish recovery from index: %s", v.indexer.File)
 	log.V(1).Infof("recovery offset: %d\n", offset)
-	log.Info("try recovery from indexsuper block %s", v.block.File)
+	log.Infof("try recovery from indexsuper block %s", v.block.File)
 	// recovery from super block
 	if err = v.block.Recovery(v.needles, v.indexer, BlockOffset(offset)); err != nil {
-		log.Info("recovery from super block: %s error(%v)", v.block.File, err)
+		log.Errorf("recovery from super block: %s error(%v)", v.block.File, err)
 		return
 	}
-	log.Info("finish recovery from block: %s", v.indexer.File)
+	log.Infof("finish recovery from block: %s", v.indexer.File)
 	return
 }
 
@@ -77,23 +75,23 @@ func (v *Volume) Get(key, cookie int64) (data []byte, err error) {
 		needleCache NeedleCache
 		needle      = &Needle{}
 	)
-	log.Infof("get needle, key: %d, cookie: %d", key, cookie)
 	// get a needle
 	v.lock.Lock()
 	needleCache, ok = v.needles[key]
 	v.lock.Unlock()
 	if !ok {
-		err = ErrNeedleNotExists
+		err = ErrNoNeedle
 		return
 	}
-	size, offset = needleCache.Value()
+	offset, size = needleCache.Value()
+	log.V(1).Infof("get needle, key: %d, cookie: %d, offset: %d, size: %d", key, cookie, BlockOffset(offset), size)
 	if offset == NeedleCacheDelOffset {
 		err = ErrNeedleDeleted
 		return
 	}
 	buf = make([]byte, size)
 	// WARN atomic read superblock, pread syscall is atomic
-	if err = v.block.Read(offset, buf); err != nil {
+	if err = v.block.Get(offset, buf); err != nil {
 		return
 	}
 	// parse needle
@@ -107,17 +105,17 @@ func (v *Volume) Get(key, cookie int64) (data []byte, err error) {
 	log.Infof("%v\n", needle)
 	// check needle
 	if needle.Key != key {
-		err = ErrNeedleKeyNotMatch
+		err = ErrNeedleKey
 		return
 	}
 	if needle.Cookie != cookie {
-		err = ErrNeedleCookieNotMatch
+		err = ErrNeedleCookie
 		return
 	}
 	// if delete
 	if needle.Flag == NeedleStatusDel {
 		v.lock.Lock()
-		v.needles[key] = NewNeedleCache(size, NeedleCacheDelOffset)
+		v.needles[key] = NewNeedleCache(NeedleCacheDelOffset, size)
 		v.lock.Unlock()
 		err = ErrNeedleDeleted
 		return
@@ -137,32 +135,25 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 	)
 	v.lock.Lock()
 	needleCache, ok = v.needles[key]
-	// superblock append
-	if size, offset, err = v.block.Append(key, cookie, data); err != nil {
+	// add needle
+	if offset, size, err = v.block.Add(key, cookie, data); err != nil {
 		v.lock.Unlock()
 		return
 	}
-	// update needle map
-	v.needles[key] = NewNeedleCache(size, offset)
+	log.V(1).Infof("add needle, offset: %d, size: %d", offset, size)
 	// update index
 	if err = v.indexer.Add(key, offset, size); err != nil {
 		v.lock.Unlock()
 		return
 	}
-	v.lock.Unlock()
+	v.needles[key] = NewNeedleCache(offset, size)
 	if ok {
-		osize, ooffset = needleCache.Value()
+		ooffset, osize = needleCache.Value()
 		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
-		// TODO set old file delete?
+		// set old file delete?
+		v.block.Del(ooffset)
 	}
-	return
-}
-
-func (v *Volume) MultiAdd(keys, cookies []int64, data [][]byte) (offsets []int64, err error) {
-	// TODO
-	// superblock append
-	// update needle map
-	// aync update index
+	v.lock.Unlock()
 	return
 }
 
@@ -179,10 +170,10 @@ func (v *Volume) Del(key int64) (err error) {
 	v.lock.Lock()
 	needleCache, ok = v.needles[key]
 	if !ok {
-		err = ErrNeedleNotExists
+		err = ErrNoNeedle
 	} else {
-		size, offset = needleCache.Value()
-		v.needles[key] = NewNeedleCache(size, NeedleCacheDelOffset)
+		offset, size = needleCache.Value()
+		v.needles[key] = NewNeedleCache(NeedleCacheDelOffset, size)
 		// update super block flag
 		v.block.Del(offset)
 	}
@@ -192,15 +183,10 @@ func (v *Volume) Del(key int64) (err error) {
 
 // Compress copy the super block to another space, and drop the "delete"
 // needle, so this can reduce disk space cost.
-func (v *Volume) Compress(bfile, ifile string) (err error) {
-	// TODO
-	// scan the whole super block, skip the del needle.
-	// copy to bfile
-	// write index
-	// update needles
-	// update needles pointer
-	// update block
-	// update indexer
+func (v *Volume) Compress(nv *Volume) (err error) {
+	// scan the whole super block, skip the del,error needle.
+	// update pointer
+	err = v.block.Compress(nv)
 	return
 }
 

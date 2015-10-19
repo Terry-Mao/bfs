@@ -49,8 +49,8 @@ type Store struct {
 func NewStore(file string) (s *Store, err error) {
 	var (
 		i         int
-		volume    *Volume
 		files     []string
+		volume    *Volume
 		volumeIds []int32
 	)
 	s = &Store{}
@@ -69,7 +69,7 @@ func NewStore(file string) (s *Store, err error) {
 	}
 	for i = 0; i < len(files); i++ {
 		log.Infof("start recovery volume_id: %d, file: %s", volumeIds[i], files[i])
-		if volume, err = s.AddVolume(volumeIds[i], files[i], files[i]+".idx"); err != nil {
+		if volume, err = NewVolume(volumeIds[i], files[i], files[i]+".idx"); err != nil {
 			log.Warningf("fail recovery volume_id: %d, file: %s", volumeIds[i], files[i])
 			continue
 		}
@@ -189,5 +189,26 @@ func (s *Store) Bulk(id int32, bfile, ifile string) (err error) {
 	}
 	v.Store = storeUpdate
 	s.ch <- v
+	return
+}
+
+func (s *Store) Compress(id int32, bfile, ifile string) (err error) {
+	var (
+		nv *Volume
+		v  = s.Volume(id)
+	)
+	if v == nil {
+		err = ErrVolumeNotExist
+		return
+	}
+	// TODO check exists
+	if nv, err = NewVolume(id, bfile, ifile); err != nil {
+		return
+	}
+	if err = v.Compress(nv); err != nil {
+		return
+	}
+	v.Store = storeUpdate
+	s.ch <- nv
 	return
 }

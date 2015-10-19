@@ -41,6 +41,7 @@ import (
 const (
 	NeedleMaxSize = 10 * 1024 * 1024 // 10MB
 
+	NeedleIntBuf     = 8
 	needleCookieSize = 8
 	needleKeySize    = 8
 	needleFlagSize   = 1
@@ -89,12 +90,12 @@ var (
 type NeedleCache int64
 
 // NewNeedleCache new a needle cache.
-func NewNeedleCache(size int32, offset uint32) NeedleCache {
+func NewNeedleCache(offset uint32, size int32) NeedleCache {
 	return NeedleCache(int64(offset)<<needleOffsetBit + int64(size))
 }
 
 // Value get needle meta data.
-func (n NeedleCache) Value() (size int32, offset uint32) {
+func (n NeedleCache) Value() (offset uint32, size int32) {
 	size, offset = int32(int64(n)&needleSizeMask), uint32(n>>needleOffsetBit)
 	return
 }
@@ -132,8 +133,7 @@ Padding:        %v
 		n.Checksum, n.Padding)
 }
 
-// FillNeedleBuf fill needle buf with photo.
-func FillNeedleBuf(key, cookie int64, data, buf []byte) (size int32) {
+func FillNeedle(key, cookie int64, data, buf []byte) (size int32) {
 	var (
 		n        int
 		padding  int32
@@ -142,34 +142,43 @@ func FillNeedleBuf(key, cookie int64, data, buf []byte) (size int32) {
 	size = int32(NeedleHeaderSize + len(data) + NeedleFooterSize)
 	padding = NeedlePaddingSize - (size % NeedlePaddingSize)
 	size += padding
-	// header
+	// --- header ---
+	// magic
 	copy(buf[:needleMagicSize], needleHeaderMagic)
 	n += needleMagicSize
+	// cookie
 	BigEndian.PutInt64(buf[n:], cookie)
 	n += needleCookieSize
+	// key
 	BigEndian.PutInt64(buf[n:], key)
 	n += needleKeySize
+	// flag
 	buf[n] = NeedleStatusOK
 	n += needleFlagSize
+	// size
 	BigEndian.PutInt32(buf[n:], int32(len(data)))
 	n += needleSizeSize
 	// data
 	copy(buf[n:], data)
 	n += len(data)
-	// footer
+	// --- footer ---
+	// magic
 	copy(buf[n:], needleFooterMagic)
 	n += needleMagicSize
+	// checksum
 	BigEndian.PutUint32(buf[n:], checksum)
 	n += needleChecksumSize
+	// padding
 	copy(buf[n:], needlePadding[padding])
 	return
+
 }
 
 // ParseNeedleHeader parse a needle header part.
 func ParseNeedleHeader(buf []byte, n *Needle) (err error) {
 	var bn int
 	n.HeaderMagic = buf[:needleMagicSize]
-	if bytes.Compare(n.HeaderMagic, needleHeaderMagic) != 0 {
+	if !bytes.Equal(n.HeaderMagic, needleHeaderMagic) {
 		err = ErrNeedleHeaderMagic
 		return
 	}
@@ -204,7 +213,7 @@ func ParseNeedleData(buf []byte, n *Needle) (err error) {
 	n.Data = buf[:n.Size]
 	bn += n.Size
 	n.FooterMagic = buf[bn : bn+needleMagicSize]
-	if bytes.Compare(n.FooterMagic, needleFooterMagic) != 0 {
+	if !bytes.Equal(n.FooterMagic, needleFooterMagic) {
 		err = ErrNeedleFooterMagic
 		return
 	}
@@ -218,8 +227,8 @@ func ParseNeedleData(buf []byte, n *Needle) (err error) {
 	bn += needleChecksumSize
 	n.Padding = buf[bn : bn+n.PaddingSize]
 	log.Infof("padding: %d, %v vs %v\n", n.PaddingSize, n.Padding, needlePadding[n.PaddingSize])
-	if bytes.Compare(n.Padding, needlePadding[n.PaddingSize]) != 0 {
-		err = ErrNeedlePaddingNotMatch
+	if !bytes.Equal(n.Padding, needlePadding[n.PaddingSize]) {
+		err = ErrNeedlePadding
 		return
 	}
 	return

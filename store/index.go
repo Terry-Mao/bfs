@@ -58,6 +58,7 @@ type Indexer struct {
 	signal  chan int
 	ring    *Ring
 	File    string
+	buf     [indexSize]byte
 	Status  IndexerStatus
 }
 
@@ -108,10 +109,25 @@ func (i *Indexer) Signal() {
 	}
 }
 
-// TODO MultiAdd
+// fill file indexer buf with index data.
+func (i *Indexer) fill(key int64, offset uint32, size int32) {
+	BigEndian.PutInt64(i.buf[:], key)
+	BigEndian.PutUint32(i.buf[indexOffsetOffset:], offset)
+	BigEndian.PutInt32(i.buf[indexSizeOffset:], size)
+	return
+}
 
-// Add add a index data to ring, signal bg goroutine merge to disk.
+// Add append a index data to ring, signal bg goroutine merge to disk.
 func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
+	if err = i.Append(key, offset, size); err != nil {
+		return
+	}
+	i.Signal()
+	return
+}
+
+// Append append a index data to ring.
+func (i *Indexer) Append(key int64, offset uint32, size int32) (err error) {
 	var (
 		index *Index
 	)
@@ -123,7 +139,26 @@ func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 	index.Offset = offset
 	index.Size = size
 	i.ring.SetAdv()
-	i.Signal()
+	return
+}
+
+// Write append index needle to disk, WARN can't concurrency with write.
+func (i *Indexer) Write(key int64, offset uint32, size int32) (err error) {
+	i.fill(key, offset, size)
+	if _, err = i.bw.Write(i.buf[:]); err != nil {
+		return
+	}
+	return
+}
+
+// Flush flush writer buffer.
+func (i *Indexer) Flush() (err error) {
+	if err = i.bw.Flush(); err != nil {
+		return
+	}
+	// TODO append N times call flush then clean the os page cache
+	// page cache no used here...
+	// after upload a photo, we cache in user-level.
 	return
 }
 
@@ -132,10 +167,10 @@ func (i *Indexer) write() {
 	var (
 		err   error
 		index *Index
-		buf   = make([]byte, indexSize)
 	)
 	for {
 		if !i.Ready() {
+			log.Info("signal index write goroutine exit")
 			break
 		}
 		for {
@@ -144,23 +179,16 @@ func (i *Indexer) write() {
 				break
 			}
 			// merge index buffer
-			BigEndian.PutInt64(buf, index.Key)
-			BigEndian.PutUint32(buf[indexOffsetOffset:], index.Offset)
-			BigEndian.PutInt32(buf[indexSizeOffset:], index.Size)
-			if _, err = i.bw.Write(buf); err != nil {
+			i.fill(index.Key, index.Offset, index.Size)
+			if _, err = i.bw.Write(i.buf[:]); err != nil {
 				log.Errorf("index write error(%v)", err)
 				break
 			}
 			i.ring.GetAdv()
 		}
-		// write to disk
-		if err = i.bw.Flush(); err != nil {
-			log.Errorf("index buffer flush error(%v)", err)
+		if err = i.Flush(); err != nil {
 			break
 		}
-		// TODO append N times call flush then clean the os page cache
-		// page cache no used here...
-		// after upload a photo, we cache in user-level.
 	}
 	if err = i.f.Sync(); err != nil {
 		log.Errorf("indexer file sync error(%v)", err)
@@ -195,10 +223,6 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		ix.Offset = BigEndian.Uint32(data[indexOffsetOffset:])
 		ix.Size = BigEndian.Int32(data[indexSizeOffset:])
 		// check
-		if ix.Offset%NeedlePaddingSize != 0 {
-			log.Warningf("index parse offset: %d % %d != 0", ix.Offset, NeedlePaddingSize)
-			break
-		}
 		if ix.Size > NeedleMaxSize {
 			log.Warningf("index parse size: %d > %d", ix.Size, NeedleMaxSize)
 			break
@@ -208,7 +232,7 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		}
 		log.V(1).Info(ix.String())
 		offset += int64(indexSize)
-		needles[ix.Key] = NewNeedleCache(ix.Size, ix.Offset)
+		needles[ix.Key] = NewNeedleCache(ix.Offset, ix.Size)
 		// save this for recovery supper block
 		noffset = ix.Offset + NeedleOffset(int(ix.Size))
 	}
