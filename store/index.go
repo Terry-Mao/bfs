@@ -80,10 +80,10 @@ Size:           %d
 }
 
 // NewIndexer new a indexer for async merge index data to disk.
-func NewIndexer(file string, chNum, buf int) (indexer *Indexer, err error) {
+func NewIndexer(file string, ring, buf int) (indexer *Indexer, err error) {
 	indexer = &Indexer{}
 	indexer.signal = make(chan int, signalNum)
-	indexer.ring = NewRing(chNum)
+	indexer.ring = NewRing(ring)
 	indexer.File = file
 	if indexer.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDWR|os.O_CREATE, 0664) error(%v)", file, err)
@@ -162,39 +162,51 @@ func (i *Indexer) Flush() (err error) {
 	return
 }
 
+func (i *Indexer) merge() (err error) {
+	var index *Index
+	for {
+		if index, err = i.ring.Get(); err != nil {
+			err = nil
+			break
+		}
+		// merge index buffer
+		i.fill(index.Key, index.Offset, index.Size)
+		if _, err = i.bw.Write(i.buf[:]); err != nil {
+			log.Errorf("index write error(%v)", err)
+			break
+		}
+		i.ring.GetAdv()
+	}
+	return
+}
+
 // write merge from ring index data, then write to disk.
 func (i *Indexer) write() {
 	var (
-		err   error
-		index *Index
+		err error
 	)
+	log.Infof("start index: %s merge write goroutine", i.File)
 	for {
 		if !i.Ready() {
 			log.Info("signal index write goroutine exit")
 			break
 		}
-		for {
-			if index, err = i.ring.Get(); err != nil {
-				// must be empty error
-				break
-			}
-			// merge index buffer
-			i.fill(index.Key, index.Offset, index.Size)
-			if _, err = i.bw.Write(i.buf[:]); err != nil {
-				log.Errorf("index write error(%v)", err)
-				break
-			}
-			i.ring.GetAdv()
+		if err = i.merge(); err != nil {
+			log.Errorf("index merge error(%v)", err)
+			break
 		}
 		if err = i.Flush(); err != nil {
 			break
 		}
 	}
+	if err = i.merge(); err != nil {
+		log.Errorf("index merge error(%v)", err)
+	}
 	if err = i.f.Sync(); err != nil {
-		log.Errorf("indexer file sync error(%v)", err)
+		log.Errorf("index file sync error(%v)", err)
 	}
 	if err = i.f.Close(); err != nil {
-		log.Errorf("indexer file close error(%v)", err)
+		log.Errorf("index file close error(%v)", err)
 	}
 	log.Errorf("index write goroutine exit")
 	return
@@ -222,6 +234,7 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		ix.Key = BigEndian.Int64(data)
 		ix.Offset = BigEndian.Uint32(data[indexOffsetOffset:])
 		ix.Size = BigEndian.Int32(data[indexSizeOffset:])
+		log.V(1).Info(ix.String())
 		// check
 		if ix.Size > NeedleMaxSize {
 			log.Warningf("index parse size: %d > %d", ix.Size, NeedleMaxSize)
