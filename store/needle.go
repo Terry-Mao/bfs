@@ -49,7 +49,7 @@ const (
 	needleMagicSize  = 4
 	NeedleHeaderSize = needleMagicSize + needleCookieSize + needleKeySize +
 		needleFlagSize + needleSizeSize
-	NeedleFlagOffset   = needleCookieSize + needleKeySize
+	NeedleFlagOffset   = needleMagicSize + needleCookieSize + needleKeySize
 	needleChecksumSize = 4
 	NeedleFooterSize   = needleMagicSize + needleChecksumSize // +padding
 	needleSizeMask     = int64(0xFF)

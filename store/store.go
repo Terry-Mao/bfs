@@ -201,13 +201,19 @@ func (s *Store) Compress(id int32, bfile, ifile string) (err error) {
 		err = ErrVolumeNotExist
 		return
 	}
-	// TODO check exists
 	if nv, err = NewVolume(id, bfile, ifile); err != nil {
 		return
 	}
+	// set volume compress flag
+	// copy to new volume
 	if err = v.Compress(nv); err != nil {
 		return
 	}
+	// v.Lock
+	// copy new add needles
+	// set del flag
+	// set readonly?
+	// v.Unlock
 	v.Store = storeUpdate
 	s.ch <- nv
 	return

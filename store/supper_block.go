@@ -44,9 +44,6 @@ type SuperBlock struct {
 
 // NewSuperBlock new a super block struct.
 func NewSuperBlock(file string) (b *SuperBlock, err error) {
-	var (
-		stat os.FileInfo
-	)
 	b = &SuperBlock{}
 	b.File = file
 	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
@@ -55,15 +52,34 @@ func NewSuperBlock(file string) (b *SuperBlock, err error) {
 	}
 	if b.r, err = os.OpenFile(file, os.O_RDONLY, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDONLY, 0664) error(%v)", file, err)
-		return
+		goto failed
 	}
+	if err = b.init(); err != nil {
+		log.Errorf("block: %s init error(%v)", file, err)
+		goto failed
+	}
+	b.bw = bufio.NewWriterSize(b.w, NeedleMaxSize)
+	return
+failed:
+	if b.w != nil {
+		b.w.Close()
+	}
+	if b.r != nil {
+		b.r.Close()
+	}
+	return
+}
+
+// init block file, add/parse meta info
+func (b *SuperBlock) init() (err error) {
+	var (
+		stat os.FileInfo
+	)
 	if stat, err = b.r.Stat(); err != nil {
-		log.Errorf("block: %s Stat() error(%v)", file, err)
 		return
 	}
 	// new file
 	if stat.Size() == 0 {
-		log.Infof("new super block file: %s", file)
 		// magic
 		if _, err = b.w.Write(superBlockMagic); err != nil {
 			return
@@ -93,11 +109,9 @@ func NewSuperBlock(file string) (b *SuperBlock, err error) {
 			return
 		}
 		if _, err = b.w.Seek(superBlockHeaderOffset, os.SEEK_SET); err != nil {
-			log.Errorf("block: %s Seek() error(%v)", file, err)
 			return
 		}
 	}
-	b.bw = bufio.NewWriterSize(b.w, NeedleMaxSize)
 	b.offset = NeedleOffset(superBlockHeaderOffset)
 	return
 }
@@ -120,20 +134,6 @@ func (b *SuperBlock) Add(key, cookie int64, data []byte) (offset uint32, size in
 	return
 }
 
-// Seek seek the block needle offset.
-func (b *SuperBlock) Seek(offset uint32) (err error) {
-	if _, err = b.r.Seek(BlockOffset(offset), os.SEEK_SET); err != nil {
-		return
-	}
-	return
-}
-
-// Begin begin a multi append block needles, offset used for block reset offset.
-func (b *SuperBlock) Begin() (offset uint32) {
-	offset = b.offset
-	return
-}
-
 // Flush flush writer buffer.
 func (b *SuperBlock) Flush() (err error) {
 	if err = b.bw.Flush(); err != nil {
@@ -145,16 +145,7 @@ func (b *SuperBlock) Flush() (err error) {
 	return
 }
 
-// Rollback rollback the offset to the orginal.
-func (b *SuperBlock) Rollback(offset uint32) (err error) {
-	if err = b.Seek(offset); err != nil {
-		return
-	}
-	b.offset = offset
-	return
-}
-
-// Append start add photos to the block, must called after start a transaction.
+// Write start add photos to the block, must called after start a transaction.
 func (b *SuperBlock) Write(key, cookie int64, data []byte) (offset uint32, size int32, err error) {
 	var n int
 	if size = FillNeedle(key, cookie, data, b.buf[:]); err != nil {
@@ -164,14 +155,13 @@ func (b *SuperBlock) Write(key, cookie int64, data []byte) (offset uint32, size 
 		return
 	}
 	offset = b.offset
-	// WARN b.offset is dirty data, if all the transaction succeed Commit
-	// else rollback reset the b.offset.
+	// WARN b.offset is dirty data here
 	b.offset += NeedleOffset(n)
 	return
 }
 
 // Repair repair the specified offset needle without update current offset.
-func (b *SuperBlock) Repair(key, cookie int64, offset uint32, data []byte) (err error) {
+func (b *SuperBlock) Repair(key, cookie int64, data []byte, offset uint32) (err error) {
 	var size int32
 	size = FillNeedle(key, cookie, data, b.buf[:])
 	if _, err = b.w.WriteAt(b.buf[:size], BlockOffset(offset)); err != nil {
@@ -310,16 +300,17 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 // Compress compress the orig block, copy to disk dst block.
 func (b *SuperBlock) Compress(v *Volume) (err error) {
 	var (
-		size   int32
-		offset uint32
-		data   []byte
-		r      *os.File
-		rd     *bufio.Reader
-		n      = &Needle{}
+		data []byte
+		r    *os.File
+		rd   *bufio.Reader
+		n    = &Needle{}
 	)
 	log.Infof("start super block compress: %s\n", b.File)
 	if r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDONLY, 0664) error(%v)", b.File, err)
+		return
+	}
+	if _, err = r.Seek(superBlockHeaderOffset, os.SEEK_SET); err != nil {
 		return
 	}
 	rd = bufio.NewReaderSize(r, NeedleMaxSize)
@@ -349,21 +340,15 @@ func (b *SuperBlock) Compress(v *Volume) (err error) {
 		if n.Flag == NeedleStatusDel {
 			continue
 		}
-		if offset, size, err = v.block.Write(n.Key, n.Cookie, n.Data); err != nil {
+		// multi append
+		if err = v.Write(n.Key, n.Cookie, n.Data); err != nil {
 			break
 		}
-		if err = v.indexer.Write(n.Key, offset, size); err != nil {
-			break
-		}
-		v.needles[n.Key] = NewNeedleCache(offset, size)
 	}
 	if err != io.EOF {
 		return
 	}
-	if err = v.block.Flush(); err != nil {
-		return
-	}
-	if err = v.indexer.Flush(); err != nil {
+	if err = v.Flush(); err != nil {
 		return
 	}
 	if err = r.Close(); err != nil {

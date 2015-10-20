@@ -151,9 +151,49 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 		ooffset, osize = needleCache.Value()
 		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
 		// set old file delete?
-		v.block.Del(ooffset)
+		// v.block.Del(ooffset)
 	}
 	v.lock.Unlock()
+	return
+}
+
+// Write add a new needle, if key exists append to super block, then update
+// needle cache offset to new offset, Write is used for multi add needles.
+func (v *Volume) Write(key, cookie int64, data []byte) (err error) {
+	var (
+		ok              bool
+		size, osize     int32
+		offset, ooffset uint32
+		needleCache     NeedleCache
+	)
+	needleCache, ok = v.needles[key]
+	// add needle
+	if offset, size, err = v.block.Write(key, cookie, data); err != nil {
+		return
+	}
+	log.V(1).Infof("add needle, offset: %d, size: %d", offset, size)
+	// update index
+	if err = v.indexer.Write(key, offset, size); err != nil {
+		return
+	}
+	v.needles[key] = NewNeedleCache(offset, size)
+	if ok {
+		ooffset, osize = needleCache.Value()
+		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
+		// set old file delete?
+		// v.block.Del(ooffset)
+	}
+	return
+}
+
+// Flush flush block&indexer buffer to disk, this is used for multi add needles.
+func (v *Volume) Flush() (err error) {
+	if err = v.block.Flush(); err != nil {
+		return
+	}
+	if err = v.indexer.Flush(); err != nil {
+		return
+	}
 	return
 }
 

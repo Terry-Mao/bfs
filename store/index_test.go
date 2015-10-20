@@ -15,26 +15,30 @@ func TestIndex(t *testing.T) {
 		needles = make(map[int64]NeedleCache)
 		noffset uint32
 	)
+	defer os.Remove(file)
 	i, err := NewIndexer(file, 10, 1024)
 	if err != nil {
 		t.Errorf("NewIndexer(\"%s\", 10, 1024)", file)
 		goto failed
 	}
-	defer os.Remove(file)
 	// test add
+	t.Log("Test Add(1)")
 	if err = i.Add(1, 1, 8); err != nil {
 		t.Errorf("i.Add() error(%v)", err)
 		goto failed
 	}
+	t.Log("Test Add(2)")
 	if err = i.Add(2, 2, 8); err != nil {
 		t.Errorf("i.Add() error(%v)", err)
 		goto failed
 	}
 	// test append
+	t.Log("Test Append(5)")
 	if err = i.Append(5, 3, 8); err != nil {
 		t.Errorf("i.Add() error(%v)", err)
 		goto failed
 	}
+	t.Log("Test Append(6)")
 	if err = i.Append(6, 4, 8); err != nil {
 		t.Errorf("i.Add() error(%v)", err)
 		goto failed
@@ -42,6 +46,7 @@ func TestIndex(t *testing.T) {
 	i.Signal()
 	time.Sleep(1 * time.Second)
 	// test recovery
+	t.Log("Test Recovery()")
 	if noffset, err = i.Recovery(needles); err != nil {
 		t.Errorf("i.Recovery() error(%v)", err)
 		goto failed
@@ -68,6 +73,7 @@ func TestIndex(t *testing.T) {
 		goto failed
 	}
 	// test write
+	t.Log("Test Recovery() wrong data")
 	if err = i.Write(10, 5, 8); err != nil {
 		t.Error("i.Write() error(%v)", err)
 		goto failed
@@ -155,7 +161,9 @@ func TestIndex1(t *testing.T) {
 		goto failed
 	}
 failed:
-	i.Close()
+	if i != nil {
+		i.Close()
+	}
 	if err != nil {
 		t.FailNow()
 	}
