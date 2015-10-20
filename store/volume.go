@@ -89,10 +89,9 @@ func (v *Volume) init() (err error) {
 }
 
 // Get get a needle by key.
-func (v *Volume) Get(key, cookie int64) (data []byte, err error) {
+func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	var (
 		ok          bool
-		buf         []byte
 		size        int32
 		offset      uint32
 		needleCache NeedleCache
@@ -112,8 +111,6 @@ func (v *Volume) Get(key, cookie int64) (data []byte, err error) {
 		err = ErrNeedleDeleted
 		return
 	}
-	// TODO reuse buf
-	buf = make([]byte, size)
 	// WARN atomic read superblock, pread syscall is atomic
 	if err = v.block.Get(offset, buf); err != nil {
 		return

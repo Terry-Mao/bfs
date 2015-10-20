@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -57,19 +58,23 @@ func TestIndex(t *testing.T) {
 		goto failed
 	}
 	if o, s := needles[1].Value(); o != 1 && s != 8 {
-		t.Error("needle.Value(1) not match")
+		err = fmt.Errorf("needle.Value(1) not match")
+		t.Error(err)
 		goto failed
 	}
 	if o, s := needles[2].Value(); o != 2 && s != 8 {
-		t.Error("needle.Value(1) not match")
+		err = fmt.Errorf("needle.Value(2) not match")
+		t.Error(err)
 		goto failed
 	}
 	if o, s := needles[5].Value(); o != 3 && s != 8 {
-		t.Error("needle.Value(1) not match")
+		err = fmt.Errorf("needle.Value(5) not match")
+		t.Error(err)
 		goto failed
 	}
 	if o, s := needles[6].Value(); o != 4 && s != 8 {
-		t.Error("needle.Value(1) not match")
+		err = fmt.Errorf("needle.Value(6) not match")
+		t.Error(err)
 		goto failed
 	}
 	// test write

@@ -35,7 +35,7 @@ func main() {
 	//		log.Errorf("v.Add() error(%v)", err)
 	//		return
 	//	}
-	if d, err = v.Get(1, 1); err != nil {
+	if d, err = v.Get(1, 1, make([]byte, 100)); err != nil {
 		log.Errorf("v.Get() error(%v)", err)
 		return
 	}
