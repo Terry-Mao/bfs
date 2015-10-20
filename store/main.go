@@ -3,14 +3,15 @@ package main
 import (
 	"flag"
 	log "github.com/golang/glog"
+	"time"
 )
 
 func main() {
 	var (
-		s   *Store
-		v   *Volume
-		d   []byte
-		err error
+		s      *Store
+		v      *Volume
+		d, buf []byte
+		err    error
 	)
 	flag.Parse()
 	defer log.Flush()
@@ -26,16 +27,19 @@ func main() {
 	//v.Add(2, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
 	//v.Add(3, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
 	//v.Add(4, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
-	//// v.block.Dump()
-	if v = s.Volume(1); v == nil {
-		log.Errorf("volume_id: %d not exist", 1)
+	// v.block.Dump()
+	time.Sleep(1 * time.Second)
+	if v = s.Volume(2); v == nil {
+		log.Errorf("volume_id: %d not exist", 2)
 		return
 	}
 	//	if err = v.Add(1, 1, []byte("test")); err != nil {
 	//		log.Errorf("v.Add() error(%v)", err)
 	//		return
 	//	}
-	if d, err = v.Get(1, 1, make([]byte, 100)); err != nil {
+	buf = s.Buffer()
+	defer s.Free(buf)
+	if d, err = v.Get(1, 1, buf); err != nil {
 		log.Errorf("v.Get() error(%v)", err)
 		return
 	}

@@ -234,7 +234,6 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		ix.Key = BigEndian.Int64(data)
 		ix.Offset = BigEndian.Uint32(data[indexOffsetOffset:])
 		ix.Size = BigEndian.Int32(data[indexSizeOffset:])
-		log.V(1).Info(ix.String())
 		// check
 		if ix.Size > NeedleMaxSize {
 			log.Warningf("index parse size: %d > %d", ix.Size, NeedleMaxSize)

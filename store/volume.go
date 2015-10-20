@@ -112,7 +112,7 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		return
 	}
 	// WARN atomic read superblock, pread syscall is atomic
-	if err = v.block.Get(offset, buf); err != nil {
+	if err = v.block.Get(offset, buf[:size]); err != nil {
 		return
 	}
 	// parse needle

@@ -39,7 +39,7 @@ import (
 // padding   | total needle size is aligned to 8 bytes
 
 const (
-	NeedleMaxSize = 10 * 1024 * 1024 // 10MB
+	NeedleMaxSize = 5 * 1024 * 1024 // 5MB
 
 	NeedleIntBuf     = 8
 	needleCookieSize = 8

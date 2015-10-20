@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Store get all volume meta data from a index file. index contains volume id,
@@ -38,11 +39,12 @@ const (
 
 // Store save volumes.
 type Store struct {
-	VolumeId int32
-	volumes  map[int32]*Volume
-	file     string
 	f        *os.File
 	ch       chan *Volume
+	file     string
+	bp       *sync.Pool
+	VolumeId int32
+	volumes  map[int32]*Volume
 }
 
 // NewStore
@@ -76,6 +78,7 @@ func NewStore(file string) (s *Store, err error) {
 		s.volumes[volumeIds[i]] = volume
 		log.Infof("finish recovery volume_id: %d, file: %s", volumeIds[i], files[i])
 	}
+	s.bp = &sync.Pool{}
 	log.Infof("current max volume id: %d", s.VolumeId)
 	return
 }
@@ -219,4 +222,17 @@ func (s *Store) Compress(id int32, bfile, ifile string) (err error) {
 	return
 }
 
-// TODO NeedleBuf
+// Buffer get a buffer from sync.Pool
+func (s *Store) Buffer() (d []byte) {
+	var v interface{}
+	if v = s.bp.Get(); v != nil {
+		d = v.([]byte)
+		return
+	}
+	return make([]byte, NeedleMaxSize)
+}
+
+// Free free the buffer to pool.
+func (s *Store) Free(d []byte) {
+	s.bp.Put(d)
+}
