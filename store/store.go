@@ -218,3 +218,5 @@ func (s *Store) Compress(id int32, bfile, ifile string) (err error) {
 	s.ch <- nv
 	return
 }
+
+// TODO NeedleBuf

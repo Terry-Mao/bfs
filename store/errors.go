@@ -28,4 +28,5 @@ var (
 	ErrStoreVolumeIndex = errors.New("store volume index error")
 	// volume
 	ErrVolumeNotExist = errors.New("volume not exist")
+	ErrVolumeDel      = errors.New("volume del error, may volume del goroutine crash or io too slow")
 )

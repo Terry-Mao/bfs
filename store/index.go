@@ -95,8 +95,8 @@ func NewIndexer(file string, ring, buf int) (indexer *Indexer, err error) {
 	return
 }
 
-// Ready wake up indexer write goroutine if ready.
-func (i *Indexer) Ready() bool {
+// ready wake up indexer write goroutine if ready.
+func (i *Indexer) ready() bool {
 	return (<-i.signal) == indexReady
 }
 
@@ -187,7 +187,7 @@ func (i *Indexer) write() {
 	)
 	log.Infof("start index: %s merge write goroutine", i.File)
 	for {
-		if !i.Ready() {
+		if !i.ready() {
 			log.Info("signal index write goroutine exit")
 			break
 		}

@@ -2,13 +2,33 @@ package main
 
 import (
 	log "github.com/golang/glog"
+	"sort"
 	"sync"
+	"time"
 )
 
 const (
+	// signal command
+	volumeFinish = 0
+	volumeReady  = 1
 	// 32GB, offset aligned 8 bytes, 4GB * 8
-	VolumeMaxSize = 4 * 1024 * 1024 * 1024 * 8
+	VolumeMaxSize  = 4 * 1024 * 1024 * 1024 * 8
+	volumeDelChNum = 10240
+	// del
+	volumeDelMax = 50
 )
+
+var (
+	// del
+	volumeDelTime = 1 * time.Minute
+)
+
+// IntSlice attaches the methods of Interface to []int, sorting in increasing order.
+type Uint32Slice []uint32
+
+func (p Uint32Slice) Len() int           { return len(p) }
+func (p Uint32Slice) Less(i, j int) bool { return p[i] < p[j] }
+func (p Uint32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 // An store server contains many logic Volume, volume is superblock container.
 type Volume struct {
@@ -17,6 +37,7 @@ type Volume struct {
 	block   *SuperBlock
 	indexer *Indexer
 	needles map[int64]NeedleCache
+	signal  chan uint32
 	// TODO status
 	ReadOnly bool
 
@@ -41,6 +62,8 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 		log.Errorf("volume: %d init error(%v)", id, err)
 		return
 	}
+	v.signal = make(chan uint32, volumeDelChNum)
+	go v.del()
 	return
 }
 
@@ -89,6 +112,7 @@ func (v *Volume) Get(key, cookie int64) (data []byte, err error) {
 		err = ErrNeedleDeleted
 		return
 	}
+	// TODO reuse buf
 	buf = make([]byte, size)
 	// WARN atomic read superblock, pread syscall is atomic
 	if err = v.block.Get(offset, buf); err != nil {
@@ -147,13 +171,13 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 		return
 	}
 	v.needles[key] = NewNeedleCache(offset, size)
+	v.lock.Unlock()
 	if ok {
 		ooffset, osize = needleCache.Value()
 		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
-		// set old file delete?
-		// v.block.Del(ooffset)
+		// set old file delete
+		err = v.asyncDel(offset)
 	}
-	v.lock.Unlock()
 	return
 }
 
@@ -180,8 +204,8 @@ func (v *Volume) Write(key, cookie int64, data []byte) (err error) {
 	if ok {
 		ooffset, osize = needleCache.Value()
 		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
-		// set old file delete?
-		// v.block.Del(ooffset)
+		// set old file delete
+		err = v.asyncDel(offset)
 	}
 	return
 }
@@ -193,6 +217,18 @@ func (v *Volume) Flush() (err error) {
 	}
 	if err = v.indexer.Flush(); err != nil {
 		return
+	}
+	return
+}
+
+// asyncDel signal the godel goroutine aync merge all offsets and del.
+func (v *Volume) asyncDel(offset uint32) (err error) {
+	// async update super block flag
+	select {
+	case v.signal <- offset:
+	default:
+		log.Errorf("volume: %d send signal failed", v.Id)
+		err = ErrVolumeDel
 	}
 	return
 }
@@ -209,15 +245,54 @@ func (v *Volume) Del(key int64) (err error) {
 	// get a needle, update the offset to del
 	v.lock.Lock()
 	needleCache, ok = v.needles[key]
-	if !ok {
-		err = ErrNoNeedle
-	} else {
+	if ok {
 		offset, size = needleCache.Value()
 		v.needles[key] = NewNeedleCache(NeedleCacheDelOffset, size)
-		// update super block flag
-		v.block.Del(offset)
 	}
 	v.lock.Unlock()
+	if ok {
+		// async update super block flag
+		err = v.asyncDel(offset)
+	} else {
+		err = ErrNoNeedle
+	}
+	return
+}
+
+// del merge from volume signal, then update block needles flag.
+func (v *Volume) del() {
+	var (
+		err     error
+		offset  uint32
+		offsets []uint32
+	)
+	log.Infof("start volume: %d del goroutine", v.Id)
+	for {
+		select {
+		case offset = <-v.signal:
+			if offset == volumeFinish {
+				log.Info("signal volume del goroutine exit")
+				break
+			}
+			// merge
+			if offsets = append(offsets, offset); len(offsets) < volumeDelMax {
+				continue
+			}
+		case <-time.After(volumeDelTime):
+		}
+		if len(offsets) == 0 {
+			continue
+		}
+		// sort let the disk seqence write
+		sort.Sort(Uint32Slice(offsets))
+		for _, offset = range offsets {
+			if err = v.block.Del(offset); err != nil {
+				break
+			}
+		}
+		offsets = offsets[:0]
+	}
+	log.Errorf("volume del goroutine exit")
 	return
 }
 
@@ -230,10 +305,12 @@ func (v *Volume) Compress(nv *Volume) (err error) {
 	return
 }
 
+// Close close the volume.
 func (v *Volume) Close() {
 	v.lock.Lock()
 	v.block.Close()
 	v.indexer.Close()
+	close(v.signal)
 	v.lock.Unlock()
 	return
 }
