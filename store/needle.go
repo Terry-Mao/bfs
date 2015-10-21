@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	log "github.com/golang/glog"
 	"hash/crc32"
 )
 
@@ -115,67 +114,8 @@ type Needle struct {
 	DataSize    int
 }
 
-func (n *Needle) String() string {
-	return fmt.Sprintf(`
------------------------------
-HeaderMagic:    %v
-Cookie:         %d
-Key:            %d
-Flag:           %d
-Size:           %d
-
-Data:           %v
-FooterMagic:    %v
-Checksum:       %d
-Padding:        %v
------------------------------
-	`, n.HeaderMagic, n.Cookie, n.Key, n.Flag, n.Size, n.Data, n.FooterMagic,
-		n.Checksum, n.Padding)
-}
-
-func FillNeedle(key, cookie int64, data, buf []byte) (size int32) {
-	var (
-		n        int
-		padding  int32
-		checksum = crc32.Update(0, crc32Table, data)
-	)
-	size = int32(NeedleHeaderSize + len(data) + NeedleFooterSize)
-	padding = NeedlePaddingSize - (size % NeedlePaddingSize)
-	size += padding
-	// --- header ---
-	// magic
-	copy(buf[:needleMagicSize], needleHeaderMagic)
-	n += needleMagicSize
-	// cookie
-	BigEndian.PutInt64(buf[n:], cookie)
-	n += needleCookieSize
-	// key
-	BigEndian.PutInt64(buf[n:], key)
-	n += needleKeySize
-	// flag
-	buf[n] = NeedleStatusOK
-	n += needleFlagSize
-	// size
-	BigEndian.PutInt32(buf[n:], int32(len(data)))
-	n += needleSizeSize
-	// data
-	copy(buf[n:], data)
-	n += len(data)
-	// --- footer ---
-	// magic
-	copy(buf[n:], needleFooterMagic)
-	n += needleMagicSize
-	// checksum
-	BigEndian.PutUint32(buf[n:], checksum)
-	n += needleChecksumSize
-	// padding
-	copy(buf[n:], needlePadding[padding])
-	return
-
-}
-
 // ParseNeedleHeader parse a needle header part.
-func ParseNeedleHeader(buf []byte, n *Needle) (err error) {
+func (n *Needle) ParseHeader(buf []byte) (err error) {
 	var bn int
 	n.HeaderMagic = buf[:needleMagicSize]
 	if !bytes.Equal(n.HeaderMagic, needleHeaderMagic) {
@@ -205,7 +145,7 @@ func ParseNeedleHeader(buf []byte, n *Needle) (err error) {
 }
 
 // ParseNeedleData parse a needle data part.
-func ParseNeedleData(buf []byte, n *Needle) (err error) {
+func (n *Needle) ParseData(buf []byte) (err error) {
 	var (
 		bn       int32
 		checksum uint32
@@ -226,7 +166,6 @@ func ParseNeedleData(buf []byte, n *Needle) (err error) {
 	}
 	bn += needleChecksumSize
 	n.Padding = buf[bn : bn+n.PaddingSize]
-	log.Infof("padding: %d, %v vs %v\n", n.PaddingSize, n.Padding, needlePadding[n.PaddingSize])
 	if !bytes.Equal(n.Padding, needlePadding[n.PaddingSize]) {
 		err = ErrNeedlePadding
 		return
@@ -234,12 +173,70 @@ func ParseNeedleData(buf []byte, n *Needle) (err error) {
 	return
 }
 
-// BlockOffset get super block file offset.
-func BlockOffset(offset uint32) int64 {
-	return int64(offset) * NeedlePaddingSize
+// FillNeedle fill needle buffer.
+func FillNeedle(padding, size int32, key, cookie int64, data, buf []byte) {
+	var (
+		n        int
+		checksum = crc32.Update(0, crc32Table, data)
+	)
+	// --- header ---
+	// magic
+	copy(buf[:needleMagicSize], needleHeaderMagic)
+	n += needleMagicSize
+	// cookie
+	BigEndian.PutInt64(buf[n:], cookie)
+	n += needleCookieSize
+	// key
+	BigEndian.PutInt64(buf[n:], key)
+	n += needleKeySize
+	// flag
+	buf[n] = NeedleStatusOK
+	n += needleFlagSize
+	// size
+	BigEndian.PutInt32(buf[n:], size)
+	n += needleSizeSize
+	// data
+	copy(buf[n:], data)
+	n += len(data)
+	// --- footer ---
+	// magic
+	copy(buf[n:], needleFooterMagic)
+	n += needleMagicSize
+	// checksum
+	BigEndian.PutUint32(buf[n:], checksum)
+	n += needleChecksumSize
+	// padding
+	copy(buf[n:], needlePadding[padding])
+	return
+}
+
+func (n *Needle) String() string {
+	return fmt.Sprintf(`
+-----------------------------
+HeaderMagic:    %v
+Cookie:         %d
+Key:            %d
+Flag:           %d
+Size:           %d
+
+Data:           %v
+FooterMagic:    %v
+Checksum:       %d
+Padding:        %v
+-----------------------------
+	`, n.HeaderMagic, n.Cookie, n.Key, n.Flag, n.Size, n.Data, n.FooterMagic,
+		n.Checksum, n.Padding)
+}
+
+// NeedleSize get a needle size by data.
+func NeedleSize(ds int32) (padding, size int32) {
+	size = int32(NeedleHeaderSize + ds + NeedleFooterSize)
+	padding = NeedlePaddingSize - (size % NeedlePaddingSize)
+	size += padding
+	return
 }
 
 // NeedleOffset get needle aligned offset.
-func NeedleOffset(n int) uint32 {
-	return uint32(n) / NeedlePaddingSize
+func NeedleOffset(size int32) uint32 {
+	return uint32(size / NeedlePaddingSize)
 }

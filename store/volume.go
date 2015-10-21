@@ -9,10 +9,8 @@ import (
 
 const (
 	// signal command
-	volumeFinish = 0
-	volumeReady  = 1
-	// 32GB, offset aligned 8 bytes, 4GB * 8
-	VolumeMaxSize  = 4 * 1024 * 1024 * 1024 * 8
+	volumeFinish   = 0
+	volumeReady    = 1
 	volumeDelChNum = 10240
 	// del
 	volumeDelMax = 50
@@ -117,10 +115,10 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	}
 	// parse needle
 	// TODO repair
-	if err = ParseNeedleHeader(buf[:NeedleHeaderSize], needle); err != nil {
+	if err = needle.ParseHeader(buf[:NeedleHeaderSize]); err != nil {
 		return
 	}
-	if err = ParseNeedleData(buf[NeedleHeaderSize:], needle); err != nil {
+	if err = needle.ParseData(buf[NeedleHeaderSize:]); err != nil {
 		return
 	}
 	log.Infof("%v\n", needle)

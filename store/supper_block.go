@@ -20,8 +20,12 @@ const (
 	superBlockMagicOffset   = 0
 	superBlockVerOffset     = superBlockMagicOffset + superBlockVerSize
 	superBlockPaddingOffset = superBlockVerOffset + superBlockPaddingSize
-
+	// ver
 	superBlockVer1 = byte(1)
+	// limits
+	// 32GB, offset aligned 8 bytes, 4GB * 8
+	superBlockMaxSize   = 4 * 1024 * 1024 * 1024 * 8
+	superBlockMaxOffset = 4294967295
 )
 
 var (
@@ -118,19 +122,50 @@ func (b *SuperBlock) init() (err error) {
 
 // Add append a photo to the block.
 func (b *SuperBlock) Add(key, cookie int64, data []byte) (offset uint32, size int32, err error) {
-	var n int
-	if size = FillNeedle(key, cookie, data, b.buf[:]); err != nil {
+	var (
+		padding    int32
+		incrOffset uint32
+		dataSize   = int32(len(data))
+	)
+	padding, size = NeedleSize(dataSize)
+	incrOffset = NeedleOffset(size)
+	if superBlockMaxOffset-incrOffset < b.offset {
+		err = ErrSuperBlockNoSpace
 		return
 	}
-	if n, err = b.w.Write(b.buf[:size]); err != nil {
+	FillNeedle(padding, dataSize, key, cookie, data, b.buf[:])
+	if _, err = b.w.Write(b.buf[:size]); err != nil {
 		return
 	}
 	offset = b.offset
-	b.offset += NeedleOffset(n)
+	b.offset += incrOffset
 	// TODO append N times call flush then clean the os page cache
 	// page cache no used here...
 	// after upload a photo, we cache in user-level.
 	log.V(1).Infof("add a needle, cur offset: %d", b.offset)
+	return
+}
+
+// Write start add needles to the block, must called after start a transaction.
+func (b *SuperBlock) Write(key, cookie int64, data []byte) (offset uint32, size int32, err error) {
+	var (
+		padding    int32
+		incrOffset uint32
+		dataSize   = int32(len(data))
+	)
+	padding, size = NeedleSize(dataSize)
+	incrOffset = NeedleOffset(size)
+	if superBlockMaxOffset-incrOffset < b.offset {
+		err = ErrSuperBlockNoSpace
+		return
+	}
+	FillNeedle(padding, dataSize, key, cookie, data, b.buf[:])
+	if _, err = b.bw.Write(b.buf[:size]); err != nil {
+		return
+	}
+	offset = b.offset
+	// WARN b.offset is dirty data here
+	b.offset += incrOffset
 	return
 }
 
@@ -145,25 +180,15 @@ func (b *SuperBlock) Flush() (err error) {
 	return
 }
 
-// Write start add photos to the block, must called after start a transaction.
-func (b *SuperBlock) Write(key, cookie int64, data []byte) (offset uint32, size int32, err error) {
-	var n int
-	if size = FillNeedle(key, cookie, data, b.buf[:]); err != nil {
-		return
-	}
-	if n, err = b.bw.Write(b.buf[:size]); err != nil {
-		return
-	}
-	offset = b.offset
-	// WARN b.offset is dirty data here
-	b.offset += NeedleOffset(n)
-	return
-}
-
 // Repair repair the specified offset needle without update current offset.
 func (b *SuperBlock) Repair(key, cookie int64, data []byte, offset uint32) (err error) {
-	var size int32
-	size = FillNeedle(key, cookie, data, b.buf[:])
+	var (
+		size     int32
+		padding  int32
+		dataSize = int32(len(data))
+	)
+	padding, size = NeedleSize(dataSize)
+	FillNeedle(padding, dataSize, key, cookie, data, b.buf[:])
 	if _, err = b.w.WriteAt(b.buf[:size], BlockOffset(offset)); err != nil {
 		return
 	}
@@ -207,7 +232,7 @@ func (b *SuperBlock) Dump() (err error) {
 		if data, err = rd.Peek(NeedleHeaderSize); err != nil {
 			break
 		}
-		if err = ParseNeedleHeader(data, n); err != nil {
+		if err = n.ParseHeader(data); err != nil {
 			break
 		}
 		if _, err = rd.Discard(NeedleHeaderSize); err != nil {
@@ -217,7 +242,7 @@ func (b *SuperBlock) Dump() (err error) {
 		if data, err = rd.Peek(n.DataSize); err != nil {
 			break
 		}
-		if err = ParseNeedleData(data, n); err != nil {
+		if err = n.ParseData(data); err != nil {
 			break
 		}
 		if _, err = rd.Discard(n.DataSize); err != nil {
@@ -256,7 +281,7 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 		if data, err = rd.Peek(NeedleHeaderSize); err != nil {
 			break
 		}
-		if err = ParseNeedleHeader(data, n); err != nil {
+		if err = n.ParseHeader(data); err != nil {
 			break
 		}
 		if _, err = rd.Discard(NeedleHeaderSize); err != nil {
@@ -266,7 +291,7 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 		if data, err = rd.Peek(n.DataSize); err != nil {
 			break
 		}
-		if err = ParseNeedleData(data, n); err != nil {
+		if err = n.ParseData(data); err != nil {
 			break
 		}
 		if _, err = rd.Discard(n.DataSize); err != nil {
@@ -284,7 +309,7 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 		needles[n.Key] = nc
 		log.V(1).Infof("recovery needle: offset: %d, size: %d", noffset, size)
 		log.V(1).Info(n.String())
-		noffset += NeedleOffset(int(size))
+		noffset += NeedleOffset(size)
 	}
 	if err == io.EOF {
 		err = nil
@@ -319,7 +344,7 @@ func (b *SuperBlock) Compress(v *Volume) (err error) {
 		if data, err = rd.Peek(NeedleHeaderSize); err != nil {
 			break
 		}
-		if err = ParseNeedleHeader(data, n); err != nil {
+		if err = n.ParseHeader(data); err != nil {
 			break
 		}
 		if _, err = rd.Discard(NeedleHeaderSize); err != nil {
@@ -329,7 +354,7 @@ func (b *SuperBlock) Compress(v *Volume) (err error) {
 		if data, err = rd.Peek(n.DataSize); err != nil {
 			break
 		}
-		if err = ParseNeedleData(data, n); err != nil {
+		if err = n.ParseData(data); err != nil {
 			break
 		}
 		if _, err = rd.Discard(n.DataSize); err != nil {
@@ -372,4 +397,9 @@ func (b *SuperBlock) Close() {
 		log.Errorf("block: %s close error(%v)", b.File, err)
 	}
 	return
+}
+
+// BlockOffset get super block file offset.
+func BlockOffset(offset uint32) int64 {
+	return int64(offset) * NeedlePaddingSize
 }

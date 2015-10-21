@@ -69,6 +69,14 @@ type Index struct {
 	Size   int32
 }
 
+// parse parse buffer into indexer.
+func (i *Index) parse(buf []byte) {
+	i.Key = BigEndian.Int64(buf)
+	i.Offset = BigEndian.Uint32(buf[indexOffsetOffset:])
+	i.Size = BigEndian.Int32(buf[indexSizeOffset:])
+	return
+}
+
 func (i *Index) String() string {
 	return fmt.Sprintf(`
 -----------------------------
@@ -231,9 +239,7 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		if data, err = rd.Peek(indexSize); err != nil {
 			break
 		}
-		ix.Key = BigEndian.Int64(data)
-		ix.Offset = BigEndian.Uint32(data[indexOffsetOffset:])
-		ix.Size = BigEndian.Int32(data[indexSizeOffset:])
+		ix.parse(data)
 		// check
 		if ix.Size > NeedleMaxSize {
 			log.Warningf("index parse size: %d > %d", ix.Size, NeedleMaxSize)
@@ -246,7 +252,7 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		offset += int64(indexSize)
 		needles[ix.Key] = NewNeedleCache(ix.Offset, ix.Size)
 		// save this for recovery supper block
-		noffset = ix.Offset + NeedleOffset(int(ix.Size))
+		noffset = ix.Offset + NeedleOffset(ix.Size)
 	}
 	if err != io.EOF {
 		return

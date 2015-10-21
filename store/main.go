@@ -38,7 +38,7 @@ func main() {
 	//		return
 	//	}
 	buf = s.Buffer()
-	defer s.Free(buf)
+	defer s.FreeBuffer(buf)
 	if d, err = v.Get(1, 1, buf); err != nil {
 		log.Errorf("v.Get() error(%v)", err)
 		return

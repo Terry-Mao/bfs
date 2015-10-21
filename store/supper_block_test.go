@@ -8,11 +8,11 @@ import (
 )
 
 func compareTestNeedle(t *testing.T, key, cookie int64, flag byte, n *Needle, data, buf []byte) (err error) {
-	if err = ParseNeedleHeader(buf[:NeedleHeaderSize], n); err != nil {
+	if err = n.ParseHeader(buf[:NeedleHeaderSize]); err != nil {
 		t.Errorf("ParseNeedleHeader() error(%v)", err)
 		return
 	}
-	if err = ParseNeedleData(buf[NeedleHeaderSize:], n); err != nil {
+	if err = n.ParseData(buf[NeedleHeaderSize:]); err != nil {
 		err = fmt.Errorf("ParseNeedleData() error(%v)", err)
 		t.Error(err)
 		return

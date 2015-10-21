@@ -232,7 +232,7 @@ func (s *Store) Buffer() (d []byte) {
 	return make([]byte, NeedleMaxSize)
 }
 
-// Free free the buffer to pool.
-func (s *Store) Free(d []byte) {
+// FreeBuffer free the buffer to pool.
+func (s *Store) FreeBuffer(d []byte) {
 	s.bp.Put(d)
 }

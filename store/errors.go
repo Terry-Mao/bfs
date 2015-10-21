@@ -9,6 +9,7 @@ var (
 	ErrSuperBlockMagic   = errors.New("super block magic error")
 	ErrSuperBlockVer     = errors.New("super block ver error")
 	ErrSuperBlockPadding = errors.New("super block padding error")
+	ErrSuperBlockNoSpace = errors.New("super block no left free space")
 	// needle
 	ErrNeedleExists      = errors.New("needle already exists")
 	ErrNoNeedle          = errors.New("needle not exists")
