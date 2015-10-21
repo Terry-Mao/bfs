@@ -33,7 +33,7 @@ func TestNeedle(t *testing.T) {
 		goto failed
 	}
 	t.Log("NeedleSize(4)")
-	if padding, size = NeedleSize(4); padding != 3 || size != 40 {
+	if padding, size, err = NeedleSize(4); padding != 3 || size != 40 || err != nil {
 		err = fmt.Errorf("NeedleSize(4) not match")
 		t.Error(err)
 		goto failed

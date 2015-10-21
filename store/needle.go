@@ -229,10 +229,13 @@ Padding:        %v
 }
 
 // NeedleSize get a needle size by data.
-func NeedleSize(ds int32) (padding, size int32) {
+func NeedleSize(ds int32) (padding, size int32, err error) {
 	size = int32(NeedleHeaderSize + ds + NeedleFooterSize)
 	padding = NeedlePaddingSize - (size % NeedlePaddingSize)
 	size += padding
+	if size > NeedleMaxSize {
+		err = ErrNeedleTooLarge
+	}
 	return
 }
 

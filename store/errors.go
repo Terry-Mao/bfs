@@ -22,6 +22,7 @@ var (
 	ErrNeedlePadding     = errors.New("needle padding error")
 	ErrNeedleCookie      = errors.New("needle cookie error")
 	ErrNeedleDeleted     = errors.New("needle deleted")
+	ErrNeedleTooLarge    = errors.New("needle too large")
 	// ring
 	ErrRingEmpty = errors.New("ring buffer empty")
 	ErrRingFull  = errors.New("ring buffer full")

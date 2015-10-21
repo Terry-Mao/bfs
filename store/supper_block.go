@@ -127,7 +127,9 @@ func (b *SuperBlock) Add(key, cookie int64, data []byte) (offset uint32, size in
 		incrOffset uint32
 		dataSize   = int32(len(data))
 	)
-	padding, size = NeedleSize(dataSize)
+	if padding, size, err = NeedleSize(dataSize); err != nil {
+		return
+	}
 	incrOffset = NeedleOffset(int64(size))
 	if superBlockMaxOffset-incrOffset < b.offset {
 		err = ErrSuperBlockNoSpace
@@ -153,7 +155,9 @@ func (b *SuperBlock) Write(key, cookie int64, data []byte) (offset uint32, size 
 		incrOffset uint32
 		dataSize   = int32(len(data))
 	)
-	padding, size = NeedleSize(dataSize)
+	if padding, size, err = NeedleSize(dataSize); err != nil {
+		return
+	}
 	incrOffset = NeedleOffset(int64(size))
 	if superBlockMaxOffset-incrOffset < b.offset {
 		err = ErrSuperBlockNoSpace
@@ -187,7 +191,9 @@ func (b *SuperBlock) Repair(key, cookie int64, data []byte, offset uint32) (err 
 		padding  int32
 		dataSize = int32(len(data))
 	)
-	padding, size = NeedleSize(dataSize)
+	if padding, size, err = NeedleSize(dataSize); err != nil {
+		return
+	}
 	FillNeedle(padding, dataSize, key, cookie, data, b.buf[:])
 	if _, err = b.w.WriteAt(b.buf[:size], BlockOffset(offset)); err != nil {
 		return

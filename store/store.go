@@ -31,11 +31,12 @@ const (
 	volumeIndexComma   = ","
 	volumeIndexSpliter = "\n"
 	storeMap           = 10
+
 	// store map flag
-	storeAdd      = 0
-	storeUpdate   = 1
-	storeDel      = 2
-	storeCompress = 3
+	storeAdd      = 1
+	storeUpdate   = 2
+	storeDel      = 3
+	storeCompress = 4
 )
 
 // Store save volumes.
@@ -94,6 +95,10 @@ func (s *Store) command() {
 	)
 	for {
 		v = <-s.ch
+		if v == nil {
+			log.Errorf("signal store command goroutine exit")
+			break
+		}
 		// copy-on-write
 		volumes = make(map[int32]*Volume, len(s.volumes))
 		for volumeId, vt = range s.volumes {
@@ -110,6 +115,7 @@ func (s *Store) command() {
 			if err = vc.StopCompress(v); err != nil {
 				continue
 			}
+			volumes[v.Id] = v
 		} else {
 			panic("unknow store flag")
 		}
@@ -120,6 +126,7 @@ func (s *Store) command() {
 		// atomic update ptr
 		s.volumes = volumes
 	}
+	log.Errorf("store command goroutine exit")
 }
 
 // AddVolume add a new volume.
@@ -201,6 +208,7 @@ func (s *Store) Bulk(id int32, bfile, ifile string) (err error) {
 	return
 }
 
+// Compress compress a super block to another file.
 func (s *Store) Compress(id int32, bfile, ifile string) (err error) {
 	var (
 		nv *Volume
@@ -219,7 +227,7 @@ func (s *Store) Compress(id int32, bfile, ifile string) (err error) {
 		v.StopCompress(nil)
 		return
 	}
-	v.Command = storeCompress
+	nv.Command = storeCompress
 	s.ch <- nv
 	return
 }
@@ -237,4 +245,21 @@ func (s *Store) Buffer() (d []byte) {
 // FreeBuffer free the buffer to pool.
 func (s *Store) FreeBuffer(d []byte) {
 	s.bp.Put(d)
+}
+
+// Close close the store.
+// WARN the global variable store must first set nil and reject any other
+// requests then safty close.
+func (s *Store) Close() {
+	var v *Volume
+	log.Info("store close")
+	if s.f != nil {
+		s.f.Close()
+	}
+	close(s.ch)
+	for _, v = range s.volumes {
+		v.Close()
+	}
+	log.Info("finish store close")
+	return
 }

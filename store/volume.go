@@ -274,7 +274,8 @@ func (v *Volume) del() {
 		case offset = <-v.signal:
 			if offset == volumeFinish {
 				log.Info("signal volume del goroutine exit")
-				break
+				log.Errorf("volume del goroutine exit")
+				return
 			}
 			// merge
 			if offsets = append(offsets, offset); len(offsets) < volumeDelMax {
@@ -294,20 +295,19 @@ func (v *Volume) del() {
 		}
 		offsets = offsets[:0]
 	}
-	log.Errorf("volume del goroutine exit")
 	return
 }
 
 // Compress copy the super block to another space, and drop the "delete"
 // needle, so this can reduce disk space cost.
 func (v *Volume) StartCompress(nv *Volume) (err error) {
-	v.Lock()
+	v.lock.Lock()
 	if v.Compress {
 		err = ErrVolumeInCompress
 	} else {
 		v.Compress = true
 	}
-	v.Unlock()
+	v.lock.Unlock()
 	if err == nil {
 		v.compressOffset, err = v.block.Compress(v.compressOffset, nv)
 	}
@@ -319,7 +319,7 @@ func (v *Volume) StartCompress(nv *Volume) (err error) {
 // if nv is nil, only reset compress status.
 func (v *Volume) StopCompress(nv *Volume) (err error) {
 	var key int64
-	v.Lock()
+	v.lock.Lock()
 	if nv != nil {
 		if v.compressOffset, err = v.block.Compress(v.compressOffset, nv); err != nil {
 			goto failed
@@ -334,16 +334,18 @@ failed:
 	v.Compress = false
 	v.compressOffset = 0
 	v.compressKeys = v.compressKeys[:0]
-	v.Unlock()
+	v.lock.Unlock()
 	return
 }
 
 // Close close the volume.
 func (v *Volume) Close() {
+	log.Infof("volume: %d close", v.Id)
 	v.lock.Lock()
 	v.block.Close()
 	v.indexer.Close()
 	close(v.signal)
 	v.lock.Unlock()
+	log.Infof("finish volume: %d close", v.Id)
 	return
 }
