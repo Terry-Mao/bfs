@@ -105,13 +105,13 @@ type Needle struct {
 	Cookie      int64
 	Key         int64
 	Flag        byte
-	Size        int32
+	Size        int32 // raw data size
 	Data        []byte
 	FooterMagic []byte
 	Checksum    uint32
 	PaddingSize int32
 	Padding     []byte
-	DataSize    int
+	DataSize    int // data-part size
 }
 
 // ParseNeedleHeader parse a needle header part.
@@ -236,7 +236,7 @@ func NeedleSize(ds int32) (padding, size int32) {
 	return
 }
 
-// NeedleOffset get needle aligned offset.
-func NeedleOffset(size int32) uint32 {
-	return uint32(size / NeedlePaddingSize)
+// NeedleOffset convert offset to needle offset.
+func NeedleOffset(offset int64) uint32 {
+	return uint32(offset / NeedlePaddingSize)
 }

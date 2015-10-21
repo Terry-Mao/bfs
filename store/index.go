@@ -252,7 +252,7 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		offset += int64(indexSize)
 		needles[ix.Key] = NewNeedleCache(ix.Offset, ix.Size)
 		// save this for recovery supper block
-		noffset = ix.Offset + NeedleOffset(ix.Size)
+		noffset = ix.Offset + NeedleOffset(int64(ix.Size))
 	}
 	if err != io.EOF {
 		return

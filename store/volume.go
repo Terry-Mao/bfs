@@ -21,7 +21,7 @@ var (
 	volumeDelTime = 1 * time.Minute
 )
 
-// IntSlice attaches the methods of Interface to []int, sorting in increasing order.
+// Uint32Slice deleted offset sort.
 type Uint32Slice []uint32
 
 func (p Uint32Slice) Len() int           { return len(p) }
@@ -36,11 +36,14 @@ type Volume struct {
 	indexer *Indexer
 	needles map[int64]NeedleCache
 	signal  chan uint32
-	// TODO status
-	ReadOnly bool
 
-	// flag used in store control
-	Store int
+	Readonly bool
+	// flag used in store
+	Command int
+	// compress
+	Compress       bool
+	compressOffset int64
+	compressKeys   []int64
 }
 
 // NewVolume new a volume and init it.
@@ -61,6 +64,7 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 		return
 	}
 	v.signal = make(chan uint32, volumeDelChNum)
+	v.compressKeys = []int64{}
 	go v.del()
 	return
 }
@@ -114,7 +118,6 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		return
 	}
 	// parse needle
-	// TODO repair
 	if err = needle.ParseHeader(buf[:NeedleHeaderSize]); err != nil {
 		return
 	}
@@ -243,6 +246,10 @@ func (v *Volume) Del(key int64) (err error) {
 	if ok {
 		offset, size = needleCache.Value()
 		v.needles[key] = NewNeedleCache(NeedleCacheDelOffset, size)
+		// del barrier
+		if v.Compress {
+			v.compressKeys = append(v.compressKeys, key)
+		}
 	}
 	v.lock.Unlock()
 	if ok {
@@ -293,10 +300,41 @@ func (v *Volume) del() {
 
 // Compress copy the super block to another space, and drop the "delete"
 // needle, so this can reduce disk space cost.
-func (v *Volume) Compress(nv *Volume) (err error) {
-	// scan the whole super block, skip the del,error needle.
-	// update pointer
-	err = v.block.Compress(nv)
+func (v *Volume) StartCompress(nv *Volume) (err error) {
+	v.Lock()
+	if v.Compress {
+		err = ErrVolumeInCompress
+	} else {
+		v.Compress = true
+	}
+	v.Unlock()
+	if err == nil {
+		v.compressOffset, err = v.block.Compress(v.compressOffset, nv)
+	}
+	return
+}
+
+// StopCompress try append left block space and deleted needles when
+// compressing, then reset compress flag, offset and compressKeys.
+// if nv is nil, only reset compress status.
+func (v *Volume) StopCompress(nv *Volume) (err error) {
+	var key int64
+	v.Lock()
+	if nv != nil {
+		if v.compressOffset, err = v.block.Compress(v.compressOffset, nv); err != nil {
+			goto failed
+		}
+		for _, key = range v.compressKeys {
+			if err = nv.Del(key); err != nil {
+				goto failed
+			}
+		}
+	}
+failed:
+	v.Compress = false
+	v.compressOffset = 0
+	v.compressKeys = v.compressKeys[:0]
+	v.Unlock()
 	return
 }
 

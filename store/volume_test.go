@@ -8,12 +8,14 @@ import (
 
 func TestVolume(t *testing.T) {
 	var (
-		v     *Volume
-		err   error
-		data  = []byte("test")
-		buf   = make([]byte, 40)
-		bfile = "./test/test.volume"
-		ifile = "./test/test.volume.idx"
+		v, nv  *Volume
+		err    error
+		data   = []byte("test")
+		buf    = make([]byte, 40)
+		bfile  = "./test/test.volume"
+		ifile  = "./test/test.volume.idx"
+		nbfile = "./test/testn.volume"
+		nifile = "./test/testn.volume.idx"
 	)
 	defer os.Remove(bfile)
 	defer os.Remove(ifile)
@@ -80,6 +82,58 @@ func TestVolume(t *testing.T) {
 	} else {
 		err = nil
 	}
+	t.Log("StartCompress")
+	defer os.Remove(nbfile)
+	defer os.Remove(nifile)
+	if nv, err = NewVolume(1, nbfile, nifile); err != nil {
+		t.Errorf("NewVolume() error(%v)", err)
+		goto failed
+	}
+	if err = v.StartCompress(nv); err != nil {
+		t.Errorf("StartCompress() error(%v)", err)
+		goto failed
+	}
+	if _, err = nv.Get(1, 1, buf); err != nil {
+		t.Errorf("Get(1) error(%v)", err)
+		goto failed
+	}
+	if _, err = nv.Get(2, 2, buf); err != nil {
+		t.Errorf("Get(1) error(%v)", err)
+		goto failed
+	}
+	if _, err = nv.Get(4, 4, buf); err != nil {
+		t.Errorf("Get(1) error(%v)", err)
+		goto failed
+	}
+	// old add
+	if err = v.Add(7, 7, data); err != nil {
+		t.Errorf("Add() error(%v)", err)
+		goto failed
+	}
+	if err = v.Add(8, 8, data); err != nil {
+		t.Errorf("Add() error(%v)", err)
+		goto failed
+	}
+	if err = v.Del(8); err != nil {
+		t.Errorf("Del error(%v)", err)
+		goto failed
+	}
+	if err = v.StopCompress(nv); err != nil {
+		t.Errorf("StartCompress() error(%v)", err)
+		goto failed
+	}
+	if _, err = nv.Get(7, 7, buf); err != nil {
+		t.Errorf("Get(1) error(%v)", err)
+		goto failed
+	}
+	if _, err = v.Get(8, 8, buf); err != ErrNeedleDeleted {
+		err = fmt.Errorf("err must be ErrNeedleDeleted")
+		t.Error(err)
+		goto failed
+	} else {
+		err = nil
+	}
+	t.Log("StopCompress")
 failed:
 	if v != nil {
 		v.Close()

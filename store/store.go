@@ -32,17 +32,18 @@ const (
 	volumeIndexSpliter = "\n"
 	storeMap           = 10
 	// store map flag
-	storeAdd    = 0
-	storeUpdate = 1
-	storeDel    = 2
+	storeAdd      = 0
+	storeUpdate   = 1
+	storeDel      = 2
+	storeCompress = 3
 )
 
 // Store save volumes.
 type Store struct {
 	f        *os.File
 	ch       chan *Volume
-	file     string
 	bp       *sync.Pool
+	file     string
 	VolumeId int32
 	volumes  map[int32]*Volume
 }
@@ -60,7 +61,7 @@ func NewStore(file string) (s *Store, err error) {
 	s.volumes = make(map[int32]*Volume)
 	s.file = file
 	s.ch = make(chan *Volume, storeMap)
-	go s.update()
+	go s.command()
 	if s.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDWR|os.O_CREATE, 0664) error(%v)", file, err)
 		return
@@ -83,9 +84,10 @@ func NewStore(file string) (s *Store, err error) {
 	return
 }
 
-// update atomic update volumes.
-func (s *Store) update() {
+// command do volume command.
+func (s *Store) command() {
 	var (
+		err       error
 		volumeId  int32
 		v, vt, vc *Volume
 		volumes   map[int32]*Volume
@@ -98,12 +100,16 @@ func (s *Store) update() {
 			volumes[volumeId] = vt
 		}
 		vc = volumes[v.Id]
-		if v.Store == storeAdd {
+		if v.Command == storeAdd {
 			volumes[v.Id] = v
-		} else if v.Store == storeUpdate {
+		} else if v.Command == storeUpdate {
 			volumes[v.Id] = v
-		} else if v.Store == storeDel {
+		} else if v.Command == storeDel {
 			delete(volumes, v.Id)
+		} else if v.Command == storeCompress {
+			if err = vc.StopCompress(v); err != nil {
+				continue
+			}
 		} else {
 			panic("unknow store flag")
 		}
@@ -122,7 +128,7 @@ func (s *Store) AddVolume(id int32, bfile, ifile string) (v *Volume, err error) 
 	if v, err = NewVolume(id, bfile, ifile); err != nil {
 		return
 	}
-	v.Store = storeAdd
+	v.Command = storeAdd
 	s.ch <- v
 	return
 }
@@ -130,7 +136,7 @@ func (s *Store) AddVolume(id int32, bfile, ifile string) (v *Volume, err error) 
 // DelVolume del the volume by volume id.
 func (s *Store) DelVolume(id int32) {
 	var v = s.Volume(id)
-	v.Store = storeDel
+	v.Command = storeDel
 	s.ch <- v
 	return
 }
@@ -190,7 +196,7 @@ func (s *Store) Bulk(id int32, bfile, ifile string) (err error) {
 	if v, err = NewVolume(id, bfile, ifile); err != nil {
 		return
 	}
-	v.Store = storeUpdate
+	v.Command = storeUpdate
 	s.ch <- v
 	return
 }
@@ -209,15 +215,11 @@ func (s *Store) Compress(id int32, bfile, ifile string) (err error) {
 	}
 	// set volume compress flag
 	// copy to new volume
-	if err = v.Compress(nv); err != nil {
+	if err = v.StartCompress(nv); err != nil {
+		v.StopCompress(nil)
 		return
 	}
-	// v.Lock
-	// copy new add needles
-	// set del flag
-	// set readonly?
-	// v.Unlock
-	v.Store = storeUpdate
+	v.Command = storeCompress
 	s.ch <- nv
 	return
 }

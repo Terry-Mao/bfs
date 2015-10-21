@@ -128,7 +128,7 @@ func (b *SuperBlock) Add(key, cookie int64, data []byte) (offset uint32, size in
 		dataSize   = int32(len(data))
 	)
 	padding, size = NeedleSize(dataSize)
-	incrOffset = NeedleOffset(size)
+	incrOffset = NeedleOffset(int64(size))
 	if superBlockMaxOffset-incrOffset < b.offset {
 		err = ErrSuperBlockNoSpace
 		return
@@ -154,7 +154,7 @@ func (b *SuperBlock) Write(key, cookie int64, data []byte) (offset uint32, size 
 		dataSize   = int32(len(data))
 	)
 	padding, size = NeedleSize(dataSize)
-	incrOffset = NeedleOffset(size)
+	incrOffset = NeedleOffset(int64(size))
 	if superBlockMaxOffset-incrOffset < b.offset {
 		err = ErrSuperBlockNoSpace
 		return
@@ -269,8 +269,8 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 	log.Infof("start super block recovery, offset: %d\n", offset)
 	if offset == 0 {
 		offset = superBlockHeaderOffset
-		noffset = NeedleOffset(superBlockHeaderOffset)
 	}
+	noffset = NeedleOffset(offset)
 	if _, err = b.r.Seek(offset, os.SEEK_SET); err != nil {
 		log.Errorf("block: %s seek error(%v)", b.File)
 		return
@@ -309,7 +309,7 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 		needles[n.Key] = nc
 		log.V(1).Infof("recovery needle: offset: %d, size: %d", noffset, size)
 		log.V(1).Info(n.String())
-		noffset += NeedleOffset(size)
+		noffset += NeedleOffset(int64(size))
 	}
 	if err == io.EOF {
 		err = nil
@@ -323,7 +323,7 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 }
 
 // Compress compress the orig block, copy to disk dst block.
-func (b *SuperBlock) Compress(v *Volume) (err error) {
+func (b *SuperBlock) Compress(offset int64, v *Volume) (noffset int64, err error) {
 	var (
 		data []byte
 		r    *os.File
@@ -335,7 +335,10 @@ func (b *SuperBlock) Compress(v *Volume) (err error) {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDONLY, 0664) error(%v)", b.File, err)
 		return
 	}
-	if _, err = r.Seek(superBlockHeaderOffset, os.SEEK_SET); err != nil {
+	if offset == 0 {
+		offset = superBlockHeaderOffset
+	}
+	if _, err = r.Seek(offset, os.SEEK_SET); err != nil {
 		return
 	}
 	rd = bufio.NewReaderSize(r, NeedleMaxSize)
@@ -360,6 +363,7 @@ func (b *SuperBlock) Compress(v *Volume) (err error) {
 		if _, err = rd.Discard(n.DataSize); err != nil {
 			break
 		}
+		offset += int64(NeedleHeaderSize + n.DataSize)
 		log.V(1).Info(n.String())
 		// skip delete needle
 		if n.Flag == NeedleStatusDel {
@@ -379,6 +383,7 @@ func (b *SuperBlock) Compress(v *Volume) (err error) {
 	if err = r.Close(); err != nil {
 		return
 	}
+	noffset = offset
 	return
 }
 

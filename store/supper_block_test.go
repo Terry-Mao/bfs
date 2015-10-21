@@ -313,6 +313,16 @@ func TestSuperBlock(t *testing.T) {
 		t.Error("needle.Value(4) not match")
 		goto failed
 	}
+	if v, err := b.w.Seek(0, os.SEEK_END); err != nil {
+		t.Errorf("b.Seek() error(%v)", err)
+		goto failed
+	} else {
+		if v != 168 {
+			err = fmt.Errorf("recovery offset %d != %d not match", v, 168)
+			t.Error(err)
+			goto failed
+		}
+	}
 	// test repair
 	t.Log("Repair(3)")
 	if err = b.Repair(3, 3, data, 11); err != nil {
@@ -335,9 +345,20 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("NewVolume(1) error(%v)", err)
 		goto failed
 	}
-	if err = b.Compress(v); err != nil {
+	if v1, err := b.Compress(0, v); err != nil {
 		t.Errorf("b.Compress() error(%v)", err)
 		goto failed
+	} else {
+		if v2, err := b.w.Seek(0, os.SEEK_END); err != nil {
+			t.Errorf("b.Seek() error(%v)", err)
+			goto failed
+		} else {
+			if v1 != v2 {
+				err = fmt.Errorf("compress offset %d != %d not match", v1, v2)
+				t.Error(err)
+				goto failed
+			}
+		}
 	}
 	if o, s := v.needles[1].Value(); o != 0 && s != 0 {
 		t.Error("needle.Value(1) not match")
