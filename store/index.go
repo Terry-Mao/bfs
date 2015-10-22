@@ -52,14 +52,13 @@ type IndexerStatus struct {
 
 // Indexer used for fast recovery super block needle cache.
 type Indexer struct {
-	f       *os.File
-	bw      *bufio.Writer
-	bufSize int
-	signal  chan int
-	ring    *Ring
-	File    string
-	buf     [indexSize]byte
-	Status  IndexerStatus
+	f      *os.File
+	bw     *bufio.Writer
+	signal chan int
+	ring   *Ring
+	File   string
+	buf    [indexSize]byte
+	Status IndexerStatus
 }
 
 // Index index data.
@@ -88,7 +87,7 @@ Size:           %d
 }
 
 // NewIndexer new a indexer for async merge index data to disk.
-func NewIndexer(file string, ring, buf int) (indexer *Indexer, err error) {
+func NewIndexer(file string, ring int) (indexer *Indexer, err error) {
 	indexer = &Indexer{}
 	indexer.signal = make(chan int, signalNum)
 	indexer.ring = NewRing(ring)
@@ -97,8 +96,7 @@ func NewIndexer(file string, ring, buf int) (indexer *Indexer, err error) {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDWR|os.O_CREATE, 0664) error(%v)", file, err)
 		return
 	}
-	indexer.bw = bufio.NewWriterSize(indexer.f, buf)
-	indexer.bufSize = buf
+	indexer.bw = bufio.NewWriterSize(indexer.f, NeedleMaxSize)
 	go indexer.write()
 	return
 }
@@ -117,11 +115,15 @@ func (i *Indexer) Signal() {
 	}
 }
 
-// fill file indexer buf with index data.
-func (i *Indexer) fill(key int64, offset uint32, size int32) {
-	BigEndian.PutInt64(i.buf[:], key)
-	BigEndian.PutUint32(i.buf[indexOffsetOffset:], offset)
-	BigEndian.PutInt32(i.buf[indexSizeOffset:], size)
+// writeIndex write index data into bufio.
+func writeIndex(w *bufio.Writer, key int64, offset uint32, size int32) (err error) {
+	if err = BigEndian.WriteInt64(w, key); err != nil {
+		return
+	}
+	if err = BigEndian.WriteUint32(w, offset); err != nil {
+		return
+	}
+	err = BigEndian.WriteInt32(w, size)
 	return
 }
 
@@ -152,22 +154,23 @@ func (i *Indexer) Append(key int64, offset uint32, size int32) (err error) {
 
 // Write append index needle to disk, WARN can't concurrency with write.
 func (i *Indexer) Write(key int64, offset uint32, size int32) (err error) {
-	i.fill(key, offset, size)
-	if _, err = i.bw.Write(i.buf[:]); err != nil {
-		return
-	}
+	err = writeIndex(i.bw, key, offset, size)
 	return
 }
 
 // Flush flush writer buffer.
 func (i *Indexer) Flush() (err error) {
-	if err = i.bw.Flush(); err != nil {
-		return
+	for {
+		// write may be less than request, we call flush in a loop
+		if err = i.bw.Flush(); err != nil || err != io.ErrShortWrite {
+			return
+		}
+		// TODO append N times call flush then clean the os page cache
+		// page cache no used here...
+		// after upload a photo, we cache in user-level.
+		if err == io.ErrShortWrite {
+		}
 	}
-	// TODO append N times call flush then clean the os page cache
-	// page cache no used here...
-	// after upload a photo, we cache in user-level.
-	return
 }
 
 func (i *Indexer) merge() (err error) {
@@ -178,9 +181,7 @@ func (i *Indexer) merge() (err error) {
 			break
 		}
 		// merge index buffer
-		i.fill(index.Key, index.Offset, index.Size)
-		if _, err = i.bw.Write(i.buf[:]); err != nil {
-			log.Errorf("index write error(%v)", err)
+		if err = writeIndex(i.bw, index.Key, index.Offset, index.Size); err != nil {
 			break
 		}
 		i.ring.GetAdv()
@@ -233,7 +234,7 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		log.Errorf("index seek offset error(%v)", err)
 		return
 	}
-	rd = bufio.NewReaderSize(i.f, i.bufSize)
+	rd = bufio.NewReaderSize(i.f, NeedleMaxSize)
 	for {
 		// parse data
 		if data, err = rd.Peek(indexSize); err != nil {
@@ -241,8 +242,8 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		}
 		ix.parse(data)
 		// check
-		if ix.Size > NeedleMaxSize {
-			log.Warningf("index parse size: %d > %d", ix.Size, NeedleMaxSize)
+		if ix.Size > NeedleMaxSize || ix.Size < 1 {
+			log.Warningf("index parse size: %d > %d or %d < 1", ix.Size, NeedleMaxSize, ix.Size)
 			break
 		}
 		if _, err = rd.Discard(indexSize); err != nil {
@@ -250,6 +251,7 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		}
 		log.V(1).Info(ix.String())
 		offset += int64(indexSize)
+		log.V(1).Infof("index add offset: %d, size: %d into needles cache", ix.Offset, ix.Size)
 		needles[ix.Key] = NewNeedleCache(ix.Offset, ix.Size)
 		// save this for recovery supper block
 		noffset = ix.Offset + NeedleOffset(int64(ix.Size))

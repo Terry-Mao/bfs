@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
+	mrand "math/rand"
 	"os"
 	"testing"
 )
@@ -141,4 +143,118 @@ failed:
 	if err != nil {
 		t.FailNow()
 	}
+}
+
+var (
+	t int64
+)
+
+func BenchmarkVolumeAdd(b *testing.B) {
+	var (
+		v     *Volume
+		err   error
+		file  = "./test/testb1"
+		ifile = "./test/testb1.idx"
+		data  = make([]byte, 1*1024)
+	)
+	defer os.Remove(file)
+	defer os.Remove(ifile)
+	if _, err = rand.Read(data); err != nil {
+		b.Errorf("rand.Read() error(%v)", err)
+		b.FailNow()
+	}
+	if v, err = NewVolume(1, file, ifile); err != nil {
+		b.Errorf("NewVolume() error(%v)", err)
+		b.FailNow()
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err = v.Add(t, t, data); err != nil {
+			b.Errorf("Add() error(%v)", err)
+			b.FailNow()
+		}
+		t++
+	}
+}
+
+func BenchmarkVolumeWrite(b *testing.B) {
+	var (
+		i     int
+		t     int64
+		v     *Volume
+		err   error
+		file  = "./test/testb2"
+		ifile = "./test/testb2.idx"
+		data  = make([]byte, 1*1024)
+	)
+	defer os.Remove(file)
+	defer os.Remove(ifile)
+	if _, err = rand.Read(data); err != nil {
+		b.Errorf("rand.Read() error(%v)", err)
+		goto failed
+	}
+	if v, err = NewVolume(1, file, ifile); err != nil {
+		b.Errorf("NewVolume() error(%v)", err)
+		goto failed
+	}
+	defer v.Close()
+	b.ResetTimer()
+	v.Lock()
+	for i = 0; i < b.N; i++ {
+		if err = v.Write(t, t, data); err != nil {
+			b.Errorf("Add() error(%v)", err)
+			goto failed
+		}
+		t++
+	}
+	if err = v.Flush(); err != nil {
+		b.Errorf("Flush() error(%v)", err)
+		goto failed
+	}
+	v.Unlock()
+failed:
+	if err != nil {
+		b.FailNow()
+	}
+}
+
+func BenchmarkVolumeGet(b *testing.B) {
+	var (
+		i     int
+		t     int64
+		v     *Volume
+		err   error
+		file  = "./test/testb3"
+		ifile = "./test/testb3.idx"
+		data  = make([]byte, 1*1024)
+	)
+	defer os.Remove(file)
+	defer os.Remove(ifile)
+	if _, err = rand.Read(data); err != nil {
+		b.Errorf("rand.Read() error(%v)", err)
+		b.FailNow()
+	}
+	if v, err = NewVolume(1, file, ifile); err != nil {
+		b.Errorf("NewVolume() error(%v)", err)
+		b.FailNow()
+	}
+	defer v.Close()
+	for i = 0; i < 1000000; i++ {
+		t = int64(i)
+		if err = v.Add(t, t, data); err != nil {
+			b.Errorf("Add() error(%v)", err)
+			b.FailNow()
+		}
+	}
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		var buf = make([]byte, NeedleMaxSize)
+		for pb.Next() {
+			t1 := mrand.Int63n(1000000)
+			if _, err := v.Get(t1, t1, buf); err != nil {
+				b.Errorf("Get(%d) error(%v)", t1, err)
+				b.FailNow()
+			}
+		}
+	})
 }

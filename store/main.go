@@ -23,23 +23,29 @@ func main() {
 	//if v, err = s.AddVolume(2, "/tmp/hijohn_2", "/tmp/hijohn_2.idx"); err != nil {
 	//	return
 	//}
-	//v.Add(1, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
 	//v.Add(2, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
 	//v.Add(3, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
 	//v.Add(4, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
 	// v.block.Dump()
 	time.Sleep(1 * time.Second)
-	if v = s.Volume(2); v == nil {
+	if v = s.Volume(1); v == nil {
 		log.Errorf("volume_id: %d not exist", 2)
 		return
 	}
-	//	if err = v.Add(1, 1, []byte("test")); err != nil {
-	//		log.Errorf("v.Add() error(%v)", err)
-	//		return
-	//	}
+	d = make([]byte, 1024)
+	if err = v.Add(0, 0, d); err != nil {
+		log.Errorf("v.Add() error(%v)", err)
+		return
+	}
+	for i := 0; i < 100; i++ {
+		if err = v.Add(int64(i), int64(i), d); err != nil {
+			log.Errorf("v.Add() error(%v)", err)
+			return
+		}
+	}
 	buf = s.Buffer()
 	defer s.FreeBuffer(buf)
-	if d, err = v.Get(1, 1, buf); err != nil {
+	if d, err = v.Get(0, 0, buf); err != nil {
 		log.Errorf("v.Get() error(%v)", err)
 		return
 	}

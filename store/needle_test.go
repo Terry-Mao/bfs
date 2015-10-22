@@ -17,11 +17,11 @@ func TestNeedle(t *testing.T) {
 		data    = []byte("test")
 		buf     = make([]byte, 40)
 	)
-	offset = 8
-	size = 40
+	offset = 134
+	size = 1064
 	t.Log("NewNeedleCache")
 	nc = NewNeedleCache(offset, size)
-	if offset, size = nc.Value(); offset != 8 || size != 40 {
+	if offset, size = nc.Value(); offset != 134 || size != 1064 {
 		err = fmt.Errorf("needlecache.Value() not match")
 		t.Error(err)
 		goto failed

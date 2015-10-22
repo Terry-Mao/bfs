@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"hash/crc32"
@@ -84,8 +85,7 @@ var (
 
 // NeedleCache needle meta data in memory.
 // high 32bit = Offset
-// medium 16bit noused
-// low 16bit = size
+// low 32 bit = Size
 type NeedleCache int64
 
 // NewNeedleCache new a needle cache.
@@ -95,7 +95,7 @@ func NewNeedleCache(offset uint32, size int32) NeedleCache {
 
 // Value get needle meta data.
 func (n NeedleCache) Value() (offset uint32, size int32) {
-	size, offset = int32(int64(n)&needleSizeMask), uint32(n>>needleOffsetBit)
+	offset, size = uint32(n>>needleOffsetBit), int32(n)
 	return
 }
 
@@ -168,8 +168,48 @@ func (n *Needle) ParseData(buf []byte) (err error) {
 	n.Padding = buf[bn : bn+n.PaddingSize]
 	if !bytes.Equal(n.Padding, needlePadding[n.PaddingSize]) {
 		err = ErrNeedlePadding
+	}
+	return
+}
+
+// WriteNeedle write needle into bufio.
+func WriteNeedle(w *bufio.Writer, padding, size int32, key, cookie int64, data []byte) (err error) {
+	// header
+	// magic
+	if _, err = w.Write(needleHeaderMagic); err != nil {
 		return
 	}
+	// cookie
+	if err = BigEndian.WriteInt64(w, cookie); err != nil {
+		return
+	}
+	// key
+	if err = BigEndian.WriteInt64(w, key); err != nil {
+		return
+	}
+	// flag
+	if err = w.WriteByte(NeedleStatusOK); err != nil {
+		return
+	}
+	// size
+	if err = BigEndian.WriteInt32(w, size); err != nil {
+		return
+	}
+	// data
+	if _, err = w.Write(data); err != nil {
+		return
+	}
+	// footer
+	// magic
+	if _, err = w.Write(needleFooterMagic); err != nil {
+		return
+	}
+	// checksum
+	if err = BigEndian.WriteUint32(w, crc32.Update(0, crc32Table, data)); err != nil {
+		return
+	}
+	// padding
+	_, err = w.Write(needlePadding[padding])
 	return
 }
 
@@ -230,6 +270,7 @@ Padding:        %v
 
 // NeedleSize get a needle size by data.
 func NeedleSize(ds int32) (padding, size int32, err error) {
+	// (padding + (size - 1)) & (^(size - 1))
 	size = int32(NeedleHeaderSize + ds + NeedleFooterSize)
 	padding = NeedlePaddingSize - (size % NeedlePaddingSize)
 	size += padding

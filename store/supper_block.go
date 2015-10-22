@@ -43,17 +43,19 @@ type SuperBlock struct {
 	offset uint32
 	Magic  []byte
 	Ver    byte
-	buf    [NeedleMaxSize]byte
+	buf    []byte
 }
 
 // NewSuperBlock new a super block struct.
 func NewSuperBlock(file string) (b *SuperBlock, err error) {
 	b = &SuperBlock{}
 	b.File = file
+	b.buf = make([]byte, NeedleMaxSize)
 	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_WRONLY|os.O_CREATE, 0664) error(%v)", file, err)
 		return
 	}
+	b.bw = bufio.NewWriterSize(b.w, NeedleMaxSize)
 	if b.r, err = os.OpenFile(file, os.O_RDONLY, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDONLY, 0664) error(%v)", file, err)
 		goto failed
@@ -62,7 +64,6 @@ func NewSuperBlock(file string) (b *SuperBlock, err error) {
 		log.Errorf("block: %s init error(%v)", file, err)
 		goto failed
 	}
-	b.bw = bufio.NewWriterSize(b.w, NeedleMaxSize)
 	return
 failed:
 	if b.w != nil {
@@ -135,16 +136,15 @@ func (b *SuperBlock) Add(key, cookie int64, data []byte) (offset uint32, size in
 		err = ErrSuperBlockNoSpace
 		return
 	}
-	FillNeedle(padding, dataSize, key, cookie, data, b.buf[:])
-	if _, err = b.w.Write(b.buf[:size]); err != nil {
+	if err = WriteNeedle(b.bw, padding, dataSize, key, cookie, data); err != nil {
+		return
+	}
+	if err = b.Flush(); err != nil {
 		return
 	}
 	offset = b.offset
 	b.offset += incrOffset
-	// TODO append N times call flush then clean the os page cache
-	// page cache no used here...
-	// after upload a photo, we cache in user-level.
-	log.V(1).Infof("add a needle, cur offset: %d", b.offset)
+	log.V(1).Infof("add a needle, key: %d, cookie: %d, offset: %d, size: %d, b.offset: %d", key, cookie, offset, size, b.offset)
 	return
 }
 
@@ -163,8 +163,7 @@ func (b *SuperBlock) Write(key, cookie int64, data []byte) (offset uint32, size 
 		err = ErrSuperBlockNoSpace
 		return
 	}
-	FillNeedle(padding, dataSize, key, cookie, data, b.buf[:])
-	if _, err = b.bw.Write(b.buf[:size]); err != nil {
+	if err = WriteNeedle(b.bw, padding, dataSize, key, cookie, data); err != nil {
 		return
 	}
 	offset = b.offset
@@ -175,12 +174,17 @@ func (b *SuperBlock) Write(key, cookie int64, data []byte) (offset uint32, size 
 
 // Flush flush writer buffer.
 func (b *SuperBlock) Flush() (err error) {
-	if err = b.bw.Flush(); err != nil {
-		return
+	for {
+		// write may be less than request, we call flush in a loop
+		if err = b.bw.Flush(); err != nil && err != io.ErrShortWrite {
+			return
+		}
+		// TODO append N times call flush then clean the os page cache
+		// page cache no used here...
+		// after upload a photo, we cache in user-level.
+		if err == io.ErrShortWrite {
+		}
 	}
-	// TODO append N times call flush then clean the os page cache
-	// page cache no used here...
-	// after upload a photo, we cache in user-level.
 	return
 }
 
@@ -194,7 +198,7 @@ func (b *SuperBlock) Repair(key, cookie int64, data []byte, offset uint32) (err 
 	if padding, size, err = NeedleSize(dataSize); err != nil {
 		return
 	}
-	FillNeedle(padding, dataSize, key, cookie, data, b.buf[:])
+	FillNeedle(padding, dataSize, key, cookie, data, b.buf)
 	if _, err = b.w.WriteAt(b.buf[:size], BlockOffset(offset)); err != nil {
 		return
 	}
@@ -313,7 +317,7 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 			nc = NewNeedleCache(NeedleCacheDelOffset, size)
 		}
 		needles[n.Key] = nc
-		log.V(1).Infof("recovery needle: offset: %d, size: %d", noffset, size)
+		log.V(1).Infof("index add offset: %d, size: %d into needles cache", noffset, size)
 		log.V(1).Info(n.String())
 		noffset += NeedleOffset(int64(size))
 	}
@@ -395,7 +399,7 @@ func (b *SuperBlock) Compress(offset int64, v *Volume) (noffset int64, err error
 
 func (b *SuperBlock) Close() {
 	var err error
-	if err = b.bw.Flush(); err != nil {
+	if err = b.Flush(); err != nil {
 		log.Errorf("block: %s flush error(%v)", b.File, err)
 	}
 	if err = b.w.Sync(); err != nil {

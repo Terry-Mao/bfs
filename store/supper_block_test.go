@@ -266,7 +266,7 @@ func TestSuperBlock(t *testing.T) {
 	}
 	// test recovery
 	t.Log("Recovery(0)")
-	if indexer, err = NewIndexer(ifile, 10, 1024); err != nil {
+	if indexer, err = NewIndexer(ifile, 10); err != nil {
 		t.Errorf("NewIndexer() error(%v)", err)
 		goto failed
 	}

@@ -54,7 +54,7 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 		log.Errorf("init super block: \"%s\" error(%v)", bfile, err)
 		return
 	}
-	if v.indexer, err = NewIndexer(ifile, 10240, 4*1024); err != nil {
+	if v.indexer, err = NewIndexer(ifile, 102400); err != nil {
 		log.Errorf("init indexer: %s error(%v)", ifile, err)
 		return
 	}
@@ -90,6 +90,14 @@ func (v *Volume) init() (err error) {
 	return
 }
 
+func (v *Volume) Lock() {
+	v.lock.Lock()
+}
+
+func (v *Volume) Unlock() {
+	v.lock.Unlock()
+}
+
 // Get get a needle by key.
 func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	var (
@@ -108,7 +116,7 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		return
 	}
 	offset, size = needleCache.Value()
-	log.V(1).Infof("get needle, key: %d, cookie: %d, offset: %d, size: %d", key, cookie, BlockOffset(offset), size)
+	log.V(1).Infof("get needle, key: %d, cookie: %d, offset: %d, size: %d", key, cookie, offset, size)
 	if offset == NeedleCacheDelOffset {
 		err = ErrNeedleDeleted
 		return
@@ -124,7 +132,8 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	if err = needle.ParseData(buf[NeedleHeaderSize:]); err != nil {
 		return
 	}
-	log.Infof("%v\n", needle)
+	log.V(1).Infof("%v\n", buf[:size])
+	log.V(1).Infof("%v\n", needle)
 	// check needle
 	if needle.Key != key {
 		err = ErrNeedleKey
@@ -162,7 +171,6 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 		v.lock.Unlock()
 		return
 	}
-	log.V(1).Infof("add needle, offset: %d, size: %d", offset, size)
 	// update index
 	if err = v.indexer.Add(key, offset, size); err != nil {
 		v.lock.Unlock()
@@ -174,7 +182,7 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 		ooffset, osize = needleCache.Value()
 		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
 		// set old file delete
-		err = v.asyncDel(offset)
+		err = v.asyncDel(ooffset)
 	}
 	return
 }
@@ -203,7 +211,7 @@ func (v *Volume) Write(key, cookie int64, data []byte) (err error) {
 		ooffset, osize = needleCache.Value()
 		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
 		// set old file delete
-		err = v.asyncDel(offset)
+		err = v.asyncDel(ooffset)
 	}
 	return
 }

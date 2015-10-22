@@ -17,7 +17,7 @@ func TestIndex(t *testing.T) {
 		noffset uint32
 	)
 	defer os.Remove(file)
-	i, err := NewIndexer(file, 10, 1024)
+	i, err := NewIndexer(file, 10)
 	if err != nil {
 		t.Errorf("NewIndexer(\"%s\", 10, 1024)", file)
 		goto failed
@@ -115,7 +115,7 @@ func TestIndex1(t *testing.T) {
 		needles = make(map[int64]NeedleCache)
 		noffset uint32
 	)
-	i, err := NewIndexer(file, 10, 1024)
+	i, err := NewIndexer(file, 10)
 	if err != nil {
 		t.Errorf("NewIndexer(\"%s\", 10, 1024)", file)
 		goto failed
