@@ -36,8 +36,6 @@ type Volume struct {
 	indexer *Indexer
 	needles map[int64]NeedleCache
 	signal  chan uint32
-
-	Readonly bool
 	// flag used in store
 	Command int
 	// compress
@@ -56,16 +54,21 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 	}
 	if v.indexer, err = NewIndexer(ifile, 102400); err != nil {
 		log.Errorf("init indexer: %s error(%v)", ifile, err)
-		return
+		goto failed
 	}
 	v.needles = make(map[int64]NeedleCache)
 	if err = v.init(); err != nil {
-		log.Errorf("volume: %d init error(%v)", id, err)
-		return
+		goto failed
 	}
 	v.signal = make(chan uint32, volumeDelChNum)
 	v.compressKeys = []int64{}
 	go v.del()
+	return
+failed:
+	v.block.Close()
+	if v.indexer != nil {
+		v.indexer.Close()
+	}
 	return
 }
 
@@ -73,27 +76,20 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 func (v *Volume) init() (err error) {
 	var offset uint32
 	// recovery from index
-	log.Infof("try recovery from index: %s", v.indexer.File)
 	if offset, err = v.indexer.Recovery(v.needles); err != nil {
-		log.Info("recovery from index: %s error(%v)", v.indexer.File, err)
 		return
 	}
-	log.Infof("finish recovery from index: %s", v.indexer.File)
-	log.V(1).Infof("recovery offset: %d\n", offset)
-	log.Infof("try recovery from indexsuper block %s", v.block.File)
 	// recovery from super block
-	if err = v.block.Recovery(v.needles, v.indexer, BlockOffset(offset)); err != nil {
-		log.Errorf("recovery from super block: %s error(%v)", v.block.File, err)
-		return
-	}
-	log.Infof("finish recovery from block: %s", v.indexer.File)
+	err = v.block.Recovery(v.needles, v.indexer, BlockOffset(offset))
 	return
 }
 
+// Lock lock the volume, used in multi write needles.
 func (v *Volume) Lock() {
 	v.lock.Lock()
 }
 
+// Unlock lock the volume, used in multi write needles.
 func (v *Volume) Unlock() {
 	v.lock.Unlock()
 }
@@ -171,6 +167,7 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 		v.lock.Unlock()
 		return
 	}
+	log.V(1).Infof("add needle, offset: %d, size: %d", offset, size)
 	// update index
 	if err = v.indexer.Add(key, offset, size); err != nil {
 		v.lock.Unlock()
@@ -221,9 +218,7 @@ func (v *Volume) Flush() (err error) {
 	if err = v.block.Flush(); err != nil {
 		return
 	}
-	if err = v.indexer.Flush(); err != nil {
-		return
-	}
+	err = v.indexer.Flush()
 	return
 }
 
@@ -276,7 +271,7 @@ func (v *Volume) del() {
 		offset  uint32
 		offsets []uint32
 	)
-	log.Infof("start volume: %d del goroutine", v.Id)
+	log.V(1).Infof("start volume: %d del goroutine", v.Id)
 	for {
 		select {
 		case offset = <-v.signal:
@@ -348,12 +343,10 @@ failed:
 
 // Close close the volume.
 func (v *Volume) Close() {
-	log.Infof("volume: %d close", v.Id)
 	v.lock.Lock()
 	v.block.Close()
 	v.indexer.Close()
 	close(v.signal)
 	v.lock.Unlock()
-	log.Infof("finish volume: %d close", v.Id)
 	return
 }

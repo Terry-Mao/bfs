@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"testing"
@@ -16,6 +17,8 @@ func TestNeedle(t *testing.T) {
 		n       = &Needle{}
 		data    = []byte("test")
 		buf     = make([]byte, 40)
+		bbuf    = bytes.NewBuffer(buf)
+		bw      = bufio.NewWriter(bbuf)
 	)
 	offset = 134
 	size = 1064
@@ -40,6 +43,24 @@ func TestNeedle(t *testing.T) {
 	}
 	t.Log("FillNeedle")
 	FillNeedle(padding, int32(len(data)), 1, 1, data, buf)
+	if err = n.ParseHeader(buf[:NeedleHeaderSize]); err != nil {
+		t.Errorf("n.ParseHeader() error(%v)", err)
+		goto failed
+	}
+	if err = n.ParseData(buf[NeedleHeaderSize:]); err != nil {
+		t.Errorf("n.ParseData() error(%v)", err)
+		goto failed
+	}
+	if n.Cookie != 1 || n.Key != 1 || n.Size != 4 || !bytes.Equal(n.Data, data) || n.Flag != NeedleStatusOK || n.PaddingSize != 3 {
+		err = fmt.Errorf("needle Parse() error")
+		t.Error(err)
+		goto failed
+	}
+	if err = WriteNeedle(bw, padding, size, 1, 1, data); err != nil {
+		t.Errorf("WriteNeedle() error(%v)", err)
+		goto failed
+	}
+	buf = bbuf.Bytes()
 	if err = n.ParseHeader(buf[:NeedleHeaderSize]); err != nil {
 		t.Errorf("n.ParseHeader() error(%v)", err)
 		goto failed

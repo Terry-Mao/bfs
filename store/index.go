@@ -44,21 +44,13 @@ const (
 	indexSizeOffset   = indexOffsetOffset + indexOffsetSize
 )
 
-// IndexerStatus is the indexer status.
-type IndexerStatus struct {
-	Status  int
-	SastErr error
-}
-
 // Indexer used for fast recovery super block needle cache.
 type Indexer struct {
 	f      *os.File
 	bw     *bufio.Writer
 	signal chan int
 	ring   *Ring
-	File   string
-	buf    [indexSize]byte
-	Status IndexerStatus
+	file   string
 }
 
 // Index index data.
@@ -91,7 +83,7 @@ func NewIndexer(file string, ring int) (indexer *Indexer, err error) {
 	indexer = &Indexer{}
 	indexer.signal = make(chan int, signalNum)
 	indexer.ring = NewRing(ring)
-	indexer.File = file
+	indexer.file = file
 	if indexer.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDWR|os.O_CREATE, 0664) error(%v)", file, err)
 		return
@@ -162,17 +154,21 @@ func (i *Indexer) Write(key int64, offset uint32, size int32) (err error) {
 func (i *Indexer) Flush() (err error) {
 	for {
 		// write may be less than request, we call flush in a loop
-		if err = i.bw.Flush(); err != nil || err != io.ErrShortWrite {
+		if err = i.bw.Flush(); err != nil && err != io.ErrShortWrite {
+			log.Errorf("index: %s Flush() error(%v)", i.file, err)
 			return
+		} else if err == io.ErrShortWrite {
+			continue
 		}
 		// TODO append N times call flush then clean the os page cache
 		// page cache no used here...
 		// after upload a photo, we cache in user-level.
-		if err == io.ErrShortWrite {
-		}
+		break
 	}
+	return
 }
 
+// merge get index data from ring then write to disk.
 func (i *Indexer) merge() (err error) {
 	var index *Index
 	for {
@@ -194,7 +190,7 @@ func (i *Indexer) write() {
 	var (
 		err error
 	)
-	log.Infof("start index: %s merge write goroutine", i.File)
+	log.Infof("index: %s merge write goroutine", i.file)
 	for {
 		if !i.ready() {
 			log.Info("signal index write goroutine exit")
@@ -212,11 +208,9 @@ func (i *Indexer) write() {
 		log.Errorf("index merge error(%v)", err)
 	}
 	if err = i.f.Sync(); err != nil {
-		log.Errorf("index file sync error(%v)", err)
+		log.Errorf("index: %s Sync() error(%v)", i.file, err)
 	}
-	if err = i.f.Close(); err != nil {
-		log.Errorf("index file close error(%v)", err)
-	}
+	err = i.f.Close()
 	log.Errorf("index write goroutine exit")
 	return
 }
@@ -230,8 +224,9 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		offset int64
 		ix     = &Index{}
 	)
+	log.Infof("index: %s recovery", i.file)
 	if offset, err = i.f.Seek(0, os.SEEK_SET); err != nil {
-		log.Errorf("index seek offset error(%v)", err)
+		log.Errorf("index: %s Seek() error(%v)", i.file, err)
 		return
 	}
 	rd = bufio.NewReaderSize(i.f, NeedleMaxSize)
@@ -243,7 +238,7 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		ix.parse(data)
 		// check
 		if ix.Size > NeedleMaxSize || ix.Size < 1 {
-			log.Warningf("index parse size: %d > %d or %d < 1", ix.Size, NeedleMaxSize, ix.Size)
+			log.Errorf("index parse size: %d > %d or %d < 1", ix.Size, NeedleMaxSize, ix.Size)
 			break
 		}
 		if _, err = rd.Discard(indexSize); err != nil {
@@ -251,7 +246,6 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		}
 		log.V(1).Info(ix.String())
 		offset += int64(indexSize)
-		log.V(1).Infof("index add offset: %d, size: %d into needles cache", ix.Offset, ix.Size)
 		needles[ix.Key] = NewNeedleCache(ix.Offset, ix.Size)
 		// save this for recovery supper block
 		noffset = ix.Offset + NeedleOffset(int64(ix.Size))
@@ -260,10 +254,10 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		return
 	}
 	// reset b.w offset, discard left space which can't parse to a needle
-	log.V(1).Infof("right index seek offset: %d\n", offset)
 	if _, err = i.f.Seek(offset, os.SEEK_SET); err != nil {
-		log.Errorf("index reset offset error(%v)", err)
+		log.Errorf("index: %s Seek() error(%v)", i.file, err)
 	}
+	log.Infof("index: %s recovery [ok]", i.file)
 	return
 }
 
