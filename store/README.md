@@ -88,6 +88,16 @@ $> cat /tmp/store.idx
 /tmp/hijohn_2,/tmp/hijohn_2.idx,2
 ```
 
+## Benchmark & Test
+
+```sh
+# test
+$ cd $GOPATH/github.com/Terry-Mao/bfs/store
+$ go test -v
+# benchmark
+go test -v -bench=. -benchtime=10s
+```
+
 ## Run
 
 ```sh
