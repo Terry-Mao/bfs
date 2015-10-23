@@ -1,2 +1,5 @@
+# store index for find volumes.
 index: /tmp/hijohn.idx
+
+# zookeeper address.
 zk: ["1", "2"]
