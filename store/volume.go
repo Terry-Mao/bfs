@@ -94,6 +94,11 @@ func (v *Volume) Unlock() {
 	v.lock.Unlock()
 }
 
+// File get volume block and index file path.
+func (v *Volume) File() (string, string) {
+	return v.block.File, v.indexer.File
+}
+
 // Get get a needle by key.
 func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	var (

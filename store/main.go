@@ -6,8 +6,17 @@ import (
 	"time"
 )
 
+var (
+	configFile string
+)
+
+func init() {
+	flag.StringVar(&configFile, "c", "./store.yaml", "set config file path")
+}
+
 func main() {
 	var (
+		c      *Config
 		s      *Store
 		v      *Volume
 		d, buf []byte
@@ -16,32 +25,25 @@ func main() {
 	flag.Parse()
 	defer log.Flush()
 	log.Infof("bfs store[%s] start", Ver)
+	if c, err = NewConfig(configFile); err != nil {
+		log.Errorf("NewConfig(\"%s\") error(%v)", configFile, err)
+		return
+	}
+	log.V(1).Infof("index: %s, zk: %v", c.Index, c.ZK)
 	if s, err = NewStore("/tmp/hijohn.idx"); err != nil {
 		log.Errorf("store init error(%v)", err)
 		return
 	}
-	//if v, err = s.AddVolume(2, "/tmp/hijohn_2", "/tmp/hijohn_2.idx"); err != nil {
-	//	return
-	//}
-	//v.Add(2, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
-	//v.Add(3, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
-	//v.Add(4, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
-	// v.block.Dump()
+	if v, err = s.AddVolume(2, "/tmp/hijohn_2", "/tmp/hijohn_2.idx"); err != nil {
+		return
+	}
+	v.Add(2, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
+	v.Add(3, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
+	v.Add(4, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
 	time.Sleep(1 * time.Second)
 	if v = s.Volume(1); v == nil {
 		log.Errorf("volume_id: %d not exist", 2)
 		return
-	}
-	d = make([]byte, 1024)
-	if err = v.Add(0, 0, d); err != nil {
-		log.Errorf("v.Add() error(%v)", err)
-		return
-	}
-	for i := 0; i < 100; i++ {
-		if err = v.Add(int64(i), int64(i), d); err != nil {
-			log.Errorf("v.Add() error(%v)", err)
-			return
-		}
 	}
 	buf = s.Buffer()
 	defer s.FreeBuffer(buf)

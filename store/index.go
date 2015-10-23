@@ -50,7 +50,7 @@ type Indexer struct {
 	bw     *bufio.Writer
 	signal chan int
 	ring   *Ring
-	file   string
+	File   string
 }
 
 // Index index data.
@@ -79,17 +79,17 @@ Size:           %d
 }
 
 // NewIndexer new a indexer for async merge index data to disk.
-func NewIndexer(file string, ring int) (indexer *Indexer, err error) {
-	indexer = &Indexer{}
-	indexer.signal = make(chan int, signalNum)
-	indexer.ring = NewRing(ring)
-	indexer.file = file
-	if indexer.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
+func NewIndexer(file string, ring int) (i *Indexer, err error) {
+	i = &Indexer{}
+	i.signal = make(chan int, signalNum)
+	i.ring = NewRing(ring)
+	i.File = file
+	if i.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDWR|os.O_CREATE, 0664) error(%v)", file, err)
 		return
 	}
-	indexer.bw = bufio.NewWriterSize(indexer.f, NeedleMaxSize)
-	go indexer.write()
+	i.bw = bufio.NewWriterSize(i.f, NeedleMaxSize)
+	go i.write()
 	return
 }
 
@@ -155,7 +155,7 @@ func (i *Indexer) Flush() (err error) {
 	for {
 		// write may be less than request, we call flush in a loop
 		if err = i.bw.Flush(); err != nil && err != io.ErrShortWrite {
-			log.Errorf("index: %s Flush() error(%v)", i.file, err)
+			log.Errorf("index: %s Flush() error(%v)", i.File, err)
 			return
 		} else if err == io.ErrShortWrite {
 			continue
@@ -190,7 +190,7 @@ func (i *Indexer) write() {
 	var (
 		err error
 	)
-	log.Infof("index: %s merge write goroutine", i.file)
+	log.Infof("index: %s merge write goroutine", i.File)
 	for {
 		if !i.ready() {
 			log.Info("signal index write goroutine exit")
@@ -208,7 +208,7 @@ func (i *Indexer) write() {
 		log.Errorf("index merge error(%v)", err)
 	}
 	if err = i.f.Sync(); err != nil {
-		log.Errorf("index: %s Sync() error(%v)", i.file, err)
+		log.Errorf("index: %s Sync() error(%v)", i.File, err)
 	}
 	err = i.f.Close()
 	log.Errorf("index write goroutine exit")
@@ -224,9 +224,9 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		offset int64
 		ix     = &Index{}
 	)
-	log.Infof("index: %s recovery", i.file)
+	log.Infof("index: %s recovery", i.File)
 	if offset, err = i.f.Seek(0, os.SEEK_SET); err != nil {
-		log.Errorf("index: %s Seek() error(%v)", i.file, err)
+		log.Errorf("index: %s Seek() error(%v)", i.File, err)
 		return
 	}
 	rd = bufio.NewReaderSize(i.f, NeedleMaxSize)
@@ -255,9 +255,9 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 	}
 	// reset b.w offset, discard left space which can't parse to a needle
 	if _, err = i.f.Seek(offset, os.SEEK_SET); err != nil {
-		log.Errorf("index: %s Seek() error(%v)", i.file, err)
+		log.Errorf("index: %s Seek() error(%v)", i.File, err)
 	}
-	log.Infof("index: %s recovery [ok]", i.file)
+	log.Infof("index: %s recovery [ok]", i.File)
 	return
 }
 
