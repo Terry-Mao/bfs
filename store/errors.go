@@ -6,10 +6,11 @@ import (
 
 var (
 	// block
-	ErrSuperBlockMagic   = errors.New("super block magic error")
-	ErrSuperBlockVer     = errors.New("super block ver error")
-	ErrSuperBlockPadding = errors.New("super block padding error")
-	ErrSuperBlockNoSpace = errors.New("super block no left free space")
+	ErrSuperBlockMagic      = errors.New("super block magic error")
+	ErrSuperBlockVer        = errors.New("super block ver error")
+	ErrSuperBlockPadding    = errors.New("super block padding error")
+	ErrSuperBlockNoSpace    = errors.New("super block no left free space")
+	ErrSuperBlockRepairSize = errors.New("super block repair size")
 	// needle
 	ErrNeedleExists      = errors.New("needle already exists")
 	ErrNoNeedle          = errors.New("needle not exists")

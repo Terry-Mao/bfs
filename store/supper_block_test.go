@@ -101,8 +101,8 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("block size: %d not match", size)
 		goto failed
 	}
-	if b.offset != 6 {
-		t.Errorf("b.offset: %d not match", b.offset)
+	if b.Offset != 6 {
+		t.Errorf("b.Offset: %d not match", b.Offset)
 		goto failed
 	}
 	if v, err := b.w.Seek(0, os.SEEK_CUR); err != nil {
@@ -141,8 +141,8 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("block size: %d not match", size)
 		goto failed
 	}
-	if b.offset != 11 {
-		t.Errorf("b.offset: %d not match", b.offset)
+	if b.Offset != 11 {
+		t.Errorf("b.Offset: %d not match", b.Offset)
 		goto failed
 	}
 	if v, err := b.w.Seek(0, os.SEEK_CUR); err != nil {
@@ -179,8 +179,8 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("block size: %d not match", size)
 		goto failed
 	}
-	if b.offset != 16 {
-		t.Errorf("b.offset: %d not match", b.offset)
+	if b.Offset != 16 {
+		t.Errorf("b.Offset: %d not match", b.Offset)
 		goto failed
 	}
 	// test write
@@ -199,8 +199,8 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("block size: %d not match", size)
 		goto failed
 	}
-	if b.offset != 21 {
-		t.Errorf("b.offset: %d not match", b.offset)
+	if b.Offset != 21 {
+		t.Errorf("b.Offset: %d not match", b.Offset)
 		goto failed
 	}
 	t.Log("Flush()")
@@ -325,7 +325,7 @@ func TestSuperBlock(t *testing.T) {
 	}
 	// test repair
 	t.Log("Repair(3)")
-	if err = b.Repair(3, 3, data, 11); err != nil {
+	if err = b.Repair(3, 3, data, 40, 11); err != nil {
 		t.Errorf("b.Repair(3) error(%v)", err)
 		goto failed
 	}

@@ -150,7 +150,7 @@ func (s *Store) saveIndex() (err error) {
 	sort.Sort(Int32Slice(vids))
 	for _, vid = range vids {
 		if v, ok = s.volumes[vid]; ok {
-			bfile, ifile = v.File()
+			bfile, ifile = v.Block.File, v.Indexer.File
 			if _, err = s.f.Write([]byte(fmt.Sprintf("%s,%s,%d\n", bfile, ifile, vid))); err != nil {
 				return
 			}

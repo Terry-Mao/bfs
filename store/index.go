@@ -46,11 +46,12 @@ const (
 
 // Indexer used for fast recovery super block needle cache.
 type Indexer struct {
-	f      *os.File
-	bw     *bufio.Writer
-	signal chan int
-	ring   *Ring
-	File   string
+	f       *os.File
+	bw      *bufio.Writer
+	signal  chan int
+	ring    *Ring
+	File    string `json:"file"`
+	LastErr error  `json:"last_err"`
 }
 
 // Index index data.
@@ -119,21 +120,17 @@ func writeIndex(w *bufio.Writer, key int64, offset uint32, size int32) (err erro
 	return
 }
 
-// Add append a index data to ring, signal bg goroutine merge to disk.
-func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
-	if err = i.Append(key, offset, size); err != nil {
-		return
-	}
-	i.Signal()
-	return
-}
-
 // Append append a index data to ring.
 func (i *Indexer) Append(key int64, offset uint32, size int32) (err error) {
 	var (
 		index *Index
 	)
+	if i.LastErr != nil {
+		err = i.LastErr
+		return
+	}
 	if index, err = i.ring.Set(); err != nil {
+		i.LastErr = err
 		log.Errorf("index ring buffer full")
 		return
 	}
@@ -144,17 +141,36 @@ func (i *Indexer) Append(key int64, offset uint32, size int32) (err error) {
 	return
 }
 
+// Add append a index data to ring, signal bg goroutine merge to disk.
+func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
+	if err = i.Append(key, offset, size); err != nil {
+		return
+	}
+	i.Signal()
+	return
+}
+
 // Write append index needle to disk, WARN can't concurrency with write.
 func (i *Indexer) Write(key int64, offset uint32, size int32) (err error) {
+	if i.LastErr != nil {
+		err = i.LastErr
+		return
+	}
 	err = writeIndex(i.bw, key, offset, size)
+	i.LastErr = err
 	return
 }
 
 // Flush flush writer buffer.
 func (i *Indexer) Flush() (err error) {
+	if i.LastErr != nil {
+		err = i.LastErr
+		return
+	}
 	for {
 		// write may be less than request, we call flush in a loop
 		if err = i.bw.Flush(); err != nil && err != io.ErrShortWrite {
+			i.LastErr = err
 			log.Errorf("index: %s Flush() error(%v)", i.File, err)
 			return
 		} else if err == io.ErrShortWrite {
@@ -177,7 +193,7 @@ func (i *Indexer) merge() (err error) {
 			break
 		}
 		// merge index buffer
-		if err = writeIndex(i.bw, index.Key, index.Offset, index.Size); err != nil {
+		if err = i.Write(index.Key, index.Offset, index.Size); err != nil {
 			break
 		}
 		i.ring.GetAdv()

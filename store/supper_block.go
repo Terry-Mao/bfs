@@ -15,7 +15,8 @@ const (
 	superBlockHeaderSize  = 8
 	superBlockMagicSize   = 4
 	superBlockVerSize     = 1
-	superBlockPaddingSize = superBlockHeaderSize - superBlockMagicSize - superBlockVerSize
+	superBlockPaddingSize = superBlockHeaderSize - superBlockMagicSize -
+		superBlockVerSize
 	// offset
 	superBlockMagicOffset   = 0
 	superBlockVerOffset     = superBlockMagicOffset + superBlockVerSize
@@ -36,15 +37,16 @@ var (
 
 // An Volume contains one superblock and many needles.
 type SuperBlock struct {
-	r      *os.File
-	w      *os.File
-	bw     *bufio.Writer
-	File   string
-	offset uint32
-	buf    []byte
+	r       *os.File
+	w       *os.File
+	bw      *bufio.Writer
+	File    string `json:"file"`
+	Offset  uint32 `json:"offset"`
+	LastErr error  `json:"last_err"`
+	buf     []byte
 	// meta
-	Magic []byte
-	Ver   byte
+	Magic []byte `json:"-"`
+	Ver   byte   `json:"ver"`
 }
 
 // NewSuperBlock new a super block struct.
@@ -120,65 +122,76 @@ func (b *SuperBlock) init() (err error) {
 			return
 		}
 	}
-	b.offset = NeedleOffset(superBlockHeaderOffset)
+	b.Offset = NeedleOffset(superBlockHeaderOffset)
+	return
+}
+
+// writeNeedle get a needle size by data.
+func (b *SuperBlock) writeNeedle(key, cookie int64, data []byte) (size int32, incrOffset uint32, err error) {
+	var (
+		padding  int32
+		dataSize = int32(len(data))
+	)
+	if padding, size, err = NeedleSize(dataSize); err != nil {
+		// if err is needle too large don't set last error
+		return
+	}
+	incrOffset = NeedleOffset(int64(size))
+	if superBlockMaxOffset-incrOffset < b.Offset {
+		err = ErrSuperBlockNoSpace
+		b.LastErr = err
+		return
+	}
+	if err = WriteNeedle(b.bw, padding, dataSize, key, cookie, data); err != nil {
+		b.LastErr = err
+	}
 	return
 }
 
 // Add append a photo to the block.
 func (b *SuperBlock) Add(key, cookie int64, data []byte) (offset uint32, size int32, err error) {
-	var (
-		padding    int32
-		incrOffset uint32
-		dataSize   = int32(len(data))
-	)
-	if padding, size, err = NeedleSize(dataSize); err != nil {
+	var incrOffset uint32
+	if b.LastErr != nil {
+		err = b.LastErr
 		return
 	}
-	incrOffset = NeedleOffset(int64(size))
-	if superBlockMaxOffset-incrOffset < b.offset {
-		err = ErrSuperBlockNoSpace
-		return
-	}
-	if err = WriteNeedle(b.bw, padding, dataSize, key, cookie, data); err != nil {
+	if size, incrOffset, err = b.writeNeedle(key, cookie, data); err != nil {
 		return
 	}
 	if err = b.Flush(); err != nil {
 		return
 	}
-	offset = b.offset
-	b.offset += incrOffset
-	log.V(1).Infof("add a needle, key: %d, cookie: %d, offset: %d, size: %d, b.offset: %d", key, cookie, offset, size, b.offset)
+	offset = b.Offset
+	b.Offset += incrOffset
+	log.V(1).Infof("add a needle, key: %d, cookie: %d, offset: %d, size: %d, b.offset: %d", key, cookie, offset, size, b.Offset)
 	return
 }
 
 // Write start add needles to the block, must called after start a transaction.
 func (b *SuperBlock) Write(key, cookie int64, data []byte) (offset uint32, size int32, err error) {
-	var (
-		padding    int32
-		incrOffset uint32
-		dataSize   = int32(len(data))
-	)
-	if padding, size, err = NeedleSize(dataSize); err != nil {
+	var incrOffset uint32
+	if b.LastErr != nil {
+		err = b.LastErr
 		return
 	}
-	incrOffset = NeedleOffset(int64(size))
-	if superBlockMaxOffset-incrOffset < b.offset {
-		err = ErrSuperBlockNoSpace
+	if size, incrOffset, err = b.writeNeedle(key, cookie, data); err != nil {
 		return
 	}
-	if err = WriteNeedle(b.bw, padding, dataSize, key, cookie, data); err != nil {
-		return
-	}
-	offset = b.offset
-	b.offset += incrOffset
+	offset = b.Offset
+	b.Offset += incrOffset
 	return
 }
 
 // Flush flush writer buffer.
 func (b *SuperBlock) Flush() (err error) {
+	if b.LastErr != nil {
+		err = b.LastErr
+		return
+	}
 	for {
 		// write may be less than request, we call flush in a loop
 		if err = b.bw.Flush(); err != nil && err != io.ErrShortWrite {
+			b.LastErr = err
 			log.Errorf("block: %s Flush() error(%v)", b.File, err)
 			return
 		} else if err == io.ErrShortWrite {
@@ -193,30 +206,49 @@ func (b *SuperBlock) Flush() (err error) {
 }
 
 // Repair repair the specified offset needle without update current offset.
-func (b *SuperBlock) Repair(key, cookie int64, data []byte, offset uint32) (err error) {
+func (b *SuperBlock) Repair(key, cookie int64, data []byte, size int32, offset uint32) (err error) {
 	var (
-		size     int32
+		nsize    int32
 		padding  int32
 		dataSize = int32(len(data))
 	)
-	if padding, size, err = NeedleSize(dataSize); err != nil {
+	if b.LastErr != nil {
+		err = b.LastErr
+		return
+	}
+	if padding, nsize, err = NeedleSize(dataSize); err != nil {
+		return
+	}
+	if nsize != size {
+		err = ErrSuperBlockRepairSize
 		return
 	}
 	FillNeedle(padding, dataSize, key, cookie, data, b.buf)
-	_, err = b.w.WriteAt(b.buf[:size], BlockOffset(offset))
+	_, err = b.w.WriteAt(b.buf[:nsize], BlockOffset(offset))
+	b.LastErr = err
 	return
 }
 
 // Get get a needle from super block.
 func (b *SuperBlock) Get(offset uint32, buf []byte) (err error) {
+	if b.LastErr != nil {
+		err = b.LastErr
+		return
+	}
 	_, err = b.r.ReadAt(buf, BlockOffset(offset))
+	b.LastErr = err
 	return
 }
 
 // Del logical del a needls, only update the flag to it.
 func (b *SuperBlock) Del(offset uint32) (err error) {
+	if b.LastErr != nil {
+		err = b.LastErr
+		return
+	}
 	// WriteAt won't update the file offset.
 	_, err = b.w.WriteAt(NeedleStatusDelBytes, BlockOffset(offset)+NeedleFlagOffset)
+	b.LastErr = err
 	return
 }
 
@@ -291,8 +323,13 @@ func (b *SuperBlock) Compress(offset int64, v *Volume) (noffset int64, err error
 		data []byte
 		r    *os.File
 		rd   *bufio.Reader
-		n    = &Needle{}
+		n    *Needle
 	)
+	if b.LastErr != nil {
+		err = b.LastErr
+		return
+	}
+	n = &Needle{}
 	log.Infof("block: %s compress", b.File)
 	if r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDONLY, 0664) error(%v)", b.File, err)

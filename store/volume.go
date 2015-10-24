@@ -31,16 +31,14 @@ func (p Uint32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 // An store server contains many logic Volume, volume is superblock container.
 type Volume struct {
-	Id      int32  `json:"id"`
-	Stats   *Stats `json:"stats"`
-	lock    sync.Mutex
-	block   *SuperBlock
-	indexer *Indexer
-	needles map[int64]NeedleCache
-	signal  chan uint32
-	// flag used in store
-	Command int `json:"-"`
-	// compress
+	lock           sync.Mutex
+	Id             int32                 `json:"id"`
+	Stats          *Stats                `json:"stats"`
+	Block          *SuperBlock           `json:"block"`
+	Indexer        *Indexer              `json:"index"`
+	needles        map[int64]NeedleCache ``
+	signal         chan uint32
+	Command        int  `json:"-"` // flag used in store
 	Compress       bool `json:"-"`
 	compressOffset int64
 	compressKeys   []int64
@@ -51,11 +49,11 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 	v = &Volume{}
 	v.Id = id
 	v.Stats = &Stats{}
-	if v.block, err = NewSuperBlock(bfile); err != nil {
+	if v.Block, err = NewSuperBlock(bfile); err != nil {
 		log.Errorf("init super block: \"%s\" error(%v)", bfile, err)
 		return
 	}
-	if v.indexer, err = NewIndexer(ifile, 102400); err != nil {
+	if v.Indexer, err = NewIndexer(ifile, 102400); err != nil {
 		log.Errorf("init indexer: %s error(%v)", ifile, err)
 		goto failed
 	}
@@ -69,9 +67,9 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 	go v.Stats.Calc()
 	return
 failed:
-	v.block.Close()
-	if v.indexer != nil {
-		v.indexer.Close()
+	v.Block.Close()
+	if v.Indexer != nil {
+		v.Indexer.Close()
 	}
 	return
 }
@@ -80,11 +78,11 @@ failed:
 func (v *Volume) init() (err error) {
 	var offset uint32
 	// recovery from index
-	if offset, err = v.indexer.Recovery(v.needles); err != nil {
+	if offset, err = v.Indexer.Recovery(v.needles); err != nil {
 		return
 	}
 	// recovery from super block
-	err = v.block.Recovery(v.needles, v.indexer, BlockOffset(offset))
+	err = v.Block.Recovery(v.needles, v.Indexer, BlockOffset(offset))
 	return
 }
 
@@ -96,11 +94,6 @@ func (v *Volume) Lock() {
 // Unlock lock the volume, used in multi write needles.
 func (v *Volume) Unlock() {
 	v.lock.Unlock()
-}
-
-// File get volume block and index file path.
-func (v *Volume) File() (string, string) {
-	return v.block.File, v.indexer.File
 }
 
 // Get get a needle by key.
@@ -127,7 +120,7 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		return
 	}
 	// WARN atomic read superblock, pread syscall is atomic
-	if err = v.block.Get(offset, buf[:size]); err != nil {
+	if err = v.Block.Get(offset, buf[:size]); err != nil {
 		return
 	}
 	// parse needle
@@ -173,13 +166,13 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 	v.lock.Lock()
 	needleCache, ok = v.needles[key]
 	// add needle
-	if offset, size, err = v.block.Add(key, cookie, data); err != nil {
+	if offset, size, err = v.Block.Add(key, cookie, data); err != nil {
 		v.lock.Unlock()
 		return
 	}
 	log.V(1).Infof("add needle, offset: %d, size: %d", offset, size)
 	// update index
-	if err = v.indexer.Add(key, offset, size); err != nil {
+	if err = v.Indexer.Add(key, offset, size); err != nil {
 		v.lock.Unlock()
 		return
 	}
@@ -206,12 +199,12 @@ func (v *Volume) Write(key, cookie int64, data []byte) (err error) {
 	)
 	needleCache, ok = v.needles[key]
 	// add needle
-	if offset, size, err = v.block.Write(key, cookie, data); err != nil {
+	if offset, size, err = v.Block.Write(key, cookie, data); err != nil {
 		return
 	}
 	log.V(1).Infof("add needle, offset: %d, size: %d", offset, size)
 	// update index
-	if err = v.indexer.Write(key, offset, size); err != nil {
+	if err = v.Indexer.Write(key, offset, size); err != nil {
 		return
 	}
 	v.needles[key] = NewNeedleCache(offset, size)
@@ -227,10 +220,10 @@ func (v *Volume) Write(key, cookie int64, data []byte) (err error) {
 
 // Flush flush block&indexer buffer to disk, this is used for multi add needles.
 func (v *Volume) Flush() (err error) {
-	if err = v.block.Flush(); err != nil {
+	if err = v.Block.Flush(); err != nil {
 		return
 	}
-	err = v.indexer.Flush()
+	err = v.Indexer.Flush()
 	atomic.AddUint64(&v.Stats.TotalFlushProcessed, 1)
 	return
 }
@@ -306,7 +299,7 @@ func (v *Volume) del() {
 		// sort let the disk seqence write
 		sort.Sort(Uint32Slice(offsets))
 		for _, offset = range offsets {
-			if err = v.block.Del(offset); err != nil {
+			if err = v.Block.Del(offset); err != nil {
 				break
 			}
 		}
@@ -326,7 +319,7 @@ func (v *Volume) StartCompress(nv *Volume) (err error) {
 	}
 	v.lock.Unlock()
 	if err == nil {
-		v.compressOffset, err = v.block.Compress(v.compressOffset, nv)
+		v.compressOffset, err = v.Block.Compress(v.compressOffset, nv)
 		atomic.AddUint64(&v.Stats.TotalCompressProcessed, 1)
 	}
 	return
@@ -339,7 +332,7 @@ func (v *Volume) StopCompress(nv *Volume) (err error) {
 	var key int64
 	v.lock.Lock()
 	if nv != nil {
-		if v.compressOffset, err = v.block.Compress(v.compressOffset, nv); err != nil {
+		if v.compressOffset, err = v.Block.Compress(v.compressOffset, nv); err != nil {
 			goto failed
 		}
 		for _, key = range v.compressKeys {
@@ -359,8 +352,8 @@ failed:
 // Close close the volume.
 func (v *Volume) Close() {
 	v.lock.Lock()
-	v.block.Close()
-	v.indexer.Close()
+	v.Block.Close()
+	v.Indexer.Close()
 	close(v.signal)
 	v.lock.Unlock()
 	return
