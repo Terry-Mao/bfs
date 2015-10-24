@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -55,7 +54,6 @@ func (p Int32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 type Store struct {
 	f        *os.File
 	ch       chan *Volume
-	bp       *sync.Pool
 	file     string
 	VolumeId int32
 	volumes  map[int32]*Volume
@@ -90,7 +88,6 @@ func NewStore(file string) (s *Store, err error) {
 		}
 		s.volumes[volumeIds[i]] = volume
 	}
-	s.bp = &sync.Pool{}
 	log.Infof("current max volume id: %d", s.VolumeId)
 	return
 }
@@ -276,21 +273,6 @@ func (s *Store) Compress(id int32, bfile, ifile string) (err error) {
 	nv.Command = storeCompress
 	s.ch <- nv
 	return
-}
-
-// Buffer get a buffer from sync.Pool
-func (s *Store) Buffer() (d []byte) {
-	var v interface{}
-	if v = s.bp.Get(); v != nil {
-		d = v.([]byte)
-		return
-	}
-	return make([]byte, NeedleMaxSize)
-}
-
-// FreeBuffer free the buffer to pool.
-func (s *Store) FreeBuffer(d []byte) {
-	s.bp.Put(d)
 }
 
 // Close close the store.

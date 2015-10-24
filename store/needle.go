@@ -52,16 +52,12 @@ const (
 	NeedleFlagOffset   = needleMagicSize + needleCookieSize + needleKeySize
 	needleChecksumSize = 4
 	NeedleFooterSize   = needleMagicSize + needleChecksumSize // +padding
-	needleSizeMask     = int64(0xFF)
-	needleOffsetBit    = 32
 	// our offset is aligned with padding size(8)
 	// so a uint32 can store 4GB * 8 offset
 	NeedlePaddingSize = 8
 	// flags
 	NeedleStatusOK  = byte(0)
 	NeedleStatusDel = byte(1)
-	// del offset
-	NeedleCacheDelOffset = uint32(0)
 )
 
 var (
@@ -82,22 +78,6 @@ var (
 	// flag
 	NeedleStatusDelBytes = []byte{NeedleStatusDel}
 )
-
-// NeedleCache needle meta data in memory.
-// high 32bit = Offset
-// low 32 bit = Size
-type NeedleCache int64
-
-// NewNeedleCache new a needle cache.
-func NewNeedleCache(offset uint32, size int32) NeedleCache {
-	return NeedleCache(int64(offset)<<needleOffsetBit + int64(size))
-}
-
-// Value get needle meta data.
-func (n NeedleCache) Value() (offset uint32, size int32) {
-	offset, size = uint32(n>>needleOffsetBit), int32(n)
-	return
-}
 
 // Needle is a photo data stored in disk.
 type Needle struct {

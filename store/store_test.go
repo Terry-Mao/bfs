@@ -37,13 +37,6 @@ func TestStore(t *testing.T) {
 
 	}
 	defer s.Close()
-	t.Log("Buffer()")
-	if buf = s.Buffer(); len(buf) != NeedleMaxSize {
-		err = fmt.Errorf("buf size: %d not match %d", len(buf), NeedleMaxSize)
-		t.Error(err)
-		goto failed
-	}
-	defer s.FreeBuffer(buf)
 	t.Log("AddVolume(1)")
 	if v, err = s.AddVolume(1, bfile, ifile); err != nil {
 		t.Errorf("AddVolume() error(%v)", err)
@@ -77,6 +70,8 @@ func TestStore(t *testing.T) {
 		t.Errorf("v.Add(1) error(%v)", err)
 		goto failed
 	}
+	buf = v.Buffer()
+	defer v.FreeBuffer(buf)
 	if _, err = v.Get(1, 1, buf); err != nil {
 		t.Errorf("v.Get(1) error(%v)", err)
 		goto failed

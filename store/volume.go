@@ -15,12 +15,30 @@ const (
 	volumeDelChNum = 10240
 	// del
 	volumeDelMax = 50
+	// needle cache
+	needleCacheOffsetBit = 32
+	// del offset
+	NeedleCacheDelOffset = uint32(0)
 )
 
 var (
 	// del
 	volumeDelTime = 1 * time.Minute
 )
+
+// NeedleCache needle meta data in memory.
+// high 32bit = Offset
+// low 32 bit = Size
+// NeedleCache new a needle cache.
+func NeedleCache(offset uint32, size int32) int64 {
+	return int64(offset)<<needleCacheOffsetBit + int64(size)
+}
+
+// NeedleCacheValue get needle cache data.
+func NeedleCacheValue(n int64) (offset uint32, size int32) {
+	offset, size = uint32(n>>needleCacheOffsetBit), int32(n)
+	return
+}
 
 // Uint32Slice deleted offset sort.
 type Uint32Slice []uint32
@@ -31,13 +49,14 @@ func (p Uint32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 // An store server contains many logic Volume, volume is superblock container.
 type Volume struct {
-	lock           sync.Mutex
-	Id             int32                 `json:"id"`
-	Stats          *Stats                `json:"stats"`
-	Block          *SuperBlock           `json:"block"`
-	Indexer        *Indexer              `json:"index"`
-	needles        map[int64]NeedleCache ``
+	lock           sync.RWMutex
+	Id             int32       `json:"id"`
+	Stats          *Stats      `json:"stats"`
+	Block          *SuperBlock `json:"block"`
+	Indexer        *Indexer    `json:"index"`
+	needles        map[int64]int64
 	signal         chan uint32
+	bp             *sync.Pool
 	Command        int  `json:"-"` // flag used in store
 	Compress       bool `json:"-"`
 	compressOffset int64
@@ -49,15 +68,16 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 	v = &Volume{}
 	v.Id = id
 	v.Stats = &Stats{}
+	v.bp = &sync.Pool{}
 	if v.Block, err = NewSuperBlock(bfile); err != nil {
 		log.Errorf("init super block: \"%s\" error(%v)", bfile, err)
 		return
 	}
-	if v.Indexer, err = NewIndexer(ifile, 102400); err != nil {
+	if v.Indexer, err = NewIndexer(ifile, 10240); err != nil {
 		log.Errorf("init indexer: %s error(%v)", ifile, err)
 		goto failed
 	}
-	v.needles = make(map[int64]NeedleCache)
+	v.needles = make(map[int64]int64)
 	if err = v.init(); err != nil {
 		goto failed
 	}
@@ -96,25 +116,42 @@ func (v *Volume) Unlock() {
 	v.lock.Unlock()
 }
 
+// Buffer get a buffer from sync.Pool
+func (v *Volume) Buffer() (d []byte) {
+	var i interface{}
+	if i = v.bp.Get(); i != nil {
+		d = i.([]byte)
+		return
+	}
+	return make([]byte, NeedleMaxSize)
+}
+
+// FreeBuffer free the buffer to pool.
+func (v *Volume) FreeBuffer(d []byte) {
+	v.bp.Put(d)
+}
+
 // Get get a needle by key.
 func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	var (
-		ok          bool
-		size        int32
-		offset      uint32
-		needleCache NeedleCache
-		needle      = &Needle{}
+		ok     bool
+		nc     int64
+		size   int32
+		offset uint32
+		n      = &Needle{}
 	)
 	// get a needle
-	v.lock.Lock()
-	needleCache, ok = v.needles[key]
-	v.lock.Unlock()
+	v.lock.RLock()
+	nc, ok = v.needles[key]
+	v.lock.RUnlock()
 	if !ok {
 		err = ErrNoNeedle
 		return
 	}
-	offset, size = needleCache.Value()
-	log.V(1).Infof("get needle, key: %d, cookie: %d, offset: %d, size: %d", key, cookie, offset, size)
+	offset, size = NeedleCacheValue(nc)
+	if log.V(1) {
+		log.Infof("get needle, key: %d, cookie: %d, offset: %d, size: %d", key, cookie, offset, size)
+	}
 	if offset == NeedleCacheDelOffset {
 		err = ErrNeedleDeleted
 		return
@@ -124,32 +161,34 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		return
 	}
 	// parse needle
-	if err = needle.ParseHeader(buf[:NeedleHeaderSize]); err != nil {
+	if err = n.ParseHeader(buf[:NeedleHeaderSize]); err != nil {
 		return
 	}
-	if err = needle.ParseData(buf[NeedleHeaderSize:]); err != nil {
+	if err = n.ParseData(buf[NeedleHeaderSize:]); err != nil {
 		return
 	}
-	log.V(1).Infof("%v\n", buf[:size])
-	log.V(1).Infof("%v\n", needle)
+	if log.V(1) {
+		log.Infof("%v\n", buf[:size])
+		log.Infof("%v\n", n)
+	}
 	// check needle
-	if needle.Key != key {
+	if n.Key != key {
 		err = ErrNeedleKey
 		return
 	}
-	if needle.Cookie != cookie {
+	if n.Cookie != cookie {
 		err = ErrNeedleCookie
 		return
 	}
 	// if delete
-	if needle.Flag == NeedleStatusDel {
+	if n.Flag == NeedleStatusDel {
 		v.lock.Lock()
-		v.needles[key] = NewNeedleCache(NeedleCacheDelOffset, size)
+		v.needles[key] = NeedleCache(NeedleCacheDelOffset, size)
 		v.lock.Unlock()
 		err = ErrNeedleDeleted
 		return
 	}
-	data = needle.Data
+	data = n.Data
 	atomic.AddUint64(&v.Stats.TotalGetProcessed, 1)
 	return
 }
@@ -159,27 +198,29 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 	var (
 		ok              bool
+		nc              int64
 		size, osize     int32
 		offset, ooffset uint32
-		needleCache     NeedleCache
 	)
 	v.lock.Lock()
-	needleCache, ok = v.needles[key]
+	nc, ok = v.needles[key]
 	// add needle
 	if offset, size, err = v.Block.Add(key, cookie, data); err != nil {
 		v.lock.Unlock()
 		return
 	}
-	log.V(1).Infof("add needle, offset: %d, size: %d", offset, size)
+	if log.V(1) {
+		log.Infof("add needle, offset: %d, size: %d", offset, size)
+	}
 	// update index
 	if err = v.Indexer.Add(key, offset, size); err != nil {
 		v.lock.Unlock()
 		return
 	}
-	v.needles[key] = NewNeedleCache(offset, size)
+	v.needles[key] = NeedleCache(offset, size)
 	v.lock.Unlock()
 	if ok {
-		ooffset, osize = needleCache.Value()
+		ooffset, osize = NeedleCacheValue(nc)
 		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
 		// set old file delete
 		err = v.asyncDel(ooffset)
@@ -193,23 +234,23 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 func (v *Volume) Write(key, cookie int64, data []byte) (err error) {
 	var (
 		ok              bool
+		nc              int64
 		size, osize     int32
 		offset, ooffset uint32
-		needleCache     NeedleCache
 	)
-	needleCache, ok = v.needles[key]
-	// add needle
+	nc, ok = v.needles[key]
 	if offset, size, err = v.Block.Write(key, cookie, data); err != nil {
 		return
 	}
-	log.V(1).Infof("add needle, offset: %d, size: %d", offset, size)
-	// update index
-	if err = v.Indexer.Write(key, offset, size); err != nil {
+	if log.V(1) {
+		log.Infof("add needle, offset: %d, size: %d", offset, size)
+	}
+	if err = v.Indexer.Append(key, offset, size); err != nil {
 		return
 	}
-	v.needles[key] = NewNeedleCache(offset, size)
+	v.needles[key] = NeedleCache(offset, size)
 	if ok {
-		ooffset, osize = needleCache.Value()
+		ooffset, osize = NeedleCacheValue(nc)
 		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
 		// set old file delete
 		err = v.asyncDel(ooffset)
@@ -223,7 +264,7 @@ func (v *Volume) Flush() (err error) {
 	if err = v.Block.Flush(); err != nil {
 		return
 	}
-	err = v.Indexer.Flush()
+	v.Indexer.Signal()
 	atomic.AddUint64(&v.Stats.TotalFlushProcessed, 1)
 	return
 }
@@ -245,17 +286,17 @@ func (v *Volume) asyncDel(offset uint32) (err error) {
 // cache offset to zero.
 func (v *Volume) Del(key int64) (err error) {
 	var (
-		ok          bool
-		size        int32
-		offset      uint32
-		needleCache NeedleCache
+		ok     bool
+		nc     int64
+		size   int32
+		offset uint32
 	)
 	// get a needle, update the offset to del
 	v.lock.Lock()
-	needleCache, ok = v.needles[key]
+	nc, ok = v.needles[key]
 	if ok {
-		offset, size = needleCache.Value()
-		v.needles[key] = NewNeedleCache(NeedleCacheDelOffset, size)
+		offset, size = NeedleCacheValue(nc)
+		v.needles[key] = NeedleCache(NeedleCacheDelOffset, size)
 		// del barrier
 		if v.Compress {
 			v.compressKeys = append(v.compressKeys, key)
@@ -278,7 +319,9 @@ func (v *Volume) del() {
 		offset  uint32
 		offsets []uint32
 	)
-	log.V(1).Infof("start volume: %d del goroutine", v.Id)
+	if log.V(1) {
+		log.Infof("start volume: %d del goroutine", v.Id)
+	}
 	for {
 		select {
 		case offset = <-v.signal:

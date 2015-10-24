@@ -13,7 +13,7 @@ func init() {
 func TestIndex(t *testing.T) {
 	var (
 		file    = "./test/test.idx"
-		needles = make(map[int64]NeedleCache)
+		needles = make(map[int64]int64)
 		noffset uint32
 	)
 	defer os.Remove(file)
@@ -57,22 +57,22 @@ func TestIndex(t *testing.T) {
 		t.Errorf("noffset: %d not match", noffset)
 		goto failed
 	}
-	if o, s := needles[1].Value(); o != 1 && s != 8 {
+	if o, s := NeedleCacheValue(needles[1]); o != 1 && s != 8 {
 		err = fmt.Errorf("needle.Value(1) not match")
 		t.Error(err)
 		goto failed
 	}
-	if o, s := needles[2].Value(); o != 2 && s != 8 {
+	if o, s := NeedleCacheValue(needles[2]); o != 2 && s != 8 {
 		err = fmt.Errorf("needle.Value(2) not match")
 		t.Error(err)
 		goto failed
 	}
-	if o, s := needles[5].Value(); o != 3 && s != 8 {
+	if o, s := NeedleCacheValue(needles[5]); o != 3 && s != 8 {
 		err = fmt.Errorf("needle.Value(5) not match")
 		t.Error(err)
 		goto failed
 	}
-	if o, s := needles[6].Value(); o != 4 && s != 8 {
+	if o, s := NeedleCacheValue(needles[6]); o != 4 && s != 8 {
 		err = fmt.Errorf("needle.Value(6) not match")
 		t.Error(err)
 		goto failed
@@ -98,7 +98,7 @@ func TestIndex(t *testing.T) {
 		t.Errorf("noffset: %d not match", noffset)
 		goto failed
 	}
-	if o, s := needles[10].Value(); o != 5 && s != 8 {
+	if o, s := NeedleCacheValue(needles[10]); o != 5 && s != 8 {
 		t.Error("needle.Value(1) not match")
 		goto failed
 	}
@@ -112,7 +112,7 @@ failed:
 func TestIndex1(t *testing.T) {
 	var (
 		file    = "./test/test1.idx"
-		needles = make(map[int64]NeedleCache)
+		needles = make(map[int64]int64)
 		noffset uint32
 	)
 	i, err := NewIndexer(file, 10)
@@ -142,7 +142,7 @@ func TestIndex1(t *testing.T) {
 		t.Errorf("noffset: %d not match", noffset)
 		goto failed
 	}
-	if o, s := needles[1].Value(); o != 1 && s != 8 {
+	if o, s := NeedleCacheValue(needles[1]); o != 1 && s != 8 {
 		t.Error("needle.Value(1) not match")
 		goto failed
 	}
@@ -161,7 +161,7 @@ func TestIndex1(t *testing.T) {
 		t.Errorf("noffset: %d not match", noffset)
 		goto failed
 	}
-	if o, s := needles[2].Value(); o != 2 && s != 8 {
+	if o, s := NeedleCacheValue(needles[2]); o != 2 && s != 8 {
 		t.Error("needle.Value(1) not match")
 		goto failed
 	}

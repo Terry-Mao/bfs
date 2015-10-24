@@ -48,8 +48,8 @@ func main() {
 		log.Errorf("volume_id: %d not exist", 2)
 		return
 	}
-	buf = s.Buffer()
-	defer s.FreeBuffer(buf)
+	buf = v.Buffer()
+	defer v.FreeBuffer(buf)
 	if d, err = v.Get(2, 1, buf); err != nil {
 		log.Errorf("v.Get() error(%v)", err)
 		return

@@ -52,7 +52,7 @@ func TestSuperBlock(t *testing.T) {
 		size    int32
 		offset  uint32
 		n       = &Needle{}
-		needles = make(map[int64]NeedleCache)
+		needles = make(map[int64]int64)
 		data    = []byte("test")
 		file    = "./test/test.block"
 		bfile   = "./test/test.block.compress"
@@ -275,19 +275,19 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("b.Recovery() error(%v)", err)
 		goto failed
 	}
-	if o, s := needles[1].Value(); o != NeedleCacheDelOffset && s != 40 {
+	if o, s := NeedleCacheValue(needles[1]); o != NeedleCacheDelOffset && s != 40 {
 		t.Error("needle.Value(1) not match")
 		goto failed
 	}
-	if o, s := needles[2].Value(); o != 6 && s != 40 {
+	if o, s := NeedleCacheValue(needles[2]); o != 6 && s != 40 {
 		t.Error("needle.Value(2) not match")
 		goto failed
 	}
-	if o, s := needles[3].Value(); o != 11 && s != 40 {
+	if o, s := NeedleCacheValue(needles[3]); o != 11 && s != 40 {
 		t.Error("needle.Value(3) not match")
 		goto failed
 	}
-	if o, s := needles[4].Value(); o != 16 && s != 40 {
+	if o, s := NeedleCacheValue(needles[4]); o != 16 && s != 40 {
 		t.Error("needle.Value(4) not match")
 		goto failed
 	}
@@ -297,19 +297,19 @@ func TestSuperBlock(t *testing.T) {
 		goto failed
 	}
 	// skip first needle, so key:1 must not exist
-	if o, s := needles[1].Value(); o != 0 && s != 0 {
+	if o, s := NeedleCacheValue(needles[1]); o != 0 && s != 0 {
 		t.Error("needle.Value(1) not match")
 		goto failed
 	}
-	if o, s := needles[2].Value(); o != 6 && s != 40 {
+	if o, s := NeedleCacheValue(needles[2]); o != 6 && s != 40 {
 		t.Error("needle.Value(2) not match")
 		goto failed
 	}
-	if o, s := needles[3].Value(); o != 11 && s != 40 {
+	if o, s := NeedleCacheValue(needles[3]); o != 11 && s != 40 {
 		t.Error("needle.Value(3) not match")
 		goto failed
 	}
-	if o, s := needles[4].Value(); o != 16 && s != 40 {
+	if o, s := NeedleCacheValue(needles[4]); o != 16 && s != 40 {
 		t.Error("needle.Value(4) not match")
 		goto failed
 	}
@@ -360,19 +360,19 @@ func TestSuperBlock(t *testing.T) {
 			}
 		}
 	}
-	if o, s := v.needles[1].Value(); o != 0 && s != 0 {
+	if o, s := NeedleCacheValue(v.needles[1]); o != 0 && s != 0 {
 		t.Error("needle.Value(1) not match")
 		goto failed
 	}
-	if o, s := v.needles[2].Value(); o != 6 && s != 40 {
+	if o, s := NeedleCacheValue(v.needles[2]); o != 6 && s != 40 {
 		t.Error("needle.Value(2) not match")
 		goto failed
 	}
-	if o, s := v.needles[3].Value(); o != 11 && s != 40 {
+	if o, s := NeedleCacheValue(v.needles[3]); o != 11 && s != 40 {
 		t.Error("needle.Value(3) not match")
 		goto failed
 	}
-	if o, s := v.needles[4].Value(); o != 16 && s != 40 {
+	if o, s := NeedleCacheValue(v.needles[4]); o != 16 && s != 40 {
 		t.Error("needle.Value(4) not match")
 		goto failed
 	}

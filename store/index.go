@@ -150,7 +150,9 @@ func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 	return
 }
 
-// Write append index needle to disk, WARN can't concurrency with write.
+// Write append index needle to disk.
+// WARN can't concurrency with merge and write.
+// ONLY used in super block recovery!!!!!!!!!!!
 func (i *Indexer) Write(key int64, offset uint32, size int32) (err error) {
 	if i.LastErr != nil {
 		err = i.LastErr
@@ -167,20 +169,14 @@ func (i *Indexer) Flush() (err error) {
 		err = i.LastErr
 		return
 	}
-	for {
-		// write may be less than request, we call flush in a loop
-		if err = i.bw.Flush(); err != nil && err != io.ErrShortWrite {
-			i.LastErr = err
-			log.Errorf("index: %s Flush() error(%v)", i.File, err)
-			return
-		} else if err == io.ErrShortWrite {
-			continue
-		}
-		// TODO append N times call flush then clean the os page cache
-		// page cache no used here...
-		// after upload a photo, we cache in user-level.
-		break
+	if err = i.bw.Flush(); err != nil {
+		i.LastErr = err
+		log.Errorf("index: %s Flush() error(%v)", i.File, err)
+		return
 	}
+	// TODO append N times call flush then clean the os page cache
+	// page cache no used here...
+	// after upload a photo, we cache in user-level.
 	return
 }
 
@@ -233,7 +229,7 @@ func (i *Indexer) write() {
 
 // Recovery recovery needle cache meta data in memory, index file  will stop
 // at the right parse data offset.
-func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err error) {
+func (i *Indexer) Recovery(needles map[int64]int64) (noffset uint32, err error) {
 	var (
 		rd     *bufio.Reader
 		data   []byte
@@ -260,9 +256,11 @@ func (i *Indexer) Recovery(needles map[int64]NeedleCache) (noffset uint32, err e
 		if _, err = rd.Discard(indexSize); err != nil {
 			break
 		}
-		log.V(1).Info(ix.String())
+		if log.V(1) {
+			log.Info(ix.String())
+		}
 		offset += int64(indexSize)
-		needles[ix.Key] = NewNeedleCache(ix.Offset, ix.Size)
+		needles[ix.Key] = NeedleCache(ix.Offset, ix.Size)
 		// save this for recovery supper block
 		noffset = ix.Offset + NeedleOffset(int64(ix.Size))
 	}

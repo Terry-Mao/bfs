@@ -163,7 +163,9 @@ func (b *SuperBlock) Add(key, cookie int64, data []byte) (offset uint32, size in
 	}
 	offset = b.Offset
 	b.Offset += incrOffset
-	log.V(1).Infof("add a needle, key: %d, cookie: %d, offset: %d, size: %d, b.offset: %d", key, cookie, offset, size, b.Offset)
+	if log.V(1) {
+		log.Infof("add a needle, key: %d, cookie: %d, offset: %d, size: %d, b.offset: %d", key, cookie, offset, size, b.Offset)
+	}
 	return
 }
 
@@ -188,20 +190,15 @@ func (b *SuperBlock) Flush() (err error) {
 		err = b.LastErr
 		return
 	}
-	for {
-		// write may be less than request, we call flush in a loop
-		if err = b.bw.Flush(); err != nil && err != io.ErrShortWrite {
-			b.LastErr = err
-			log.Errorf("block: %s Flush() error(%v)", b.File, err)
-			return
-		} else if err == io.ErrShortWrite {
-			continue
-		}
-		// TODO append N times call flush then clean the os page cache
-		// page cache no used here...
-		// after upload a photo, we cache in user-level.
-		break
+	// write may be less than request, we call flush in a loop
+	if err = b.bw.Flush(); err != nil {
+		b.LastErr = err
+		log.Errorf("block: %s Flush() error(%v)", b.File, err)
+		return
 	}
+	// TODO append N times call flush then clean the os page cache
+	// page cache no used here...
+	// after upload a photo, we cache in user-level.
 	return
 }
 
@@ -253,13 +250,13 @@ func (b *SuperBlock) Del(offset uint32) (err error) {
 }
 
 // Recovery recovery needles map from super block.
-func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, offset int64) (err error) {
+func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset int64) (err error) {
 	var (
+		n       = &Needle{}
+		nc      int64
+		rd      *bufio.Reader
 		size    int32
 		data    []byte
-		rd      *bufio.Reader
-		n       = &Needle{}
-		nc      NeedleCache
 		noffset uint32
 	)
 	log.Infof("block: %s recovery from offset: %d", b.File, offset)
@@ -295,20 +292,25 @@ func (b *SuperBlock) Recovery(needles map[int64]NeedleCache, indexer *Indexer, o
 		}
 		size = int32(NeedleHeaderSize + n.DataSize)
 		if n.Flag == NeedleStatusOK {
-			if err = indexer.Add(n.Key, noffset, size); err != nil {
+			if err = indexer.Write(n.Key, noffset, size); err != nil {
 				break
 			}
-			nc = NewNeedleCache(noffset, size)
+			nc = NeedleCache(noffset, size)
 		} else {
-			nc = NewNeedleCache(NeedleCacheDelOffset, size)
+			nc = NeedleCache(NeedleCacheDelOffset, size)
 		}
 		needles[n.Key] = nc
-		log.V(1).Infof("block add offset: %d, size: %d to needles cache", noffset, size)
-		log.V(1).Info(n.String())
+		if log.V(1) {
+			log.Infof("block add offset: %d, size: %d to needles cache", noffset, size)
+			log.Info(n.String())
+		}
 		noffset += NeedleOffset(int64(size))
 	}
 	if err == io.EOF {
 		err = nil
+	}
+	if err = indexer.Flush(); err != nil {
+		return
 	}
 	// reset b.w offset, discard left space which can't parse to a needle
 	if _, err = b.w.Seek(BlockOffset(noffset), os.SEEK_SET); err != nil {
@@ -365,7 +367,9 @@ func (b *SuperBlock) Compress(offset int64, v *Volume) (noffset int64, err error
 			break
 		}
 		offset += int64(NeedleHeaderSize + n.DataSize)
-		log.V(1).Info(n.String())
+		if log.V(1) {
+			log.Info(n.String())
+		}
 		// skip delete needle
 		if n.Flag == NeedleStatusDel {
 			continue

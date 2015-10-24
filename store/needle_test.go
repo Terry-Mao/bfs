@@ -13,22 +13,12 @@ func TestNeedle(t *testing.T) {
 		padding int32
 		offset  uint32
 		size    int32
-		nc      NeedleCache
 		n       = &Needle{}
 		data    = []byte("test")
 		buf     = make([]byte, 40)
 		bbuf    = bytes.NewBuffer(buf)
 		bw      = bufio.NewWriter(bbuf)
 	)
-	offset = 134
-	size = 1064
-	t.Log("NewNeedleCache")
-	nc = NewNeedleCache(offset, size)
-	if offset, size = nc.Value(); offset != 134 || size != 1064 {
-		err = fmt.Errorf("needlecache.Value() not match")
-		t.Error(err)
-		goto failed
-	}
 	t.Log("NeedleOffset(32)")
 	if offset = NeedleOffset(32); offset != 4 {
 		err = fmt.Errorf("NeedleOffset(32) not match")
