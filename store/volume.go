@@ -4,6 +4,7 @@ import (
 	log "github.com/golang/glog"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,16 +31,17 @@ func (p Uint32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 // An store server contains many logic Volume, volume is superblock container.
 type Volume struct {
-	Id      int32
+	Id      int32  `json:"id"`
+	Stats   *Stats `json:"stats"`
 	lock    sync.Mutex
 	block   *SuperBlock
 	indexer *Indexer
 	needles map[int64]NeedleCache
 	signal  chan uint32
 	// flag used in store
-	Command int
+	Command int `json:"-"`
 	// compress
-	Compress       bool
+	Compress       bool `json:"-"`
 	compressOffset int64
 	compressKeys   []int64
 }
@@ -48,6 +50,7 @@ type Volume struct {
 func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 	v = &Volume{}
 	v.Id = id
+	v.Stats = &Stats{}
 	if v.block, err = NewSuperBlock(bfile); err != nil {
 		log.Errorf("init super block: \"%s\" error(%v)", bfile, err)
 		return
@@ -63,6 +66,7 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 	v.signal = make(chan uint32, volumeDelChNum)
 	v.compressKeys = []int64{}
 	go v.del()
+	go v.Stats.Calc()
 	return
 failed:
 	v.block.Close()
@@ -153,6 +157,7 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		return
 	}
 	data = needle.Data
+	atomic.AddUint64(&v.Stats.TotalGetProcessed, 1)
 	return
 }
 
@@ -186,6 +191,7 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 		// set old file delete
 		err = v.asyncDel(ooffset)
 	}
+	atomic.AddUint64(&v.Stats.TotalAddProcessed, 1)
 	return
 }
 
@@ -215,6 +221,7 @@ func (v *Volume) Write(key, cookie int64, data []byte) (err error) {
 		// set old file delete
 		err = v.asyncDel(ooffset)
 	}
+	atomic.AddUint64(&v.Stats.TotalWriteProcessed, 1)
 	return
 }
 
@@ -224,6 +231,7 @@ func (v *Volume) Flush() (err error) {
 		return
 	}
 	err = v.indexer.Flush()
+	atomic.AddUint64(&v.Stats.TotalFlushProcessed, 1)
 	return
 }
 
@@ -236,6 +244,7 @@ func (v *Volume) asyncDel(offset uint32) (err error) {
 		log.Errorf("volume: %d send signal failed", v.Id)
 		err = ErrVolumeDel
 	}
+	atomic.AddUint64(&v.Stats.TotalDelProcessed, 1)
 	return
 }
 
@@ -318,6 +327,7 @@ func (v *Volume) StartCompress(nv *Volume) (err error) {
 	v.lock.Unlock()
 	if err == nil {
 		v.compressOffset, err = v.block.Compress(v.compressOffset, nv)
+		atomic.AddUint64(&v.Stats.TotalCompressProcessed, 1)
 	}
 	return
 }

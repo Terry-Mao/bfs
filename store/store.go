@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Store get all volume meta data from a index file. index contains volume id,
@@ -39,6 +40,8 @@ const (
 	storeUpdate   = 2
 	storeDel      = 3
 	storeCompress = 4
+	// stat
+	storeStatDuration = 1 * time.Second
 )
 
 // Int32Slice sort volumes.
@@ -139,7 +142,7 @@ func (s *Store) saveIndex() (err error) {
 		ok           bool
 		vid          int32
 		bfile, ifile string
-		vids         = make([]int32, len(s.volumes))
+		vids         = make([]int32, 0, len(s.volumes))
 	)
 	for vid, v = range s.volumes {
 		vids = append(vids, vid)
@@ -202,6 +205,18 @@ func (s *Store) command() {
 		}
 	}
 	log.Errorf("store command goroutine exit")
+}
+
+func (s *Store) stat() {
+	var v *Volume
+	for {
+		for _, v = range s.volumes {
+			v.Stats.Calc()
+			StoreInfo.Stats.Merge(v.Stats)
+		}
+		StoreInfo.Stats.Calc()
+		time.Sleep(storeStatDuration)
+	}
 }
 
 // AddVolume add a new volume.

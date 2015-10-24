@@ -10,8 +10,13 @@ import (
 type Config struct {
 	Index string   `yaml: index`
 	ZK    []string `yaml:",flow"`
-	file  string
-	f     *os.File
+	Pprof struct {
+		Enable bool   `yaml: enable`
+		Addr   string `yaml: addr`
+	}
+	Stat string `yaml: stat`
+	file string
+	f    *os.File
 }
 
 func NewConfig(file string) (c *Config, err error) {
