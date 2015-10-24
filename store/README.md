@@ -73,6 +73,17 @@ store use yaml as a config file.
 config file:
 
 ```yaml
+# pprof
+pprof:
+  # enable golang pprof
+  enable: true
+  # pprof http addr
+  addr: localhost:6060
+
+# stat http addr
+# stat api: http://http_stat_addr/stat
+stat: localhost:6061
+
 # store index for find volumes.
 index: /tmp/hijohn.idx
 
@@ -126,6 +137,20 @@ Usage of ./store:
     	log level for V logs
   -vmodule value
     	comma-separated list of pattern=N settings for file-filtered logging
+```
+
+## Stat
+
+stat let us get and statistics about the server in a json format that is simple 
+to parse by computers and easy to read by humans.
+The optional parameter can be used to select a specific section of information:
+
+* server: general information about the store server;
+* volumes: general statistics about volume;
+
+```sh
+# the http addr can config in store.yaml
+$ curl http://localhost:6061/stat
 ```
 
 Have Fun!
