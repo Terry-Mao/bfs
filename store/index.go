@@ -48,6 +48,7 @@ const (
 type Indexer struct {
 	f       *os.File
 	bw      *bufio.Writer
+	sigNum  int
 	signal  chan int
 	ring    *Ring
 	File    string `json:"file"`
@@ -84,6 +85,7 @@ func NewIndexer(file string, ring int) (i *Indexer, err error) {
 	i = &Indexer{}
 	i.signal = make(chan int, signalNum)
 	i.ring = NewRing(ring)
+	i.sigNum = ring / 2
 	i.File = file
 	if i.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDWR|os.O_CREATE, 0664) error(%v)", file, err)
@@ -92,20 +94,6 @@ func NewIndexer(file string, ring int) (i *Indexer, err error) {
 	i.bw = bufio.NewWriterSize(i.f, NeedleMaxSize)
 	go i.write()
 	return
-}
-
-// ready wake up indexer write goroutine if ready.
-func (i *Indexer) ready() bool {
-	return (<-i.signal) == indexReady
-}
-
-// Signal wake up indexer write goroutine merge index data.
-func (i *Indexer) Signal() {
-	// just ignore duplication signal
-	select {
-	case i.signal <- indexReady:
-	default:
-	}
 }
 
 // writeIndex write index data into bufio.
@@ -129,6 +117,13 @@ func (i *Indexer) Append(key int64, offset uint32, size int32) (err error) {
 		err = i.LastErr
 		return
 	}
+	if i.ring.Buffered() > i.sigNum {
+		// just ignore duplication signal
+		select {
+		case i.signal <- indexReady:
+		default:
+		}
+	}
 	if index, err = i.ring.Set(); err != nil {
 		i.LastErr = err
 		log.Errorf("index ring buffer full")
@@ -146,7 +141,6 @@ func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 	if err = i.Append(key, offset, size); err != nil {
 		return
 	}
-	i.Signal()
 	return
 }
 
@@ -204,7 +198,7 @@ func (i *Indexer) write() {
 	)
 	log.Infof("index: %s merge write goroutine", i.File)
 	for {
-		if !i.ready() {
+		if !((<-i.signal) == indexReady) {
 			log.Info("signal index write goroutine exit")
 			break
 		}

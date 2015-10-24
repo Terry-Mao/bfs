@@ -214,6 +214,7 @@ func BenchmarkVolumeGet(b *testing.B) {
 			b.Errorf("Add() error(%v)", err)
 			b.FailNow()
 		}
+		t++
 	}
 	b.ResetTimer()
 	b.SetParallelism(8)

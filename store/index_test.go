@@ -44,7 +44,10 @@ func TestIndex(t *testing.T) {
 		t.Errorf("i.Add() error(%v)", err)
 		goto failed
 	}
-	i.Signal()
+	select {
+	case i.signal <- indexReady:
+	default:
+	}
 	time.Sleep(1 * time.Second)
 	// test recovery
 	t.Log("Test Recovery()")
@@ -126,6 +129,11 @@ func TestIndex1(t *testing.T) {
 		t.Errorf("i.Add() error(%v)", err)
 		goto failed
 	}
+	// just ignore duplication signal
+	select {
+	case i.signal <- indexReady:
+	default:
+	}
 	time.Sleep(1 * time.Second)
 	// write a error data
 	if _, err = i.f.Write([]byte("test")); err != nil {
@@ -149,6 +157,11 @@ func TestIndex1(t *testing.T) {
 	if err = i.Add(2, 2, 8); err != nil {
 		t.Errorf("i.Add() error(%v)", err)
 		goto failed
+	}
+	// just ignore duplication signal
+	select {
+	case i.signal <- indexReady:
+	default:
 	}
 	time.Sleep(1 * time.Second)
 	// try recovery

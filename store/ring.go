@@ -2,10 +2,10 @@ package main
 
 type Ring struct {
 	// read
-	rn int
+	rn int64
 	rp int
 	// write
-	wn int
+	wn int64
 	wp int
 	// info
 	num  int
@@ -45,7 +45,7 @@ func (r *Ring) GetAdv() {
 }
 
 func (r *Ring) Set() (index *Index, err error) {
-	if r.wn-r.rn >= r.num {
+	if r.Buffered() >= r.num {
 		return nil, ErrRingFull
 	}
 	index = &r.data[r.wp]
@@ -60,6 +60,10 @@ func (r *Ring) SetAdv() {
 	//if Conf.Debug {
 	//	log.Debug("ring wn: %d, wp: %d", r.wn, r.wp)
 	//}
+}
+
+func (r *Ring) Buffered() int {
+	return int(r.wn - r.rn)
 }
 
 func (r *Ring) Reset() {

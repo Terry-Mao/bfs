@@ -57,6 +57,7 @@ type Volume struct {
 	needles        map[int64]int64
 	signal         chan uint32
 	bp             *sync.Pool
+	np             *sync.Pool
 	Command        int  `json:"-"` // flag used in store
 	Compress       bool `json:"-"`
 	compressOffset int64
@@ -69,11 +70,12 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 	v.Id = id
 	v.Stats = &Stats{}
 	v.bp = &sync.Pool{}
+	v.np = &sync.Pool{}
 	if v.Block, err = NewSuperBlock(bfile); err != nil {
 		log.Errorf("init super block: \"%s\" error(%v)", bfile, err)
 		return
 	}
-	if v.Indexer, err = NewIndexer(ifile, 10240); err != nil {
+	if v.Indexer, err = NewIndexer(ifile, 10240*5); err != nil {
 		log.Errorf("init indexer: %s error(%v)", ifile, err)
 		goto failed
 	}
@@ -116,7 +118,22 @@ func (v *Volume) Unlock() {
 	v.lock.Unlock()
 }
 
-// Buffer get a buffer from sync.Pool
+// Needle get a needle from sync.Pool.
+func (v *Volume) needle() (n *Needle) {
+	var i interface{}
+	if i = v.np.Get(); i != nil {
+		n = i.(*Needle)
+		return
+	}
+	return new(Needle)
+}
+
+// FreeNeedle free the needle to pool.
+func (v *Volume) freeNeedle(n *Needle) {
+	v.np.Put(n)
+}
+
+// Buffer get a buffer from sync.Pool.
 func (v *Volume) Buffer() (d []byte) {
 	var i interface{}
 	if i = v.bp.Get(); i != nil {
@@ -138,7 +155,7 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		nc     int64
 		size   int32
 		offset uint32
-		n      = &Needle{}
+		n      *Needle
 	)
 	// get a needle
 	v.lock.RLock()
@@ -161,11 +178,12 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		return
 	}
 	// parse needle
+	n = v.needle()
 	if err = n.ParseHeader(buf[:NeedleHeaderSize]); err != nil {
-		return
+		goto failed
 	}
 	if err = n.ParseData(buf[NeedleHeaderSize:]); err != nil {
-		return
+		goto failed
 	}
 	if log.V(1) {
 		log.Infof("%v\n", buf[:size])
@@ -174,11 +192,11 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	// check needle
 	if n.Key != key {
 		err = ErrNeedleKey
-		return
+		goto failed
 	}
 	if n.Cookie != cookie {
 		err = ErrNeedleCookie
-		return
+		goto failed
 	}
 	// if delete
 	if n.Flag == NeedleStatusDel {
@@ -186,10 +204,12 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		v.needles[key] = NeedleCache(NeedleCacheDelOffset, size)
 		v.lock.Unlock()
 		err = ErrNeedleDeleted
-		return
+		goto failed
 	}
 	data = n.Data
 	atomic.AddUint64(&v.Stats.TotalGetProcessed, 1)
+failed:
+	v.freeNeedle(n)
 	return
 }
 
@@ -264,7 +284,6 @@ func (v *Volume) Flush() (err error) {
 	if err = v.Block.Flush(); err != nil {
 		return
 	}
-	v.Indexer.Signal()
 	atomic.AddUint64(&v.Stats.TotalFlushProcessed, 1)
 	return
 }
