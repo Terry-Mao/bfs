@@ -61,6 +61,7 @@ type Volume struct {
 	Command        int        `json:"-"` // flag used in store
 	Compress       bool       `json:"-"`
 	compressOffset int64
+	compressTime   int64
 	compressKeys   []int64
 }
 
@@ -155,6 +156,7 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		size   int32
 		offset uint32
 		n      *Needle
+		now    = time.Now().UnixNano()
 	)
 	v.lock.RLock()
 	nc, ok = v.needles[key]
@@ -204,6 +206,8 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	}
 	data = n.Data
 	atomic.AddUint64(&v.Stats.TotalGetProcessed, 1)
+	atomic.AddUint64(&v.Stats.TotalReadBytes, uint64(size))
+	atomic.AddUint64(&v.Stats.TotalGetDelay, uint64(time.Now().UnixNano()-now))
 free:
 	v.freeNeedle(n)
 	return
@@ -217,6 +221,7 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 		nc              int64
 		size, osize     int32
 		offset, ooffset uint32
+		now             = time.Now().UnixNano()
 	)
 	v.lock.Lock()
 	nc, ok = v.needles[key]
@@ -240,6 +245,8 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 		err = v.asyncDel(ooffset)
 	}
 	atomic.AddUint64(&v.Stats.TotalAddProcessed, 1)
+	atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(size))
+	atomic.AddUint64(&v.Stats.TotalAddDelay, uint64(time.Now().UnixNano()-now))
 	return
 }
 
@@ -251,6 +258,7 @@ func (v *Volume) Write(key, cookie int64, data []byte) (err error) {
 		nc              int64
 		size, osize     int32
 		offset, ooffset uint32
+		now             = time.Now().UnixNano()
 	)
 	nc, ok = v.needles[key]
 	if offset, size, err = v.Block.Write(key, cookie, data); err != nil {
@@ -269,15 +277,19 @@ func (v *Volume) Write(key, cookie int64, data []byte) (err error) {
 		err = v.asyncDel(ooffset)
 	}
 	atomic.AddUint64(&v.Stats.TotalWriteProcessed, 1)
+	atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(size))
+	atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 	return
 }
 
 // Flush flush block&indexer buffer to disk, this is used for multi add needles.
 func (v *Volume) Flush() (err error) {
+	var now = time.Now().UnixNano()
 	if err = v.Block.Flush(); err != nil {
 		return
 	}
 	atomic.AddUint64(&v.Stats.TotalFlushProcessed, 1)
+	atomic.AddUint64(&v.Stats.TotalFlushDelay, uint64(time.Now().UnixNano()-now))
 	return
 }
 
@@ -291,7 +303,6 @@ func (v *Volume) asyncDel(offset uint32) (err error) {
 		err = ErrVolumeDel
 		return
 	}
-	atomic.AddUint64(&v.Stats.TotalDelProcessed, 1)
 	return
 }
 
@@ -327,6 +338,7 @@ func (v *Volume) Del(key int64) (err error) {
 func (v *Volume) del() {
 	var (
 		err     error
+		now     int64
 		offset  uint32
 		offsets []uint32
 	)
@@ -348,9 +360,13 @@ func (v *Volume) del() {
 		// sort let the disk seqence write
 		sort.Sort(Uint32Slice(offsets))
 		for _, offset = range offsets {
+			now = time.Now().UnixNano()
 			if err = v.Block.Del(offset); err != nil {
 				break
 			}
+			atomic.AddUint64(&v.Stats.TotalDelProcessed, 1)
+			atomic.AddUint64(&v.Stats.TotalWriteBytes, 1)
+			atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 		}
 		offsets = offsets[:0]
 	}
@@ -370,6 +386,7 @@ func (v *Volume) StartCompress(nv *Volume) (err error) {
 	if err == nil {
 		v.compressOffset, err = v.Block.Compress(v.compressOffset, nv)
 		atomic.AddUint64(&v.Stats.TotalCompressProcessed, 1)
+		v.compressTime = time.Now().UnixNano()
 	}
 	return
 }
@@ -378,7 +395,10 @@ func (v *Volume) StartCompress(nv *Volume) (err error) {
 // compressing, then reset compress flag, offset and compressKeys.
 // if nv is nil, only reset compress status.
 func (v *Volume) StopCompress(nv *Volume) (err error) {
-	var key int64
+	var (
+		key int64
+		now = time.Now().UnixNano()
+	)
 	v.lock.Lock()
 	if nv != nil {
 		if v.compressOffset, err = v.Block.Compress(v.compressOffset, nv); err != nil {
@@ -389,10 +409,12 @@ func (v *Volume) StopCompress(nv *Volume) (err error) {
 				goto failed
 			}
 		}
+		atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 	}
 failed:
 	v.Compress = false
 	v.compressOffset = 0
+	v.compressTime = 0
 	v.compressKeys = v.compressKeys[:0]
 	v.lock.Unlock()
 	return

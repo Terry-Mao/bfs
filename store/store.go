@@ -88,6 +88,7 @@ func NewStore(file string) (s *Store, err error) {
 		}
 		s.volumes[volumeIds[i]] = volume
 	}
+	go s.stat()
 	log.Infof("current max volume id: %d", s.VolumeId)
 	return
 }
@@ -204,14 +205,24 @@ func (s *Store) command() {
 	log.Errorf("store command goroutine exit")
 }
 
+// stat stat the store.
 func (s *Store) stat() {
-	var v *Volume
+	var (
+		v     *Volume
+		stat  = new(Stats)
+		stat1 *Stats
+	)
 	for {
+		*stat = *(StoreInfo.Stats)
+		stat1 = StoreInfo.Stats
+		StoreInfo.Stats = stat
+		stat1.Reset()
 		for _, v = range s.volumes {
 			v.Stats.Calc()
-			StoreInfo.Stats.Merge(v.Stats)
+			stat1.Merge(v.Stats)
 		}
-		StoreInfo.Stats.Calc()
+		stat1.Calc()
+		StoreInfo.Stats = stat1
 		time.Sleep(storeStatDuration)
 	}
 }

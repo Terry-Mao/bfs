@@ -9,6 +9,7 @@ func TestStat(t *testing.T) {
 		s  = &Stats{}
 		s1 = &Stats{}
 	)
+	// tps & qps
 	s.TotalAddProcessed = 10
 	s.TotalWriteProcessed = 15
 	s.TotalDelProcessed = 20
@@ -21,27 +22,29 @@ func TestStat(t *testing.T) {
 	s1.TotalGetProcessed = 25
 	s1.TotalFlushProcessed = 30
 	s1.TotalCompressProcessed = 35
+	// bytes
+	// delay
 	s.Calc()
 	s1.Merge(s)
 	s1.Calc()
-	if s.TotalAddTPS != 10 {
-		t.Errorf("TotalAddTPS: %d not match", s.TotalAddTPS)
+	if s.AddTPS != 10 {
+		t.Errorf("TotalAddTPS: %d not match", s.AddTPS)
 		t.FailNow()
 	}
-	if s.TotalWriteTPS != 15 {
-		t.Errorf("TotalWriteTPS: %d not match", s.TotalWriteTPS)
+	if s.WriteTPS != 15 {
+		t.Errorf("TotalWriteTPS: %d not match", s.WriteTPS)
 		t.FailNow()
 	}
-	if s.TotalDelTPS != 20 {
-		t.Errorf("TotalDelTPS: %d not match", s.TotalDelTPS)
+	if s.DelTPS != 20 {
+		t.Errorf("TotalDelTPS: %d not match", s.DelTPS)
 		t.FailNow()
 	}
-	if s.TotalGetQPS != 25 {
-		t.Errorf("TotalGetQPS: %d not match", s.TotalGetQPS)
+	if s.GetQPS != 25 {
+		t.Errorf("TotalGetQPS: %d not match", s.GetQPS)
 		t.FailNow()
 	}
-	if s.TotalFlushTPS != 30 {
-		t.Errorf("TotalFlushTPS: %d not match", s.TotalFlushTPS)
+	if s.FlushTPS != 30 {
+		t.Errorf("TotalFlushTPS: %d not match", s.FlushTPS)
 		t.FailNow()
 	}
 	if s.TotalCommandsProcessed != 135 {
@@ -72,24 +75,24 @@ func TestStat(t *testing.T) {
 		t.Errorf("TotalCompressProcessed: %d not match", s1.TotalCompressProcessed)
 		t.FailNow()
 	}
-	if s1.TotalAddTPS != 20 {
-		t.Errorf("TotalAddTPS: %d not match", s1.TotalAddTPS)
+	if s1.AddTPS != 20 {
+		t.Errorf("TotalAddTPS: %d not match", s1.AddTPS)
 		t.FailNow()
 	}
-	if s1.TotalWriteTPS != 30 {
-		t.Errorf("TotalWriteTPS: %d not match", s1.TotalWriteTPS)
+	if s1.WriteTPS != 30 {
+		t.Errorf("TotalWriteTPS: %d not match", s1.WriteTPS)
 		t.FailNow()
 	}
-	if s1.TotalDelTPS != 40 {
-		t.Errorf("TotalDelTPS: %d not match", s1.TotalDelTPS)
+	if s1.DelTPS != 40 {
+		t.Errorf("TotalDelTPS: %d not match", s1.DelTPS)
 		t.FailNow()
 	}
-	if s1.TotalGetQPS != 50 {
-		t.Errorf("TotalGetQPS: %d not match", s1.TotalGetQPS)
+	if s1.GetQPS != 50 {
+		t.Errorf("TotalGetQPS: %d not match", s1.GetQPS)
 		t.FailNow()
 	}
-	if s1.TotalFlushTPS != 60 {
-		t.Errorf("TotalFlushTPS: %d not match", s1.TotalFlushTPS)
+	if s1.FlushTPS != 60 {
+		t.Errorf("TotalFlushTPS: %d not match", s1.FlushTPS)
 		t.FailNow()
 	}
 	if s1.TotalCommandsProcessed != 270 {
