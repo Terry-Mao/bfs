@@ -104,7 +104,7 @@ func (v *Volume) init() (err error) {
 		return
 	}
 	// recovery from super block
-	err = v.Block.Recovery(v.needles, v.Indexer, BlockOffset(offset))
+	err = v.Block.Recovery(v.needles, v.Indexer, offset)
 	return
 }
 

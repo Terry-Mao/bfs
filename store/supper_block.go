@@ -195,7 +195,7 @@ func (b *SuperBlock) Repair(offset uint32, buf []byte) (err error) {
 		err = b.LastErr
 		return
 	}
-	_, err = b.w.WriteAt(buf, BlockOffset(offset))
+	_, err = b.w.WriteAt(buf, blockOffset(offset))
 	b.LastErr = err
 	return
 }
@@ -206,7 +206,7 @@ func (b *SuperBlock) Get(offset uint32, buf []byte) (err error) {
 		err = b.LastErr
 		return
 	}
-	_, err = b.r.ReadAt(buf, BlockOffset(offset))
+	_, err = b.r.ReadAt(buf, blockOffset(offset))
 	b.LastErr = err
 	return
 }
@@ -218,27 +218,25 @@ func (b *SuperBlock) Del(offset uint32) (err error) {
 		return
 	}
 	// WriteAt won't update the file offset.
-	_, err = b.w.WriteAt(NeedleStatusDelBytes, BlockOffset(offset)+NeedleFlagOffset)
+	_, err = b.w.WriteAt(NeedleStatusDelBytes, blockOffset(offset)+NeedleFlagOffset)
 	b.LastErr = err
 	return
 }
 
 // Recovery recovery needles map from super block.
-func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset int64) (err error) {
+func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset uint32) (err error) {
 	var (
-		n       = &Needle{}
-		nc      int64
-		rd      *bufio.Reader
-		size    int32
-		data    []byte
-		noffset uint32
+		n    = &Needle{}
+		nc   int64
+		rd   *bufio.Reader
+		size int32
+		data []byte
 	)
 	log.Infof("block: %s recovery from offset: %d", b.File, offset)
 	if offset == 0 {
-		offset = superBlockHeaderOffset
+		offset = NeedleOffset(superBlockHeaderOffset)
 	}
-	noffset = NeedleOffset(offset)
-	if _, err = b.r.Seek(offset, os.SEEK_SET); err != nil {
+	if _, err = b.r.Seek(blockOffset(offset), os.SEEK_SET); err != nil {
 		log.Errorf("block: %s Seek() error(%v)", b.File)
 		return
 	}
@@ -264,19 +262,19 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 		}
 		size = int32(NeedleHeaderSize + n.DataSize)
 		if n.Flag == NeedleStatusOK {
-			if err = indexer.Write(n.Key, noffset, size); err != nil {
+			if err = indexer.Write(n.Key, offset, size); err != nil {
 				break
 			}
-			nc = NeedleCache(noffset, size)
+			nc = NeedleCache(offset, size)
 		} else {
 			nc = NeedleCache(NeedleCacheDelOffset, size)
 		}
 		needles[n.Key] = nc
 		if log.V(1) {
-			log.Infof("block add offset: %d, size: %d to needles cache", noffset, size)
+			log.Infof("block add offset: %d, size: %d to needles cache", offset, size)
 			log.Info(n.String())
 		}
-		noffset += NeedleOffset(int64(size))
+		offset += NeedleOffset(int64(size))
 	}
 	if err == io.EOF {
 		err = nil
@@ -285,7 +283,7 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 		return
 	}
 	// reset b.w offset, discard left space which can't parse to a needle
-	if _, err = b.w.Seek(BlockOffset(noffset), os.SEEK_SET); err != nil {
+	if _, err = b.w.Seek(blockOffset(offset), os.SEEK_SET); err != nil {
 		log.Errorf("block: %s Seek() error(%v)", b.File, err)
 	}
 	return
@@ -378,7 +376,7 @@ func (b *SuperBlock) Close() {
 	return
 }
 
-// BlockOffset get super block file offset.
-func BlockOffset(offset uint32) int64 {
+// blockOffset get super block file offset.
+func blockOffset(offset uint32) int64 {
 	return int64(offset) * NeedlePaddingSize
 }

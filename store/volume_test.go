@@ -238,11 +238,10 @@ func BenchmarkVolumeGet(b *testing.B) {
 	b.SetParallelism(8)
 	b.RunParallel(func(pb *testing.PB) {
 		var buf = make([]byte, NeedleMaxSize)
-		var data1 []byte
 		var err1 error
 		for pb.Next() {
 			t1 := mrand.Int63n(1000000)
-			if data1, err1 = v.Get(t1, t1, buf); err1 != nil {
+			if _, err1 = v.Get(t1, t1, buf); err1 != nil {
 				b.Errorf("Get(%d) error(%v)", t1, err1)
 				b.FailNow()
 			}
