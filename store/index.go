@@ -108,8 +108,8 @@ func writeIndex(w *bufio.Writer, key int64, offset uint32, size int32) (err erro
 	return
 }
 
-// Append append a index data to ring.
-func (i *Indexer) Append(key int64, offset uint32, size int32) (err error) {
+// Add append a index data to ring.
+func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 	var (
 		index *Index
 	)
@@ -118,7 +118,6 @@ func (i *Indexer) Append(key int64, offset uint32, size int32) (err error) {
 		return
 	}
 	if i.ring.Buffered() > i.sigNum {
-		// just ignore duplication signal
 		select {
 		case i.signal <- indexReady:
 		default:
@@ -126,21 +125,12 @@ func (i *Indexer) Append(key int64, offset uint32, size int32) (err error) {
 	}
 	if index, err = i.ring.Set(); err != nil {
 		i.LastErr = err
-		log.Errorf("index ring buffer full")
 		return
 	}
 	index.Key = key
 	index.Offset = offset
 	index.Size = size
 	i.ring.SetAdv()
-	return
-}
-
-// Add append a index data to ring, signal bg goroutine merge to disk.
-func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
-	if err = i.Append(key, offset, size); err != nil {
-		return
-	}
 	return
 }
 
@@ -182,7 +172,6 @@ func (i *Indexer) merge() (err error) {
 			err = nil
 			break
 		}
-		// merge index buffer
 		if err = i.Write(index.Key, index.Offset, index.Size); err != nil {
 			break
 		}
@@ -196,28 +185,23 @@ func (i *Indexer) write() {
 	var (
 		err error
 	)
-	log.Infof("index: %s merge write goroutine", i.File)
 	for {
 		if !((<-i.signal) == indexReady) {
-			log.Info("signal index write goroutine exit")
 			break
 		}
 		if err = i.merge(); err != nil {
-			log.Errorf("index merge error(%v)", err)
 			break
 		}
 		if err = i.Flush(); err != nil {
 			break
 		}
 	}
-	if err = i.merge(); err != nil {
-		log.Errorf("index merge error(%v)", err)
-	}
+	i.merge()
+	i.Flush()
 	if err = i.f.Sync(); err != nil {
 		log.Errorf("index: %s Sync() error(%v)", i.File, err)
 	}
-	err = i.f.Close()
-	log.Errorf("index write goroutine exit")
+	i.f.Close()
 	return
 }
 
@@ -237,12 +221,10 @@ func (i *Indexer) Recovery(needles map[int64]int64) (noffset uint32, err error) 
 	}
 	rd = bufio.NewReaderSize(i.f, NeedleMaxSize)
 	for {
-		// parse data
 		if data, err = rd.Peek(indexSize); err != nil {
 			break
 		}
 		ix.parse(data)
-		// check
 		if ix.Size > NeedleMaxSize || ix.Size < 1 {
 			log.Errorf("index parse size: %d > %d or %d < 1", ix.Size, NeedleMaxSize, ix.Size)
 			break

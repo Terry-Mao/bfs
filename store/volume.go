@@ -56,10 +56,10 @@ type Volume struct {
 	Indexer        *Indexer    `json:"index"`
 	needles        map[int64]int64
 	signal         chan uint32
-	bp             *sync.Pool
-	np             *sync.Pool
-	Command        int  `json:"-"` // flag used in store
-	Compress       bool `json:"-"`
+	bp             *sync.Pool // buffer pool
+	np             *sync.Pool // needle struct pool
+	Command        int        `json:"-"` // flag used in store
+	Compress       bool       `json:"-"`
 	compressOffset int64
 	compressKeys   []int64
 }
@@ -86,7 +86,6 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 	v.signal = make(chan uint32, volumeDelChNum)
 	v.compressKeys = []int64{}
 	go v.del()
-	go v.Stats.Calc()
 	return
 failed:
 	v.Block.Close()
@@ -148,7 +147,7 @@ func (v *Volume) FreeBuffer(d []byte) {
 	v.bp.Put(d)
 }
 
-// Get get a needle by key.
+// Get get a needle by key and cookie.
 func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	var (
 		ok     bool
@@ -157,7 +156,6 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		offset uint32
 		n      *Needle
 	)
-	// get a needle
 	v.lock.RLock()
 	nc, ok = v.needles[key]
 	v.lock.RUnlock()
@@ -165,50 +163,48 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 		err = ErrNoNeedle
 		return
 	}
-	offset, size = NeedleCacheValue(nc)
-	if log.V(1) {
-		log.Infof("get needle, key: %d, cookie: %d, offset: %d, size: %d", key, cookie, offset, size)
-	}
-	if offset == NeedleCacheDelOffset {
+	if offset, size = NeedleCacheValue(nc); offset == NeedleCacheDelOffset {
 		err = ErrNeedleDeleted
 		return
 	}
-	// WARN atomic read superblock, pread syscall is atomic
+	if log.V(1) {
+		log.Infof("get needle, key: %d, cookie: %d, offset: %d, size: %d",
+			key, cookie, offset, size)
+	}
+	// WARN pread syscall is atomic, so don't need lock
 	if err = v.Block.Get(offset, buf[:size]); err != nil {
 		return
 	}
-	// parse needle
 	n = v.needle()
 	if err = n.ParseHeader(buf[:NeedleHeaderSize]); err != nil {
-		goto failed
+		goto free
 	}
-	if err = n.ParseData(buf[NeedleHeaderSize:]); err != nil {
-		goto failed
+	if err = n.ParseData(buf[NeedleHeaderSize:size]); err != nil {
+		goto free
 	}
 	if log.V(1) {
 		log.Infof("%v\n", buf[:size])
 		log.Infof("%v\n", n)
 	}
-	// check needle
 	if n.Key != key {
 		err = ErrNeedleKey
-		goto failed
+		goto free
 	}
 	if n.Cookie != cookie {
 		err = ErrNeedleCookie
-		goto failed
+		goto free
 	}
-	// if delete
+	// needles map may be out-dated, recheck
 	if n.Flag == NeedleStatusDel {
 		v.lock.Lock()
 		v.needles[key] = NeedleCache(NeedleCacheDelOffset, size)
 		v.lock.Unlock()
 		err = ErrNeedleDeleted
-		goto failed
+		goto free
 	}
 	data = n.Data
 	atomic.AddUint64(&v.Stats.TotalGetProcessed, 1)
-failed:
+free:
 	v.freeNeedle(n)
 	return
 }
@@ -229,20 +225,18 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 		v.lock.Unlock()
 		return
 	}
-	if log.V(1) {
-		log.Infof("add needle, offset: %d, size: %d", offset, size)
-	}
-	// update index
 	if err = v.Indexer.Add(key, offset, size); err != nil {
 		v.lock.Unlock()
 		return
 	}
 	v.needles[key] = NeedleCache(offset, size)
 	v.lock.Unlock()
+	if log.V(1) {
+		log.Infof("add needle, offset: %d, size: %d", offset, size)
+	}
 	if ok {
 		ooffset, osize = NeedleCacheValue(nc)
 		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
-		// set old file delete
 		err = v.asyncDel(ooffset)
 	}
 	atomic.AddUint64(&v.Stats.TotalAddProcessed, 1)
@@ -262,17 +256,16 @@ func (v *Volume) Write(key, cookie int64, data []byte) (err error) {
 	if offset, size, err = v.Block.Write(key, cookie, data); err != nil {
 		return
 	}
-	if log.V(1) {
-		log.Infof("add needle, offset: %d, size: %d", offset, size)
-	}
-	if err = v.Indexer.Append(key, offset, size); err != nil {
+	if err = v.Indexer.Add(key, offset, size); err != nil {
 		return
 	}
 	v.needles[key] = NeedleCache(offset, size)
+	if log.V(1) {
+		log.Infof("add needle, offset: %d, size: %d", offset, size)
+	}
 	if ok {
 		ooffset, osize = NeedleCacheValue(nc)
 		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
-		// set old file delete
 		err = v.asyncDel(ooffset)
 	}
 	atomic.AddUint64(&v.Stats.TotalWriteProcessed, 1)
@@ -296,6 +289,7 @@ func (v *Volume) asyncDel(offset uint32) (err error) {
 	default:
 		log.Errorf("volume: %d send signal failed", v.Id)
 		err = ErrVolumeDel
+		return
 	}
 	atomic.AddUint64(&v.Stats.TotalDelProcessed, 1)
 	return
@@ -310,20 +304,18 @@ func (v *Volume) Del(key int64) (err error) {
 		size   int32
 		offset uint32
 	)
-	// get a needle, update the offset to del
 	v.lock.Lock()
 	nc, ok = v.needles[key]
 	if ok {
 		offset, size = NeedleCacheValue(nc)
 		v.needles[key] = NeedleCache(NeedleCacheDelOffset, size)
-		// del barrier
+		// when in compress, must save all del operations.
 		if v.Compress {
 			v.compressKeys = append(v.compressKeys, key)
 		}
 	}
 	v.lock.Unlock()
 	if ok {
-		// async update super block flag
 		err = v.asyncDel(offset)
 	} else {
 		err = ErrNoNeedle
@@ -338,15 +330,10 @@ func (v *Volume) del() {
 		offset  uint32
 		offsets []uint32
 	)
-	if log.V(1) {
-		log.Infof("start volume: %d del goroutine", v.Id)
-	}
 	for {
 		select {
 		case offset = <-v.signal:
 			if offset == volumeFinish {
-				log.Info("signal volume del goroutine exit")
-				log.Errorf("volume del goroutine exit")
 				return
 			}
 			// merge

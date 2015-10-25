@@ -25,6 +25,7 @@ func init() {
 }
 
 type Stats struct {
+	// qps & tps
 	TotalCommandsProcessed  uint64 `json:"total_commands_processed"`
 	TotalAddProcessed       uint64 `json:"total_add_processed"`
 	TotalAddTPS             uint64 `json:"total_add_tps"`
@@ -42,6 +43,9 @@ type Stats struct {
 	TotalFlushTPS           uint64 `json:"total_flush_tps"`
 	lastTotalFlushProcessed uint64 `json:"-"`
 	TotalCompressProcessed  uint64 `json:"total_compress_processed"`
+	// TODO
+	// bytes
+	// delay
 }
 
 // Calc calc the commands qps/tps.

@@ -87,7 +87,6 @@ func (b *SuperBlock) init() (err error) {
 		log.Errorf("block: %s Stat() error(%v)", b.File, err)
 		return
 	}
-	// new file
 	if stat.Size() == 0 {
 		// magic
 		if _, err = b.w.Write(superBlockMagic); err != nil {
@@ -105,8 +104,6 @@ func (b *SuperBlock) init() (err error) {
 		if _, err = b.r.Read(b.buf[:superBlockHeaderSize]); err != nil {
 			return
 		}
-		// parse block meta data
-		// check magic
 		b.Magic = b.buf[superBlockMagicOffset : superBlockMagicOffset+superBlockMagicSize]
 		b.Ver = byte(b.buf[superBlockVerOffset : superBlockVerOffset+superBlockVerSize][0])
 		if !bytes.Equal(b.Magic, superBlockMagic) {

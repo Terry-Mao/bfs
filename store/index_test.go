@@ -33,14 +33,13 @@ func TestIndex(t *testing.T) {
 		t.Errorf("i.Add() error(%v)", err)
 		goto failed
 	}
-	// test append
-	t.Log("Test Append(5)")
-	if err = i.Append(5, 3, 8); err != nil {
+	t.Log("Test Add(5)")
+	if err = i.Add(5, 3, 8); err != nil {
 		t.Errorf("i.Add() error(%v)", err)
 		goto failed
 	}
-	t.Log("Test Append(6)")
-	if err = i.Append(6, 4, 8); err != nil {
+	t.Log("Test Add(6)")
+	if err = i.Add(6, 4, 8); err != nil {
 		t.Errorf("i.Add() error(%v)", err)
 		goto failed
 	}
