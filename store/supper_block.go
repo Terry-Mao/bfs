@@ -123,60 +123,50 @@ func (b *SuperBlock) init() (err error) {
 	return
 }
 
-// writeNeedle get a needle size by data.
-func (b *SuperBlock) writeNeedle(key, cookie int64, data []byte) (size int32, incrOffset uint32, err error) {
-	var (
-		padding  int32
-		dataSize = int32(len(data))
-	)
-	if padding, size, err = NeedleSize(dataSize); err != nil {
-		// if err is needle too large don't set last error
-		return
-	}
-	incrOffset = NeedleOffset(int64(size))
+// avvailable check block has enough space.
+func (b *SuperBlock) available(incrOffset uint32) (err error) {
 	if superBlockMaxOffset-incrOffset < b.Offset {
 		err = ErrSuperBlockNoSpace
-		b.LastErr = err
-		return
-	}
-	if err = WriteNeedle(b.bw, padding, dataSize, key, cookie, data); err != nil {
 		b.LastErr = err
 	}
 	return
 }
 
 // Add append a photo to the block.
-func (b *SuperBlock) Add(key, cookie int64, data []byte) (offset uint32, size int32, err error) {
-	var incrOffset uint32
+func (b *SuperBlock) Add(n *Needle) (err error) {
 	if b.LastErr != nil {
 		err = b.LastErr
 		return
 	}
-	if size, incrOffset, err = b.writeNeedle(key, cookie, data); err != nil {
+	var incrOffset = NeedleOffset(int64(n.TotalSize))
+	if err = b.available(incrOffset); err != nil {
+		return
+	}
+	if err = n.Write(b.bw); err != nil {
+		b.LastErr = err
 		return
 	}
 	if err = b.Flush(); err != nil {
 		return
 	}
-	offset = b.Offset
 	b.Offset += incrOffset
-	if log.V(1) {
-		log.Infof("add a needle, key: %d, cookie: %d, offset: %d, size: %d, b.offset: %d", key, cookie, offset, size, b.Offset)
-	}
 	return
 }
 
 // Write start add needles to the block, must called after start a transaction.
-func (b *SuperBlock) Write(key, cookie int64, data []byte) (offset uint32, size int32, err error) {
-	var incrOffset uint32
+func (b *SuperBlock) Write(n *Needle) (err error) {
 	if b.LastErr != nil {
 		err = b.LastErr
 		return
 	}
-	if size, incrOffset, err = b.writeNeedle(key, cookie, data); err != nil {
+	var incrOffset = NeedleOffset(int64(n.TotalSize))
+	if err = b.available(incrOffset); err != nil {
 		return
 	}
-	offset = b.Offset
+	if err = n.Write(b.bw); err != nil {
+		b.LastErr = err
+		return
+	}
 	b.Offset += incrOffset
 	return
 }
@@ -200,25 +190,12 @@ func (b *SuperBlock) Flush() (err error) {
 }
 
 // Repair repair the specified offset needle without update current offset.
-func (b *SuperBlock) Repair(key, cookie int64, data []byte, size int32, offset uint32) (err error) {
-	var (
-		nsize    int32
-		padding  int32
-		dataSize = int32(len(data))
-	)
+func (b *SuperBlock) Repair(offset uint32, buf []byte) (err error) {
 	if b.LastErr != nil {
 		err = b.LastErr
 		return
 	}
-	if padding, nsize, err = NeedleSize(dataSize); err != nil {
-		return
-	}
-	if nsize != size {
-		err = ErrSuperBlockRepairSize
-		return
-	}
-	FillNeedle(padding, dataSize, key, cookie, data, b.buf)
-	_, err = b.w.WriteAt(b.buf[:nsize], BlockOffset(offset))
+	_, err = b.w.WriteAt(buf, BlockOffset(offset))
 	b.LastErr = err
 	return
 }
@@ -267,7 +244,6 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 	}
 	rd = bufio.NewReaderSize(b.r, NeedleMaxSize)
 	for {
-		// header
 		if data, err = rd.Peek(NeedleHeaderSize); err != nil {
 			break
 		}
@@ -277,7 +253,6 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 		if _, err = rd.Discard(NeedleHeaderSize); err != nil {
 			break
 		}
-		// data
 		if data, err = rd.Peek(n.DataSize); err != nil {
 			break
 		}
@@ -318,17 +293,16 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 
 // Compress compress the orig block, copy to disk dst block.
 func (b *SuperBlock) Compress(offset int64, v *Volume) (noffset int64, err error) {
-	var (
-		data []byte
-		r    *os.File
-		rd   *bufio.Reader
-		n    *Needle
-	)
 	if b.LastErr != nil {
 		err = b.LastErr
 		return
 	}
-	n = &Needle{}
+	var (
+		r    *os.File
+		rd   *bufio.Reader
+		data []byte
+		n    = &Needle{}
+	)
 	log.Infof("block: %s compress", b.File)
 	if r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDONLY, 0664) error(%v)", b.File, err)
@@ -343,7 +317,6 @@ func (b *SuperBlock) Compress(offset int64, v *Volume) (noffset int64, err error
 	}
 	rd = bufio.NewReaderSize(r, NeedleMaxSize)
 	for {
-		// header
 		if data, err = rd.Peek(NeedleHeaderSize); err != nil {
 			break
 		}
@@ -353,7 +326,6 @@ func (b *SuperBlock) Compress(offset int64, v *Volume) (noffset int64, err error
 		if _, err = rd.Discard(NeedleHeaderSize); err != nil {
 			break
 		}
-		// data
 		if data, err = rd.Peek(n.DataSize); err != nil {
 			break
 		}
@@ -363,7 +335,7 @@ func (b *SuperBlock) Compress(offset int64, v *Volume) (noffset int64, err error
 		if _, err = rd.Discard(n.DataSize); err != nil {
 			break
 		}
-		offset += int64(NeedleHeaderSize + n.DataSize)
+		offset += int64(n.TotalSize)
 		if log.V(1) {
 			log.Info(n.String())
 		}
@@ -372,7 +344,7 @@ func (b *SuperBlock) Compress(offset int64, v *Volume) (noffset int64, err error
 			continue
 		}
 		// multi append
-		if err = v.Write(n.Key, n.Cookie, n.Data); err != nil {
+		if err = v.Write(n); err != nil {
 			break
 		}
 	}

@@ -23,6 +23,7 @@ func TestVolume(t *testing.T) {
 		buf    []byte
 		bfile  = "./test/test1"
 		ifile  = "./test/test1.idx"
+		n      = &Needle{}
 	)
 	defer os.Remove(bfile)
 	defer os.Remove(ifile)
@@ -73,17 +74,29 @@ func TestVolume(t *testing.T) {
 		goto failed
 	}
 	t.Log("Write(4)")
-	if err = v.Write(4, 4, data); err != nil {
+	if err = n.Parse(4, 4, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		goto failed
+	}
+	if err = v.Write(n); err != nil {
 		t.Errorf("Write() error(%v)", err)
 		goto failed
 	}
 	t.Log("Write(5)")
-	if err = v.Write(5, 5, data); err != nil {
+	if err = n.Parse(5, 5, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		goto failed
+	}
+	if err = v.Write(n); err != nil {
 		t.Errorf("Write() error(%v)", err)
 		goto failed
 	}
 	t.Log("Write(6)")
-	if err = v.Write(6, 6, data); err != nil {
+	if err = n.Parse(6, 6, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		goto failed
+	}
+	if err = v.Write(n); err != nil {
 		t.Errorf("Write() error(%v)", err)
 		goto failed
 	}
@@ -155,6 +168,7 @@ func BenchmarkVolumeWrite(b *testing.B) {
 		file  = "./test/testb2"
 		ifile = "./test/testb2.idx"
 		data  = make([]byte, 1*1024)
+		n     = &Needle{}
 	)
 	defer os.Remove(file)
 	defer os.Remove(ifile)
@@ -170,7 +184,11 @@ func BenchmarkVolumeWrite(b *testing.B) {
 	b.ResetTimer()
 	v.Lock()
 	for i = 0; i < b.N; i++ {
-		if err = v.Write(t, t, data); err != nil {
+		if err = n.Parse(t, t, data); err != nil {
+			b.Errorf("n.Parse() error(%v)", err)
+			goto failed
+		}
+		if err = v.Write(n); err != nil {
 			b.Errorf("Add() error(%v)", err)
 			goto failed
 		}
@@ -228,7 +246,6 @@ func BenchmarkVolumeGet(b *testing.B) {
 				b.Errorf("Get(%d) error(%v)", t1, err1)
 				b.FailNow()
 			}
-			b.SetBytes(int64(len(data1)))
 		}
 	})
 }

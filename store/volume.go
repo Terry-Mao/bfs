@@ -119,7 +119,7 @@ func (v *Volume) Unlock() {
 }
 
 // Needle get a needle from sync.Pool.
-func (v *Volume) needle() (n *Needle) {
+func (v *Volume) Needle() (n *Needle) {
 	var i interface{}
 	if i = v.np.Get(); i != nil {
 		n = i.(*Needle)
@@ -129,7 +129,7 @@ func (v *Volume) needle() (n *Needle) {
 }
 
 // FreeNeedle free the needle to pool.
-func (v *Volume) freeNeedle(n *Needle) {
+func (v *Volume) FreeNeedle(n *Needle) {
 	v.np.Put(n)
 }
 
@@ -151,12 +151,12 @@ func (v *Volume) FreeBuffer(d []byte) {
 // Get get a needle by key and cookie.
 func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	var (
+		now    = time.Now().UnixNano()
 		ok     bool
 		nc     int64
 		size   int32
 		offset uint32
 		n      *Needle
-		now    = time.Now().UnixNano()
 	)
 	v.lock.RLock()
 	nc, ok = v.needles[key]
@@ -177,7 +177,7 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	if err = v.Block.Get(offset, buf[:size]); err != nil {
 		return
 	}
-	n = v.needle()
+	n = v.Needle()
 	if err = n.ParseHeader(buf[:NeedleHeaderSize]); err != nil {
 		goto free
 	}
@@ -209,7 +209,7 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	atomic.AddUint64(&v.Stats.TotalReadBytes, uint64(size))
 	atomic.AddUint64(&v.Stats.TotalGetDelay, uint64(time.Now().UnixNano()-now))
 free:
-	v.freeNeedle(n)
+	v.FreeNeedle(n)
 	return
 }
 
@@ -217,31 +217,37 @@ free:
 // needle cache offset to new offset.
 func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 	var (
+		now             = time.Now().UnixNano()
 		ok              bool
 		nc              int64
-		size, osize     int32
+		size            int32
 		offset, ooffset uint32
-		now             = time.Now().UnixNano()
+		n               = v.Needle()
 	)
+	if err = n.Parse(key, cookie, data); err != nil {
+		return
+	}
+	size = n.TotalSize
 	v.lock.Lock()
-	nc, ok = v.needles[key]
-	// add needle
-	if offset, size, err = v.Block.Add(key, cookie, data); err != nil {
-		v.lock.Unlock()
-		return
+	offset = v.Block.Offset
+	if err = v.Block.Add(n); err == nil {
+		if err = v.Indexer.Add(key, offset, size); err == nil {
+			nc, ok = v.needles[key]
+			v.needles[key] = NeedleCache(offset, size)
+		}
 	}
-	if err = v.Indexer.Add(key, offset, size); err != nil {
-		v.lock.Unlock()
-		return
-	}
-	v.needles[key] = NeedleCache(offset, size)
 	v.lock.Unlock()
+	v.FreeNeedle(n)
+	if err != nil {
+		return
+	}
 	if log.V(1) {
 		log.Infof("add needle, offset: %d, size: %d", offset, size)
 	}
 	if ok {
-		ooffset, osize = NeedleCacheValue(nc)
-		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
+		ooffset, _ = NeedleCacheValue(nc)
+		log.Warningf("same key: %d, old offset: %d, new offset: %d", key,
+			ooffset, offset)
 		err = v.asyncDel(ooffset)
 	}
 	atomic.AddUint64(&v.Stats.TotalAddProcessed, 1)
@@ -252,32 +258,33 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 
 // Write add a new needle, if key exists append to super block, then update
 // needle cache offset to new offset, Write is used for multi add needles.
-func (v *Volume) Write(key, cookie int64, data []byte) (err error) {
+func (v *Volume) Write(n *Needle) (err error) {
 	var (
 		ok              bool
 		nc              int64
-		size, osize     int32
 		offset, ooffset uint32
 		now             = time.Now().UnixNano()
 	)
-	nc, ok = v.needles[key]
-	if offset, size, err = v.Block.Write(key, cookie, data); err != nil {
+	offset = v.Block.Offset
+	if err = v.Block.Write(n); err == nil {
+		if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err == nil {
+			nc, ok = v.needles[n.Key]
+			v.needles[n.Key] = NeedleCache(offset, n.TotalSize)
+		}
+	}
+	if err != nil {
 		return
 	}
-	if err = v.Indexer.Add(key, offset, size); err != nil {
-		return
-	}
-	v.needles[key] = NeedleCache(offset, size)
 	if log.V(1) {
-		log.Infof("add needle, offset: %d, size: %d", offset, size)
+		log.Infof("add needle, offset: %d, size: %d", offset, n.TotalSize)
 	}
 	if ok {
-		ooffset, osize = NeedleCacheValue(nc)
-		log.Warningf("same key: %d add a new needle, old offset: %d, old size: %d, new offset: %d, new size: %d", key, ooffset, osize, offset, size)
+		ooffset, _ = NeedleCacheValue(nc)
+		log.Warningf("same key: %d, old offset: %d, new offset: %d", n.Key, ooffset, offset)
 		err = v.asyncDel(ooffset)
 	}
 	atomic.AddUint64(&v.Stats.TotalWriteProcessed, 1)
-	atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(size))
+	atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(n.TotalSize))
 	atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 	return
 }
@@ -383,11 +390,12 @@ func (v *Volume) StartCompress(nv *Volume) (err error) {
 		v.Compress = true
 	}
 	v.lock.Unlock()
-	if err == nil {
-		v.compressOffset, err = v.Block.Compress(v.compressOffset, nv)
-		atomic.AddUint64(&v.Stats.TotalCompressProcessed, 1)
-		v.compressTime = time.Now().UnixNano()
+	if err != nil {
+		return
 	}
+	v.compressTime = time.Now().UnixNano()
+	v.compressOffset, err = v.Block.Compress(v.compressOffset, nv)
+	atomic.AddUint64(&v.Stats.TotalCompressProcessed, 1)
 	return
 }
 
@@ -396,8 +404,8 @@ func (v *Volume) StartCompress(nv *Volume) (err error) {
 // if nv is nil, only reset compress status.
 func (v *Volume) StopCompress(nv *Volume) (err error) {
 	var (
-		key int64
 		now = time.Now().UnixNano()
+		key int64
 	)
 	v.lock.Lock()
 	if nv != nil {

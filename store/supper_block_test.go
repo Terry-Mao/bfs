@@ -49,8 +49,6 @@ func TestSuperBlock(t *testing.T) {
 	var (
 		v       *Volume
 		buf     []byte
-		size    int32
-		offset  uint32
 		n       = &Needle{}
 		needles = make(map[int64]int64)
 		data    = []byte("test")
@@ -87,18 +85,12 @@ func TestSuperBlock(t *testing.T) {
 	}
 	// test add
 	t.Log("Add(1)")
-	if offset, size, err = b.Add(1, 1, data); err != nil {
+	if err = n.Parse(1, 1, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		goto failed
+	}
+	if err = b.Add(n); err != nil {
 		t.Errorf("b.Add() error(%v)", err)
-		goto failed
-	}
-	// super block has 8bytes header, so offset is 1
-	if offset != 1 {
-		t.Errorf("block offset: %d not match", offset)
-		goto failed
-	}
-	// header 25 + footer 8 = 33
-	if size != 40 {
-		t.Errorf("block size: %d not match", size)
 		goto failed
 	}
 	if b.Offset != 6 {
@@ -127,18 +119,12 @@ func TestSuperBlock(t *testing.T) {
 	}
 	// test add
 	t.Log("Add(2)")
-	if offset, size, err = b.Add(2, 2, data); err != nil {
+	if err = n.Parse(2, 2, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		goto failed
+	}
+	if err = b.Add(n); err != nil {
 		t.Errorf("b.Add() error(%v)", err)
-		goto failed
-	}
-	// old offset must 6, start with it
-	if offset != 6 {
-		t.Errorf("block offset: %d not match", offset)
-		goto failed
-	}
-	// header 25 + footer 8 = 33
-	if size != 40 {
-		t.Errorf("block size: %d not match", size)
 		goto failed
 	}
 	if b.Offset != 11 {
@@ -165,18 +151,12 @@ func TestSuperBlock(t *testing.T) {
 	}
 	// test write
 	t.Log("Write(3)")
-	if offset, size, err = b.Write(3, 3, data); err != nil {
+	if err = n.Parse(3, 3, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		goto failed
+	}
+	if err = b.Write(n); err != nil {
 		t.Errorf("b.Add() error(%v)", err)
-		goto failed
-	}
-	// old offset must 11, start with it
-	if offset != 11 {
-		t.Errorf("block offset: %d not match", offset)
-		goto failed
-	}
-	// header 25 + footer 8 = 33
-	if size != 40 {
-		t.Errorf("block size: %d not match", size)
 		goto failed
 	}
 	if b.Offset != 16 {
@@ -185,18 +165,12 @@ func TestSuperBlock(t *testing.T) {
 	}
 	// test write
 	t.Log("Write(4)")
-	if offset, size, err = b.Write(4, 4, data); err != nil {
+	if err = n.Parse(4, 4, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		goto failed
+	}
+	if err = b.Write(n); err != nil {
 		t.Errorf("b.Add() error(%v)", err)
-		goto failed
-	}
-	// old offset must 16, start with it
-	if offset != 16 {
-		t.Errorf("block offset: %d not match", offset)
-		goto failed
-	}
-	// header 25 + footer 8 = 33
-	if size != 40 {
-		t.Errorf("block size: %d not match", size)
 		goto failed
 	}
 	if b.Offset != 21 {
@@ -325,7 +299,12 @@ func TestSuperBlock(t *testing.T) {
 	}
 	// test repair
 	t.Log("Repair(3)")
-	if err = b.Repair(3, 3, data, 40, 11); err != nil {
+	if err = n.Parse(3, 3, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		goto failed
+	}
+	n.Fill(buf)
+	if err = b.Repair(11, buf); err != nil {
 		t.Errorf("b.Repair(3) error(%v)", err)
 		goto failed
 	}

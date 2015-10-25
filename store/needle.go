@@ -89,9 +89,11 @@ type Needle struct {
 	Data        []byte
 	FooterMagic []byte
 	Checksum    uint32
-	PaddingSize int32
 	Padding     []byte
-	DataSize    int // data-part size
+	PaddingSize int32
+	TotalSize   int32 // total needle write size
+	// used in peek
+	DataSize int // data-part size
 }
 
 // ParseNeedleHeader parse a needle header part.
@@ -118,8 +120,9 @@ func (n *Needle) ParseHeader(buf []byte) (err error) {
 		err = ErrNeedleSize
 		return
 	}
-	n.PaddingSize = NeedlePaddingSize - ((NeedleHeaderSize + n.Size +
-		NeedleFooterSize) % NeedlePaddingSize)
+	n.TotalSize = NeedleHeaderSize + n.Size + NeedleFooterSize
+	n.PaddingSize = NeedlePaddingSize - (n.TotalSize % NeedlePaddingSize)
+	n.TotalSize += n.PaddingSize
 	n.DataSize = int(n.Size + n.PaddingSize + NeedleFooterSize)
 	return
 }
@@ -152,84 +155,6 @@ func (n *Needle) ParseData(buf []byte) (err error) {
 	return
 }
 
-// WriteNeedle write needle into bufio.
-func WriteNeedle(w *bufio.Writer, padding, size int32, key, cookie int64, data []byte) (err error) {
-	// header
-	// magic
-	if _, err = w.Write(needleHeaderMagic); err != nil {
-		return
-	}
-	// cookie
-	if err = BigEndian.WriteInt64(w, cookie); err != nil {
-		return
-	}
-	// key
-	if err = BigEndian.WriteInt64(w, key); err != nil {
-		return
-	}
-	// flag
-	if err = w.WriteByte(NeedleStatusOK); err != nil {
-		return
-	}
-	// size
-	if err = BigEndian.WriteInt32(w, size); err != nil {
-		return
-	}
-	// data
-	if _, err = w.Write(data); err != nil {
-		return
-	}
-	// footer
-	// magic
-	if _, err = w.Write(needleFooterMagic); err != nil {
-		return
-	}
-	// checksum
-	if err = BigEndian.WriteUint32(w, crc32.Update(0, crc32Table, data)); err != nil {
-		return
-	}
-	// padding
-	_, err = w.Write(needlePadding[padding])
-	return
-}
-
-// FillNeedle fill needle buffer.
-func FillNeedle(padding, size int32, key, cookie int64, data, buf []byte) {
-	var (
-		n        int
-		checksum = crc32.Update(0, crc32Table, data)
-	)
-	// --- header ---
-	// magic
-	copy(buf[:needleMagicSize], needleHeaderMagic)
-	n += needleMagicSize
-	// cookie
-	BigEndian.PutInt64(buf[n:], cookie)
-	n += needleCookieSize
-	// key
-	BigEndian.PutInt64(buf[n:], key)
-	n += needleKeySize
-	// flag
-	buf[n] = NeedleStatusOK
-	n += needleFlagSize
-	// size
-	BigEndian.PutInt32(buf[n:], size)
-	n += needleSizeSize
-	// data
-	copy(buf[n:], data)
-	n += len(data)
-	// --- footer ---
-	// magic
-	copy(buf[n:], needleFooterMagic)
-	n += needleMagicSize
-	// checksum
-	BigEndian.PutUint32(buf[n:], checksum)
-	n += needleChecksumSize
-	// padding
-	copy(buf[n:], needlePadding[padding])
-	return
-}
-
 func (n *Needle) String() string {
 	return fmt.Sprintf(`
 -----------------------------
@@ -248,15 +173,97 @@ Padding:        %v
 		n.Checksum, n.Padding)
 }
 
-// NeedleSize get a needle size by data.
-func NeedleSize(ds int32) (padding, size int32, err error) {
-	// (padding + (size - 1)) & (^(size - 1))
-	size = int32(NeedleHeaderSize + ds + NeedleFooterSize)
-	padding = NeedlePaddingSize - (size % NeedlePaddingSize)
-	size += padding
-	if size > NeedleMaxSize {
+// Parse parse needle from data.
+func (n *Needle) Parse(key, cookie int64, data []byte) (err error) {
+	var dataSize = int32(len(data))
+	n.TotalSize = int32(NeedleHeaderSize + dataSize + NeedleFooterSize)
+	n.PaddingSize = NeedlePaddingSize - (n.TotalSize % NeedlePaddingSize)
+	n.TotalSize += n.PaddingSize
+	if n.TotalSize > NeedleMaxSize {
 		err = ErrNeedleTooLarge
+		return
 	}
+	n.Key = key
+	n.Cookie = cookie
+	n.Size = dataSize
+	n.Data = data
+	n.Checksum = crc32.Update(0, crc32Table, data)
+	n.Padding = needlePadding[n.PaddingSize]
+	return
+}
+
+// Write write needle into bufio.
+func (n *Needle) Write(w *bufio.Writer) (err error) {
+	// header
+	// magic
+	if _, err = w.Write(needleHeaderMagic); err != nil {
+		return
+	}
+	// cookie
+	if err = BigEndian.WriteInt64(w, n.Cookie); err != nil {
+		return
+	}
+	// key
+	if err = BigEndian.WriteInt64(w, n.Key); err != nil {
+		return
+	}
+	// flag
+	if err = w.WriteByte(NeedleStatusOK); err != nil {
+		return
+	}
+	// size
+	if err = BigEndian.WriteInt32(w, n.Size); err != nil {
+		return
+	}
+	// data
+	if _, err = w.Write(n.Data); err != nil {
+		return
+	}
+	// footer
+	// magic
+	if _, err = w.Write(needleFooterMagic); err != nil {
+		return
+	}
+	// checksum
+	if err = BigEndian.WriteUint32(w, n.Checksum); err != nil {
+		return
+	}
+	// padding
+	_, err = w.Write(n.Padding)
+	return
+}
+
+// Fill fill buffer with needle data.
+func (n *Needle) Fill(buf []byte) {
+	var bn int
+	// --- header ---
+	// magic
+	copy(buf[:needleMagicSize], needleHeaderMagic)
+	bn += needleMagicSize
+	// cookie
+	BigEndian.PutInt64(buf[bn:], n.Cookie)
+	bn += needleCookieSize
+	// key
+	BigEndian.PutInt64(buf[bn:], n.Key)
+	bn += needleKeySize
+	// flag
+	buf[bn] = NeedleStatusOK
+	bn += needleFlagSize
+	// size
+	BigEndian.PutInt32(buf[bn:], n.Size)
+	bn += needleSizeSize
+	// data
+	copy(buf[bn:], n.Data)
+	bn += len(n.Data)
+	// --- footer ---
+	// magic
+	copy(buf[bn:], needleFooterMagic)
+	bn += needleMagicSize
+	// checksum
+	BigEndian.PutUint32(buf[bn:], n.Checksum)
+	bn += needleChecksumSize
+	// padding
+	copy(buf[bn:], n.Padding)
 	return
 }
 
