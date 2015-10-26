@@ -161,6 +161,8 @@ func BenchmarkVolumeAdd(b *testing.B) {
 			b.SetBytes(int64(n.TotalSize))
 		}
 	})
+	os.Remove(file)
+	os.Remove(ifile)
 }
 
 func BenchmarkVolumeWrite(b *testing.B) {
@@ -218,6 +220,8 @@ func BenchmarkVolumeWrite(b *testing.B) {
 			b.SetBytes(int64(n.TotalSize) * 9)
 		}
 	})
+	os.Remove(file)
+	os.Remove(ifile)
 }
 
 func BenchmarkVolumeGet(b *testing.B) {
