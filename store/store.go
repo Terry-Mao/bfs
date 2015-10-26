@@ -35,10 +35,10 @@ const (
 	storeMap           = 10
 
 	// store map flag
-	storeAdd      = 1
-	storeUpdate   = 2
-	storeDel      = 3
-	storeCompress = 4
+	storeAdd     = 1
+	storeUpdate  = 2
+	storeDel     = 3
+	storeCompact = 4
 	// stat
 	storeStatDuration = 1 * time.Second
 )
@@ -183,8 +183,8 @@ func (s *Store) command() {
 			volumes[v.Id] = v
 		} else if v.Command == storeDel {
 			delete(volumes, v.Id)
-		} else if v.Command == storeCompress {
-			if err = vc.StopCompress(v); err != nil {
+		} else if v.Command == storeCompact {
+			if err = vc.StopCompact(v); err != nil {
 				continue
 			}
 			volumes[v.Id] = v
@@ -260,8 +260,8 @@ func (s *Store) Bulk(id int32, bfile, ifile string) (err error) {
 	return
 }
 
-// Compress compress a super block to another file.
-func (s *Store) Compress(id int32, bfile, ifile string) (err error) {
+// Compact compact a super block to another file.
+func (s *Store) Compact(id int32, bfile, ifile string) (err error) {
 	var (
 		nv *Volume
 		v  = s.Volume(id)
@@ -273,13 +273,13 @@ func (s *Store) Compress(id int32, bfile, ifile string) (err error) {
 	if nv, err = NewVolume(id, bfile, ifile); err != nil {
 		return
 	}
-	// set volume compress flag
+	// set volume compact flag
 	// copy to new volume
-	if err = v.StartCompress(nv); err != nil {
-		v.StopCompress(nil)
+	if err = v.StartCompact(nv); err != nil {
+		v.StopCompact(nil)
 		return
 	}
-	nv.Command = storeCompress
+	nv.Command = storeCompact
 	s.ch <- nv
 	return
 }

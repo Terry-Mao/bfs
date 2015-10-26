@@ -49,20 +49,20 @@ func (p Uint32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 // An store server contains many logic Volume, volume is superblock container.
 type Volume struct {
-	lock           sync.RWMutex
-	Id             int32       `json:"id"`
-	Stats          *Stats      `json:"stats"`
-	Block          *SuperBlock `json:"block"`
-	Indexer        *Indexer    `json:"index"`
-	needles        map[int64]int64
-	signal         chan uint32
-	bp             *sync.Pool // buffer pool
-	np             *sync.Pool // needle struct pool
-	Command        int        `json:"-"` // flag used in store
-	Compress       bool       `json:"-"`
-	compressOffset int64
-	compressTime   int64
-	compressKeys   []int64
+	lock          sync.RWMutex
+	Id            int32       `json:"id"`
+	Stats         *Stats      `json:"stats"`
+	Block         *SuperBlock `json:"block"`
+	Indexer       *Indexer    `json:"index"`
+	needles       map[int64]int64
+	signal        chan uint32
+	bp            *sync.Pool // buffer pool
+	np            *sync.Pool // needle struct pool
+	Command       int        `json:"-"` // flag used in store
+	Compact       bool       `json:"-"`
+	compactOffset int64
+	compactTime   int64
+	compactKeys   []int64
 }
 
 // NewVolume new a volume and init it.
@@ -85,7 +85,7 @@ func NewVolume(id int32, bfile, ifile string) (v *Volume, err error) {
 		goto failed
 	}
 	v.signal = make(chan uint32, volumeDelChNum)
-	v.compressKeys = []int64{}
+	v.compactKeys = []int64{}
 	go v.del()
 	return
 failed:
@@ -334,9 +334,9 @@ func (v *Volume) Del(key int64) (err error) {
 	if ok {
 		offset, size = NeedleCacheValue(nc)
 		v.needles[key] = NeedleCache(NeedleCacheDelOffset, size)
-		// when in compress, must save all del operations.
-		if v.Compress {
-			v.compressKeys = append(v.compressKeys, key)
+		// when in compact, must save all del operations.
+		if v.Compact {
+			v.compactKeys = append(v.compactKeys, key)
 		}
 	}
 	v.lock.Unlock()
@@ -387,39 +387,39 @@ func (v *Volume) del() {
 	return
 }
 
-// Compress copy the super block to another space, and drop the "delete"
+// Compact copy the super block to another space, and drop the "delete"
 // needle, so this can reduce disk space cost.
-func (v *Volume) StartCompress(nv *Volume) (err error) {
+func (v *Volume) StartCompact(nv *Volume) (err error) {
 	v.lock.Lock()
-	if v.Compress {
-		err = ErrVolumeInCompress
+	if v.Compact {
+		err = ErrVolumeInCompact
 	} else {
-		v.Compress = true
+		v.Compact = true
 	}
 	v.lock.Unlock()
 	if err != nil {
 		return
 	}
-	v.compressTime = time.Now().UnixNano()
-	v.compressOffset, err = v.Block.Compress(v.compressOffset, nv)
-	atomic.AddUint64(&v.Stats.TotalCompressProcessed, 1)
+	v.compactTime = time.Now().UnixNano()
+	v.compactOffset, err = v.Block.Compact(v.compactOffset, nv)
+	atomic.AddUint64(&v.Stats.TotalCompactProcessed, 1)
 	return
 }
 
-// StopCompress try append left block space and deleted needles when
-// compressing, then reset compress flag, offset and compressKeys.
-// if nv is nil, only reset compress status.
-func (v *Volume) StopCompress(nv *Volume) (err error) {
+// StopCompact try append left block space and deleted needles when
+// compacting, then reset compact flag, offset and compactKeys.
+// if nv is nil, only reset compact status.
+func (v *Volume) StopCompact(nv *Volume) (err error) {
 	var (
 		now = time.Now().UnixNano()
 		key int64
 	)
 	v.lock.Lock()
 	if nv != nil {
-		if v.compressOffset, err = v.Block.Compress(v.compressOffset, nv); err != nil {
+		if v.compactOffset, err = v.Block.Compact(v.compactOffset, nv); err != nil {
 			goto failed
 		}
-		for _, key = range v.compressKeys {
+		for _, key = range v.compactKeys {
 			if err = nv.Del(key); err != nil {
 				goto failed
 			}
@@ -427,10 +427,10 @@ func (v *Volume) StopCompress(nv *Volume) (err error) {
 		atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 	}
 failed:
-	v.Compress = false
-	v.compressOffset = 0
-	v.compressTime = 0
-	v.compressKeys = v.compressKeys[:0]
+	v.Compact = false
+	v.compactOffset = 0
+	v.compactTime = 0
+	v.compactKeys = v.compactKeys[:0]
 	v.lock.Unlock()
 	return
 }

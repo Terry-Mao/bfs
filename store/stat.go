@@ -42,7 +42,7 @@ type Stats struct {
 	TotalFlushProcessed     uint64 `json:total_flush_processed`
 	FlushTPS                uint64 `json:"flush_tps"`
 	lastTotalFlushProcessed uint64 `json:"-"`
-	TotalCompressProcessed  uint64 `json:"total_compress_processed"`
+	TotalCompactProcessed   uint64 `json:"total_compact_processed"`
 	// bytes
 	TotalTransferedBytes     uint64 `json:"total_transfered_bytes"`
 	TransferedFlow           uint64 `json:"transfered_flow"`
@@ -72,7 +72,7 @@ type Stats struct {
 	TotalFlushDelay     uint64 `json:"total_flush_delay"`
 	lastTotalFlushDelay uint64 `json:"-"`
 	FlushDelay          uint64 `json:"flush_delay"`
-	TotalCompressDelay  uint64 `json:"total_compress_delay"`
+	TotalCompactDelay   uint64 `json:"total_compact_delay"`
 }
 
 // Calc calc the commands qps/tps.
@@ -90,7 +90,7 @@ func (s *Stats) Calc() {
 	s.lastTotalFlushProcessed = s.TotalFlushProcessed
 	s.TotalCommandsProcessed = s.TotalAddProcessed + s.TotalWriteProcessed +
 		s.TotalDelProcessed + s.TotalGetProcessed + s.TotalFlushProcessed +
-		s.TotalCompressProcessed
+		s.TotalCompactProcessed
 	// bytes
 	s.ReadFlow = s.TotalReadBytes - s.lastTotalReadBytes
 	s.lastTotalReadBytes = s.TotalReadBytes
@@ -125,7 +125,7 @@ func (s *Stats) Merge(s1 *Stats) {
 	s.TotalDelProcessed += s1.TotalDelProcessed
 	s.TotalGetProcessed += s1.TotalGetProcessed
 	s.TotalFlushProcessed += s1.TotalFlushProcessed
-	s.TotalCompressProcessed += s1.TotalCompressProcessed
+	s.TotalCompactProcessed += s1.TotalCompactProcessed
 	// bytes
 	s.TotalReadBytes += s1.TotalReadBytes
 	s.TotalWriteBytes += s1.TotalWriteBytes
@@ -135,7 +135,7 @@ func (s *Stats) Merge(s1 *Stats) {
 	s.TotalDelDelay += s1.TotalDelDelay
 	s.TotalGetDelay += s1.TotalGetDelay
 	s.TotalFlushDelay += s1.TotalFlushDelay
-	s.TotalCompressDelay += s1.TotalCompressDelay
+	s.TotalCompactDelay += s1.TotalCompactDelay
 }
 
 // Reset reset the stat.
@@ -146,7 +146,7 @@ func (s *Stats) Reset() {
 	s.TotalDelProcessed = 0
 	s.TotalGetProcessed = 0
 	s.TotalFlushProcessed = 0
-	s.TotalCompressProcessed = 0
+	s.TotalCompactProcessed = 0
 	// bytes
 	s.TotalReadBytes = 0
 	s.TotalWriteBytes = 0
@@ -156,7 +156,7 @@ func (s *Stats) Reset() {
 	s.TotalDelDelay = 0
 	s.TotalGetDelay = 0
 	s.TotalFlushDelay = 0
-	s.TotalCompressDelay = 0
+	s.TotalCompactDelay = 0
 }
 
 // Stat is store server stat.

@@ -289,8 +289,8 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 	return
 }
 
-// Compress compress the orig block, copy to disk dst block.
-func (b *SuperBlock) Compress(offset int64, v *Volume) (noffset int64, err error) {
+// Compact compact the orig block, copy to disk dst block.
+func (b *SuperBlock) Compact(offset int64, v *Volume) (noffset int64, err error) {
 	if b.LastErr != nil {
 		err = b.LastErr
 		return
@@ -301,7 +301,7 @@ func (b *SuperBlock) Compress(offset int64, v *Volume) (noffset int64, err error
 		data []byte
 		n    = &Needle{}
 	)
-	log.Infof("block: %s compress", b.File)
+	log.Infof("block: %s compact", b.File)
 	if r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDONLY, 0664) error(%v)", b.File, err)
 		return
