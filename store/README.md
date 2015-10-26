@@ -9,7 +9,7 @@ Store is part of bfs, it's for small files stored service.
 
 ## Architechure
 ### Needles
-needle is small file raw data in the disk, thery are stored by one by in disk file. it's aligned with 8 bytes, we used a uint32 stored offset to the file, so the max needle size is 8 * 4GB = 32GB.
+needle is the raw data of small file in the disk, they are stored one by one in disk file. it's aligned with 8 bytes, we used a uint32 stored offset to the file, so the max needle size is 8 * 4GB = 32GB.
 Needle stored int super block, aligned to 8bytes.                           
                                                                             
 needle file format:  
