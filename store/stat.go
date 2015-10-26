@@ -189,7 +189,7 @@ func retWrite(w http.ResponseWriter, r *http.Request, res map[string]interface{}
 }
 
 func StartStat(s *Store, addr string) {
-	http.HandleFunc("/stat", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return

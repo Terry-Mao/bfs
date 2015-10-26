@@ -258,6 +258,13 @@ func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
 
 // Write add a new needle, if key exists append to super block, then update
 // needle cache offset to new offset, Write is used for multi add needles.
+// Get Needle
+// Lock
+// for {
+//   Write
+// }
+// Unlock
+// Free Needle
 func (v *Volume) Write(n *Needle) (err error) {
 	var (
 		ok              bool

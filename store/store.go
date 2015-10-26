@@ -169,7 +169,6 @@ func (s *Store) command() {
 	for {
 		v = <-s.ch
 		if v == nil {
-			log.Errorf("signal store command goroutine exit")
 			break
 		}
 		// copy-on-write
@@ -202,7 +201,6 @@ func (s *Store) command() {
 			log.Errorf("store save index: %s error(%v)", s.file, err)
 		}
 	}
-	log.Errorf("store command goroutine exit")
 }
 
 // stat stat the store.

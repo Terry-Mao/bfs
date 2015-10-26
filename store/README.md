@@ -150,7 +150,7 @@ The optional parameter can be used to select a specific section of information:
 
 ```sh
 # the http addr can config in store.yaml
-$ curl http://localhost:6061/stat
+$ curl http://localhost:6061/info
 ```
 
 Have Fun!
