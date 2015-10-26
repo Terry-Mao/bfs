@@ -100,6 +100,11 @@ func (b *SuperBlock) init() (err error) {
 		if _, err = b.w.Write(superBlockPadding); err != nil {
 			return
 		}
+		// falloc(FALLOC_FL_KEEP_SIZE)
+		if err = Fallocate(b.w.Fd(), 1, superBlockHeaderSize, 1*1024*1024); err != nil {
+			log.Errorf("Fallocate(b.w.Fd(), 1, superBlockHeaderSize, 1*1024*1024) error(err)", err)
+			return
+		}
 	} else {
 		if _, err = b.r.Read(b.buf[:superBlockHeaderSize]); err != nil {
 			return

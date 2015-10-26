@@ -9,8 +9,11 @@ pprof:
 # stat api: http://http_stat_addr/stat
 stat: localhost:6061
 
-# store index for find volumes.
+# store index for find volumes
 index: /tmp/hijohn.idx
 
-# zookeeper address.
+# rack set the store server belongs to which rack
+rack: bfs-1
+
+# zookeeper address
 zk: ["1", "2"]

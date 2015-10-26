@@ -15,13 +15,13 @@ func TestStat(t *testing.T) {
 	s.TotalDelProcessed = 20
 	s.TotalGetProcessed = 25
 	s.TotalFlushProcessed = 30
-	s.TotalCompressProcessed = 35
+	s.TotalCompactProcessed = 35
 	s1.TotalAddProcessed = 10
 	s1.TotalWriteProcessed = 15
 	s1.TotalDelProcessed = 20
 	s1.TotalGetProcessed = 25
 	s1.TotalFlushProcessed = 30
-	s1.TotalCompressProcessed = 35
+	s1.TotalCompactProcessed = 35
 	// bytes
 	// delay
 	s.Calc()
@@ -71,8 +71,8 @@ func TestStat(t *testing.T) {
 		t.Errorf("TotalFlushProcessed: %d not match", s1.TotalFlushProcessed)
 		t.FailNow()
 	}
-	if s1.TotalCompressProcessed != 70 {
-		t.Errorf("TotalCompressProcessed: %d not match", s1.TotalCompressProcessed)
+	if s1.TotalCompactProcessed != 70 {
+		t.Errorf("TotalCompactProcessed: %d not match", s1.TotalCompactProcessed)
 		t.FailNow()
 	}
 	if s1.AddTPS != 20 {

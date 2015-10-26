@@ -76,8 +76,8 @@ func TestStore(t *testing.T) {
 		t.Errorf("v.Get(1) error(%v)", err)
 		goto failed
 	}
-	t.Log("Compress(1)")
-	if err = s.Compress(1, b3file, i3file); err != nil {
+	t.Log("Compact(1)")
+	if err = s.Compact(1, b3file, i3file); err != nil {
 		t.Errorf("Compress(1) error(%v)", err)
 		goto failed
 	}

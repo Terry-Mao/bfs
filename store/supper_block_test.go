@@ -324,7 +324,7 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("NewVolume(1) error(%v)", err)
 		goto failed
 	}
-	if v1, err := b.Compress(0, v); err != nil {
+	if v1, err := b.Compact(0, v); err != nil {
 		t.Errorf("b.Compress() error(%v)", err)
 		goto failed
 	} else {
