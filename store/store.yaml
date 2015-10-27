@@ -12,8 +12,12 @@ stat: localhost:6061
 # store index for find volumes
 index: /tmp/hijohn.idx
 
-# rack set the store server belongs to which rack
-rack: bfs-1
+# serverid for store server, must unique in cluster, ie. linux shell uuidgen 
+# can get one.
+server_id: 47E273ED-CD3A-4D6A-94CE-554BA9B195EB
 
-# zookeeper address
-zk: ["1", "2"]
+# zookeeper
+zookeeper:
+  addrs : ["localhost:2181"]
+  timeout: 1s
+  root: /rack/bfs-1/

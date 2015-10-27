@@ -57,17 +57,13 @@ type Store struct {
 	file     string
 	VolumeId int32
 	volumes  map[int32]*Volume
+	zk       *Zookeeper
 }
 
 // NewStore
-func NewStore(file string) (s *Store, err error) {
-	var (
-		i              int
-		bfiles, ifiles []string
-		volume         *Volume
-		volumeIds      []int32
-	)
+func NewStore(zk *Zookeeper, file string) (s *Store, err error) {
 	s = &Store{}
+	s.zk = zk
 	s.VolumeId = 1
 	s.volumes = make(map[int32]*Volume)
 	s.file = file
@@ -77,35 +73,84 @@ func NewStore(file string) (s *Store, err error) {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDWR|os.O_CREATE, 0664) error(%v)", file, err)
 		return
 	}
-	if volumeIds, bfiles, ifiles, err = s.parseIndex(); err != nil {
-		log.Errorf("parse volume index failed, check the volume index file format")
+	if err = s.init(); err != nil {
 		return
-	}
-	for i = 0; i < len(bfiles); i++ {
-		if volume, err = NewVolume(volumeIds[i], bfiles[i], ifiles[i]); err != nil {
-			log.Warningf("fail recovery volume_id: %d, file: %s, index: %s", volumeIds[i], bfiles[i], ifiles[i])
-			continue
-		}
-		s.volumes[volumeIds[i]] = volume
 	}
 	go s.stat()
 	log.Infof("current max volume id: %d", s.VolumeId)
 	return
 }
 
-// parseIndex parse volume info from a index file.
-func (s *Store) parseIndex() (volumeIds []int32, bfiles []string, ifiles []string, err error) {
+func (s *Store) init() (err error) {
 	var (
-		data               []byte
-		bfile, ifile, line string
-		seps               []string
-		volumeId           int64
+		i                                int
+		ok                               bool
+		bfiles, ifiles, bfiles1, ifiles1 []string
+		volume                           *Volume
+		volumeIds, volumeIds1            []int32
+		volumeIdMap, volumeIdMap1        map[int32]struct{}
+		data                             []byte
+		lines                            []string
 	)
 	if data, err = ioutil.ReadAll(s.f); err != nil {
 		log.Errorf("ioutil.ReadAll() error(%v)", err)
 		return
 	}
-	for _, line = range strings.Split(string(data), volumeIndexSpliter) {
+	lines = strings.Split(string(data), volumeIndexSpliter)
+	if volumeIdMap, volumeIds, bfiles, ifiles, err = s.parseIndex(lines); err != nil {
+		return
+	}
+	if lines, err = s.zk.Volumes(); err != nil {
+		return
+	}
+	if volumeIdMap1, volumeIds1, bfiles1, ifiles1, err = s.parseIndex(lines); err != nil {
+		return
+	}
+	for i = 0; i < len(bfiles); i++ {
+		if _, ok = s.volumes[volumeIds[i]]; ok {
+			continue
+		}
+		// local index
+		if volume, err = NewVolume(volumeIds[i], bfiles[i], ifiles[i]); err != nil {
+			log.Warningf("fail recovery volume_id: %d, file: %s, index: %s", volumeIds[i], bfiles[i], ifiles[i])
+			continue
+		}
+		s.volumes[volumeIds[i]] = volume
+		if _, ok = volumeIdMap1[volumeIds[i]]; !ok {
+			// if not exists in zk, must readd to zk
+			log.Infof("volume_id: %d not exist in zk", volumeIds[i])
+			if err = s.zk.AddVolume(volumeIds[i], bfiles[i], ifiles[i]); err != nil {
+				return
+			}
+		}
+	}
+	for i = 0; i < len(bfiles1); i++ {
+		if _, ok = s.volumes[volumeIds1[i]]; ok {
+			continue
+		}
+		// zk index
+		if _, ok = volumeIdMap[volumeIds1[i]]; !ok {
+			// if not exists in local
+			if volume, err = NewVolume(volumeIds1[i], bfiles1[i], ifiles1[i]); err != nil {
+				log.Warningf("fail recovery volume_id: %d, file: %s, index: %s", volumeIds1[i], bfiles1[i], ifiles1[i])
+				continue
+			}
+			s.volumes[volumeIds1[i]] = volume
+		}
+	}
+	err = s.saveIndex()
+	return
+}
+
+// parseIndex parse volume info from a index file.
+func (s *Store) parseIndex(lines []string) (volumeIdMap map[int32]struct{}, volumeIds []int32, bfiles []string, ifiles []string, err error) {
+	var (
+		bfile, ifile, line string
+		seps               []string
+		volumeId           int64
+	)
+	volumeIdMap = make(map[int32]struct{})
+	for _, line = range lines {
 		if len(strings.TrimSpace(line)) == 0 {
 			continue
 		}
@@ -124,6 +169,7 @@ func (s *Store) parseIndex() (volumeIds []int32, bfiles []string, ifiles []strin
 		volumeIds = append(volumeIds, int32(volumeId))
 		bfiles = append(bfiles, bfile)
 		ifiles = append(ifiles, ifile)
+		volumeIdMap[int32(volumeId)] = struct{}{}
 		if int32(volumeId) > s.VolumeId {
 			// reset max volume id
 			s.VolumeId = int32(volumeId)
@@ -136,12 +182,16 @@ func (s *Store) parseIndex() (volumeIds []int32, bfiles []string, ifiles []strin
 // saveIndex save volumes index info to disk.
 func (s *Store) saveIndex() (err error) {
 	var (
+		tn, n        int
 		v            *Volume
 		ok           bool
 		vid          int32
 		bfile, ifile string
 		vids         = make([]int32, 0, len(s.volumes))
 	)
+	if _, err = s.f.Seek(0, os.SEEK_SET); err != nil {
+		return
+	}
 	for vid, v = range s.volumes {
 		vids = append(vids, vid)
 	}
@@ -149,12 +199,16 @@ func (s *Store) saveIndex() (err error) {
 	for _, vid = range vids {
 		if v, ok = s.volumes[vid]; ok {
 			bfile, ifile = v.Block.File, v.Indexer.File
-			if _, err = s.f.Write([]byte(fmt.Sprintf("%s,%s,%d\n", bfile, ifile, vid))); err != nil {
+			if n, err = s.f.Write([]byte(fmt.Sprintf("%s,%s,%d\n", bfile, ifile, vid))); err != nil {
 				return
 			}
 		}
+		tn += n
 	}
-	err = s.f.Sync()
+	if err = s.f.Sync(); err != nil {
+		return
+	}
+	err = os.Truncate(s.file, int64(tn))
 	return
 }
 

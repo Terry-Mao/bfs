@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	log "github.com/golang/glog"
+	"path"
 	"time"
 )
 
@@ -19,6 +20,7 @@ func main() {
 		c      *Config
 		s      *Store
 		v      *Volume
+		z      *Zookeeper
 		d, buf []byte
 		err    error
 	)
@@ -32,7 +34,10 @@ func main() {
 	if c.Pprof.Enable {
 		StartPprof(c.Pprof.Addr)
 	}
-	if s, err = NewStore("/tmp/hijohn.idx"); err != nil {
+	if z, err = NewZookeeper(c.Zookeeper.Addrs, c.Zookeeper.Timeout, path.Join(c.Zookeeper.Root, c.ServerId)); err != nil {
+		return
+	}
+	if s, err = NewStore(z, c.Index); err != nil {
 		log.Errorf("store init error(%v)", err)
 		return
 	}

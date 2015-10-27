@@ -5,16 +5,22 @@ import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
+	"time"
 )
 
 type Config struct {
-	Index string   `yaml: index`
-	ZK    []string `yaml:",flow"`
-	Pprof struct {
-		Enable bool   `yaml: enable`
-		Addr   string `yaml: addr`
+	Index    string `yaml: "index"`
+	ServerId string `yaml: "server_id"`
+	Pprof    struct {
+		Enable bool   `yaml: "enable"`
+		Addr   string `yaml: "addr"`
 	}
-	Stat string `yaml: stat`
+	Stat      string `yaml: "stat"`
+	Zookeeper struct {
+		Addrs   []string      `yaml: "addrs,flow"`
+		Timeout time.Duration `yaml: "timeout"`
+		Root    string        `yaml: "root"`
+	}
 	file string
 	f    *os.File
 }

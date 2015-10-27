@@ -6,5 +6,5 @@ import (
 )
 
 func Fallocate(fd uintptr, mode uint32, off int64, len int64) (err error) {
-	return syscall.Fallocate(fd, mode, off, len)
+	return syscall.Fallocate(int(fd), mode, off, len)
 }

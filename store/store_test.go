@@ -11,6 +11,7 @@ import (
 func TestStore(t *testing.T) {
 	var (
 		s      *Store
+		z      *Zookeeper
 		v      *Volume
 		err    error
 		buf    []byte
@@ -31,7 +32,11 @@ func TestStore(t *testing.T) {
 	defer os.Remove(b3file)
 	defer os.Remove(i3file)
 	t.Log("NewStore()")
-	if s, err = NewStore(file); err != nil {
+	if z, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack/test/"); err != nil {
+		t.Errorf("NewZookeeper() error(%v)", err)
+		goto failed
+	}
+	if s, err = NewStore(z, file); err != nil {
 		t.Errorf("NewStore() error(%v)", err)
 		goto failed
 

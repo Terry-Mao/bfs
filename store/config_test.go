@@ -27,7 +27,7 @@ func TestConfig(t *testing.T) {
 	if c.Pprof.Addr != "localhost:6060" {
 		t.FailNow()
 	}
-	if len(c.ZK) != 2 || c.ZK[0] != "1" || c.ZK[1] != "2" {
+	if len(c.Zookeeper.Addrs) != 1 || c.Zookeeper.Addrs[0] != "localhost:2181" {
 		t.FailNow()
 	}
 }

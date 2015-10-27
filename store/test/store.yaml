@@ -9,8 +9,15 @@ pprof:
 # stat api: http://http_stat_addr/stat
 stat: localhost:6061
 
-# store index for find volumes.
+# store index for find volumes
 index: /tmp/hijohn.idx
 
-# zookeeper address.
-zk: ["1", "2"]
+# serverid for store server, must unique in cluster, ie. linux shell uuidgen 
+# can get one.
+server_id: 47E273ED-CD3A-4D6A-94CE-554BA9B195EB
+
+# zookeeper
+zookeeper:
+  addrs : ["localhost:2181"]
+  timeout: 1s
+  root: /rack/bfs-1/
