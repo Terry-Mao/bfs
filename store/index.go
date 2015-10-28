@@ -30,9 +30,8 @@ import (
 
 const (
 	// signal command
-	signalNum   = 1
-	indexFinish = 0
-	indexReady  = 1
+	signalNum  = 1
+	indexReady = 1
 	// index size
 	indexKeySize    = 8
 	indexOffsetSize = 4
@@ -97,7 +96,7 @@ func NewIndexer(file string, ring int) (i *Indexer, err error) {
 		return
 	}
 	if stat, err = i.f.Stat(); err != nil {
-		log.Errorf("block: %s Stat() error(%v)", i.File, err)
+		log.Errorf("index: %s Stat() error(%v)", i.File, err)
 		return
 	}
 	if stat.Size() == 0 {
@@ -198,6 +197,7 @@ func (i *Indexer) merge() (err error) {
 			break
 		}
 		if err = i.Write(index.Key, index.Offset, index.Size); err != nil {
+			log.Errorf("index: %s Write() error(%v)", i.File, err)
 			break
 		}
 		i.ring.GetAdv()
@@ -226,7 +226,9 @@ func (i *Indexer) write() {
 	if err = i.f.Sync(); err != nil {
 		log.Errorf("index: %s Sync() error(%v)", i.File, err)
 	}
-	i.f.Close()
+	if err = i.f.Close(); err != nil {
+		log.Errorf("index: %s Close() error(%v)", i.File, err)
+	}
 	return
 }
 
@@ -251,7 +253,8 @@ func (i *Indexer) Recovery(needles map[int64]int64) (noffset uint32, err error) 
 		}
 		ix.parse(data)
 		if ix.Size > NeedleMaxSize || ix.Size < 1 {
-			log.Errorf("index parse size: %d > %d or %d < 1", ix.Size, NeedleMaxSize, ix.Size)
+			log.Errorf("index parse size: %d error", ix.Size)
+			err = ErrIndexSize
 			break
 		}
 		if _, err = rd.Discard(indexSize); err != nil {
@@ -265,14 +268,16 @@ func (i *Indexer) Recovery(needles map[int64]int64) (noffset uint32, err error) 
 		// save this for recovery supper block
 		noffset = ix.Offset + NeedleOffset(int64(ix.Size))
 	}
-	if err != io.EOF {
-		return
+	if err == io.EOF {
+		// reset b.w offset, discard left space which can't parse to a needle
+		if _, err = i.f.Seek(offset, os.SEEK_SET); err != nil {
+			log.Errorf("index: %s Seek() error(%v)", i.File, err)
+		} else {
+			log.Infof("index: %s recovery [ok]", i.File)
+			return
+		}
 	}
-	// reset b.w offset, discard left space which can't parse to a needle
-	if _, err = i.f.Seek(offset, os.SEEK_SET); err != nil {
-		log.Errorf("index: %s Seek() error(%v)", i.File, err)
-	}
-	log.Infof("index: %s recovery [ok]", i.File)
+	log.Errorf("index: %s recovery [failed], error(%v)", i.File, err)
 	return
 }
 

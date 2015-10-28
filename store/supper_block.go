@@ -64,7 +64,7 @@ func NewSuperBlock(file string) (b *SuperBlock, err error) {
 		goto failed
 	}
 	if err = b.init(); err != nil {
-		log.Errorf("block: %s init error(%v)", file, err)
+		log.Errorf("block: %s init() error(%v)", file, err)
 		goto failed
 	}
 	return
@@ -88,6 +88,11 @@ func (b *SuperBlock) init() (err error) {
 		return
 	}
 	if stat.Size() == 0 {
+		// falloc(FALLOC_FL_KEEP_SIZE)
+		if err = Fallocate(b.w.Fd(), 1, 0, superBlockMaxSize); err != nil {
+			log.Errorf("Fallocate(b.w.Fd(), 1, 0, 4GB) error(err)", err)
+			return
+		}
 		// magic
 		if _, err = b.w.Write(superBlockMagic); err != nil {
 			return
@@ -100,17 +105,12 @@ func (b *SuperBlock) init() (err error) {
 		if _, err = b.w.Write(superBlockPadding); err != nil {
 			return
 		}
-		// falloc(FALLOC_FL_KEEP_SIZE)
-		if err = Fallocate(b.w.Fd(), 1, superBlockHeaderSize, superBlockMaxSize); err != nil {
-			log.Errorf("Fallocate(b.w.Fd(), 1, 8, 4GB) error(err)", err)
-			return
-		}
 	} else {
 		if _, err = b.r.Read(b.buf[:superBlockHeaderSize]); err != nil {
 			return
 		}
 		b.Magic = b.buf[superBlockMagicOffset : superBlockMagicOffset+superBlockMagicSize]
-		b.Ver = byte(b.buf[superBlockVerOffset : superBlockVerOffset+superBlockVerSize][0])
+		b.Ver = b.buf[superBlockVerOffset : superBlockVerOffset+superBlockVerSize][0]
 		if !bytes.Equal(b.Magic, superBlockMagic) {
 			err = ErrSuperBlockMagic
 			return
@@ -255,6 +255,7 @@ func (b *SuperBlock) Del(offset uint32) (err error) {
 }
 
 // Recovery recovery needles map from super block.
+// TODO use func var
 func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset uint32) (err error) {
 	var (
 		n    = &Needle{}
@@ -309,20 +310,23 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 		b.Offset += NeedleOffset(int64(size))
 	}
 	if err == io.EOF {
-		err = nil
+		if err = indexer.Flush(); err != nil {
+			return
+		}
+		// reset b.w offset, discard left space which can't parse to a needle
+		if _, err = b.w.Seek(blockOffset(b.Offset), os.SEEK_SET); err != nil {
+			log.Errorf("block: %s Seek() error(%v)", b.File, err)
+		} else {
+			log.Infof("block: %s:%d*8 recovery [ok]", b.File, b.Offset)
+			return
+		}
 	}
-	if err = indexer.Flush(); err != nil {
-		return
-	}
-	// reset b.w offset, discard left space which can't parse to a needle
-	if _, err = b.w.Seek(blockOffset(b.Offset), os.SEEK_SET); err != nil {
-		log.Errorf("block: %s Seek() error(%v)", b.File, err)
-	}
-	log.Infof("block: %s:%d*8 recovery [ok]", b.File, b.Offset)
+	log.Infof("block: %s recovery [failed]", b.File)
 	return
 }
 
 // Compact compact the orig block, copy to disk dst block.
+// TODO
 func (b *SuperBlock) Compact(offset int64, v *Volume) (noffset int64, err error) {
 	if b.LastErr != nil {
 		err = b.LastErr

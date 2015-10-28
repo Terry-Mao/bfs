@@ -11,6 +11,8 @@ var (
 	ErrSuperBlockPadding    = errors.New("super block padding error")
 	ErrSuperBlockNoSpace    = errors.New("super block no left free space")
 	ErrSuperBlockRepairSize = errors.New("super block repair size")
+	// index
+	ErrIndexSize = errors.New("index size error")
 	// needle
 	ErrNeedleExists      = errors.New("needle already exists")
 	ErrNoNeedle          = errors.New("needle not exists")
