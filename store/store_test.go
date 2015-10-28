@@ -17,12 +17,12 @@ func TestStore(t *testing.T) {
 		buf    []byte
 		data   = []byte("test")
 		file   = "./test/store.idx"
-		bfile  = "./test/volume"
-		ifile  = "./test/volume.idx"
-		b2file = "./test/volume2"
-		i2file = "./test/volume2.idx"
-		b3file = "./test/volume3"
-		i3file = "./test/volume3.idx"
+		bfile  = "./test/block_1"
+		ifile  = "./test/block_1.idx"
+		b2file = "./test/block_2"
+		i2file = "./test/block_2.idx"
+		b3file = "./test/block_3"
+		i3file = "./test/block_3.idx"
 	)
 	defer os.Remove(file)
 	defer os.Remove(bfile)
@@ -42,8 +42,13 @@ func TestStore(t *testing.T) {
 
 	}
 	defer s.Close()
+	t.Log("AddFreeVolume")
+	if _, err = s.AddFreeVolume(1, "./test", "./test"); err != nil {
+		t.Errorf("s.AddFreeVolume() error(%v)", err)
+		goto failed
+	}
 	t.Log("AddVolume(1)")
-	if v, err = s.AddVolume(1, bfile, ifile); err != nil {
+	if v, err = s.AddVolume(1); err != nil {
 		t.Errorf("AddVolume() error(%v)", err)
 		goto failed
 	}

@@ -42,12 +42,21 @@ func main() {
 		return
 	}
 	StartStat(s, c.Stat)
-	if v, err = s.AddVolume(2, "/tmp/hijohn_2", "/tmp/hijohn_2.idx"); err != nil {
+	//if _, err = s.AddFreeVolume(10, "/tmp", "/tmp"); err != nil {
+	//	return
+	//}
+	//if v, err = s.AddVolume(2); err != nil {
+	//	return
+	//}
+	//if v, err = s.AddVolume(2, "/tmp/hijohn_2", "/tmp/hijohn_2.idx"); err != nil {
+	//	return
+	//}
+	if v = s.Volume(2); v == nil {
 		return
 	}
 	v.Add(2, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
-	v.Add(3, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
-	v.Add(4, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
+	//v.Add(3, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
+	//v.Add(4, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
 	time.Sleep(1 * time.Second)
 	if v = s.Volume(2); v == nil {
 		log.Errorf("volume_id: %d not exist", 2)

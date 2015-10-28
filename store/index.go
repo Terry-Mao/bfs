@@ -91,6 +91,7 @@ func NewIndexer(file string, ring int) (i *Indexer, err error) {
 		log.Errorf("os.OpenFile(\"%s\", os.O_RDWR|os.O_CREATE, 0664) error(%v)", file, err)
 		return
 	}
+	// TODO falloc
 	i.bw = bufio.NewWriterSize(i.f, NeedleMaxSize)
 	go i.write()
 	return

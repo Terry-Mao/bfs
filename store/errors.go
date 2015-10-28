@@ -28,7 +28,8 @@ var (
 	ErrRingEmpty = errors.New("ring buffer empty")
 	ErrRingFull  = errors.New("ring buffer full")
 	// store
-	ErrStoreVolumeIndex = errors.New("store volume index error")
+	ErrStoreVolumeIndex  = errors.New("store volume index error")
+	ErrStoreNoFreeVolume = errors.New("store has no free volume")
 	// volume
 	ErrVolumeNotExist  = errors.New("volume not exist")
 	ErrVolumeDel       = errors.New("volume del error, may volume del goroutine crash or io too slow")

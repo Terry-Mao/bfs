@@ -5,9 +5,11 @@ import (
 	log "github.com/golang/glog"
 	"io/ioutil"
 	"os"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -40,7 +42,8 @@ const (
 	storeDel     = 3
 	storeCompact = 4
 	// stat
-	storeStatDuration = 1 * time.Second
+	storeStatDuration     = 1 * time.Second
+	storeFreeVolumePrefix = "block_"
 )
 
 // Int32Slice sort volumes.
@@ -52,12 +55,14 @@ func (p Int32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 // Store save volumes.
 type Store struct {
-	f        *os.File
-	ch       chan *Volume
-	file     string
-	VolumeId int32
-	volumes  map[int32]*Volume
-	zk       *Zookeeper
+	f           *os.File
+	ch          chan *Volume
+	file        string
+	VolumeId    int32
+	volumes     map[int32]*Volume
+	freeVolumes []*Volume
+	zk          *Zookeeper
+	lock        sync.Mutex
 }
 
 // NewStore
@@ -81,6 +86,7 @@ func NewStore(zk *Zookeeper, file string) (s *Store, err error) {
 	return
 }
 
+// init parse index from local config and zookeeper.
 func (s *Store) init() (err error) {
 	var (
 		i                                int
@@ -115,12 +121,17 @@ func (s *Store) init() (err error) {
 			log.Warningf("fail recovery volume_id: %d, file: %s, index: %s", volumeIds[i], bfiles[i], ifiles[i])
 			continue
 		}
-		s.volumes[volumeIds[i]] = volume
-		if _, ok = volumeIdMap1[volumeIds[i]]; !ok {
-			// if not exists in zk, must readd to zk
-			log.Infof("volume_id: %d not exist in zk", volumeIds[i])
-			if err = s.zk.AddVolume(volumeIds[i], bfiles[i], ifiles[i]); err != nil {
-				return
+		if volume.Id == VolumeEmptyId {
+			volume.Close()
+			s.freeVolumes = append(s.freeVolumes, volume)
+		} else {
+			s.volumes[volumeIds[i]] = volume
+			if _, ok = volumeIdMap1[volumeIds[i]]; !ok {
+				// if not exists in zk, must readd to zk
+				log.Infof("volume_id: %d not exist in zk", volumeIds[i])
+				if err = s.zk.AddVolume(volumeIds[i], bfiles[i], ifiles[i]); err != nil {
+					return
+				}
 			}
 		}
 	}
@@ -188,6 +199,7 @@ func (s *Store) saveIndex() (err error) {
 		vid          int32
 		bfile, ifile string
 		vids         = make([]int32, 0, len(s.volumes))
+		data         []byte
 	)
 	if _, err = s.f.Seek(0, os.SEEK_SET); err != nil {
 		return
@@ -196,12 +208,23 @@ func (s *Store) saveIndex() (err error) {
 		vids = append(vids, vid)
 	}
 	sort.Sort(Int32Slice(vids))
+	// volumes
 	for _, vid = range vids {
 		if v, ok = s.volumes[vid]; ok {
 			bfile, ifile = v.Block.File, v.Indexer.File
-			if n, err = s.f.Write([]byte(fmt.Sprintf("%s,%s,%d\n", bfile, ifile, vid))); err != nil {
+			data = []byte(fmt.Sprintf("%s,%s,%d\n", bfile, ifile, vid))
+			if n, err = s.f.Write(data); err != nil {
 				return
 			}
+		}
+		tn += n
+	}
+	// free volumes
+	for _, v = range s.freeVolumes {
+		bfile, ifile = v.Block.File, v.Indexer.File
+		data = []byte(fmt.Sprintf("%s,%s,%d\n", bfile, ifile, v.Id))
+		if n, err = s.f.Write(data); err != nil {
+			return
 		}
 		tn += n
 	}
@@ -232,14 +255,26 @@ func (s *Store) command() {
 		}
 		vc = volumes[v.Id]
 		if v.Command == storeAdd {
+			if err = s.zk.AddVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
+				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
+			}
 			volumes[v.Id] = v
 		} else if v.Command == storeUpdate {
+			if err = s.zk.SetVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
+				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
+			}
 			volumes[v.Id] = v
 		} else if v.Command == storeDel {
+			if err = s.zk.DelVolume(v.Id); err != nil {
+				log.Errorf("zk.DelVolume(%d) error(%v)", v.Id, err)
+			}
 			delete(volumes, v.Id)
 		} else if v.Command == storeCompact {
 			if err = vc.StopCompact(v); err != nil {
 				continue
+			}
+			if err = s.zk.SetVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
+				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
 			}
 			volumes[v.Id] = v
 		} else {
@@ -251,38 +286,57 @@ func (s *Store) command() {
 		}
 		// atomic update ptr
 		s.volumes = volumes
+		s.lock.Lock()
 		if err = s.saveIndex(); err != nil {
 			log.Errorf("store save index: %s error(%v)", s.file, err)
 		}
+		s.lock.Unlock()
 	}
 }
 
-// stat stat the store.
-func (s *Store) stat() {
+// AddFreeVolume add free volumes.
+func (s *Store) AddFreeVolume(n int, bdir, idir string) (sn int, err error) {
 	var (
-		v     *Volume
-		stat  = new(Stats)
-		stat1 *Stats
+		i            int
+		bfile, ifile string
+		v            *Volume
 	)
-	for {
-		*stat = *(StoreInfo.Stats)
-		stat1 = StoreInfo.Stats
-		StoreInfo.Stats = stat
-		stat1.Reset()
-		for _, v = range s.volumes {
-			v.Stats.Calc()
-			stat1.Merge(v.Stats)
+	s.lock.Lock()
+	for i = 0; i < n; i++ {
+		s.VolumeId++
+		bfile = path.Join(bdir, fmt.Sprintf("%s%d", storeFreeVolumePrefix, s.VolumeId))
+		ifile = path.Join(bdir, fmt.Sprintf("%s%d.idx", storeFreeVolumePrefix, s.VolumeId))
+		if v, err = NewVolume(VolumeEmptyId, bfile, ifile); err != nil {
+			break
 		}
-		stat1.Calc()
-		StoreInfo.Stats = stat1
-		time.Sleep(storeStatDuration)
+		v.Close()
+		s.freeVolumes = append(s.freeVolumes, v)
+		sn++
 	}
+	err = s.saveIndex()
+	s.lock.Unlock()
+	return
+}
+
+// freeVolume get a free volume.
+func (s *Store) freeVolume() (v *Volume, err error) {
+	s.lock.Lock()
+	if len(s.freeVolumes) == 0 {
+		err = ErrStoreNoFreeVolume
+	} else {
+		v = s.freeVolumes[0]
+		s.freeVolumes = s.freeVolumes[1:]
+	}
+	s.lock.Unlock()
+	return
 }
 
 // AddVolume add a new volume.
-func (s *Store) AddVolume(id int32, bfile, ifile string) (v *Volume, err error) {
-	// test
-	if v, err = NewVolume(id, bfile, ifile); err != nil {
+func (s *Store) AddVolume(id int32) (v *Volume, err error) {
+	if v, err = s.freeVolume(); err != nil {
+		return
+	}
+	if v, err = NewVolume(id, v.Block.File, v.Indexer.File); err != nil {
 		return
 	}
 	v.Command = storeAdd
@@ -338,6 +392,28 @@ func (s *Store) Compact(id int32, bfile, ifile string) (err error) {
 	return
 }
 
+// stat stat the store.
+func (s *Store) stat() {
+	var (
+		v     *Volume
+		stat  = new(Stats)
+		stat1 *Stats
+	)
+	for {
+		*stat = *(StoreInfo.Stats)
+		stat1 = StoreInfo.Stats
+		StoreInfo.Stats = stat
+		stat1.Reset()
+		for _, v = range s.volumes {
+			v.Stats.Calc()
+			stat1.Merge(v.Stats)
+		}
+		stat1.Calc()
+		StoreInfo.Stats = stat1
+		time.Sleep(storeStatDuration)
+	}
+}
+
 // Close close the store.
 // WARN the global variable store must first set nil and reject any other
 // requests then safty close.
@@ -350,5 +426,6 @@ func (s *Store) Close() {
 	for _, v = range s.volumes {
 		v.Close()
 	}
+	s.zk.Close()
 	return
 }

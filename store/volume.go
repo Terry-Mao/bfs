@@ -19,6 +19,7 @@ const (
 	needleCacheOffsetBit = 32
 	// del offset
 	NeedleCacheDelOffset = uint32(0)
+	VolumeEmptyId        = -1
 )
 
 var (

@@ -117,8 +117,24 @@ func (z *Zookeeper) DelVolume(id int32) (err error) {
 	return
 }
 
-// Set set the data into fpath
-func (z *Zookeeper) Set(data []byte) (err error) {
-	// update store data
+// SetVolume set the data into fpath.
+func (z *Zookeeper) SetVolume(id int32, bfile, ifile string) (err error) {
+	var (
+		stat  *zk.Stat
+		dpath = path.Join(z.fpath, strconv.Itoa(int(id)))
+	)
+	if _, stat, err = z.c.Get(dpath); err != nil {
+		log.Errorf("zk.Get(\"%s\") error(%v)", dpath, err)
+		return
+	}
+	if _, err = z.c.Set(dpath, []byte(fmt.Sprintf("%s,%s,%d", bfile, ifile, id)), stat.Version); err != nil {
+		log.Errorf("zk.Set(\"%s\") error(%v)", dpath, err)
+		return
+	}
 	return
+}
+
+// Close close the zookeeper connection.
+func (z *Zookeeper) Close() {
+	z.c.Close()
 }
