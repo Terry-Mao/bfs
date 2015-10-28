@@ -50,7 +50,10 @@ func TestIndex(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	// test recovery
 	t.Log("Test Recovery()")
-	if noffset, err = i.Recovery(needles); err != nil {
+	if noffset, err = i.Recovery(func(ix *Index) error {
+		needles[ix.Key] = NeedleCache(ix.Offset, ix.Size)
+		return nil
+	}); err != nil {
 		t.Errorf("i.Recovery() error(%v)", err)
 		goto failed
 	}
@@ -91,7 +94,10 @@ func TestIndex(t *testing.T) {
 		goto failed
 	}
 	// test recovery
-	if noffset, err = i.Recovery(needles); err != nil {
+	if noffset, err = i.Recovery(func(ix *Index) error {
+		needles[ix.Key] = NeedleCache(ix.Offset, ix.Size)
+		return nil
+	}); err != nil {
 		t.Errorf("i.Recovery() error(%v)", err)
 		goto failed
 	}
@@ -140,7 +146,10 @@ func TestIndex1(t *testing.T) {
 		goto failed
 	}
 	// try recovery
-	if noffset, err = i.Recovery(needles); err != nil {
+	if noffset, err = i.Recovery(func(ix *Index) error {
+		needles[ix.Key] = NeedleCache(ix.Offset, ix.Size)
+		return nil
+	}); err != nil {
 		t.Errorf("i.Recovery() error(%v)", err)
 		goto failed
 	}
@@ -164,7 +173,10 @@ func TestIndex1(t *testing.T) {
 	}
 	time.Sleep(1 * time.Second)
 	// try recovery
-	if noffset, err = i.Recovery(needles); err != nil {
+	if noffset, err = i.Recovery(func(ix *Index) error {
+		needles[ix.Key] = NeedleCache(ix.Offset, ix.Size)
+		return nil
+	}); err != nil {
 		t.Errorf("i.Recovery() error(%v)", err)
 		goto failed
 	}

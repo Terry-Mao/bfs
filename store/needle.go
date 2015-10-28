@@ -58,6 +58,8 @@ const (
 	// flags
 	NeedleStatusOK  = byte(0)
 	NeedleStatusDel = byte(1)
+	// display
+	needleDisplayData = 16
 )
 
 var (
@@ -156,6 +158,10 @@ func (n *Needle) ParseData(buf []byte) (err error) {
 }
 
 func (n *Needle) String() string {
+	var dn = needleDisplayData
+	if len(n.Data) < dn {
+		dn = len(n.Data)
+	}
 	return fmt.Sprintf(`
 -----------------------------
 HeaderMagic:    %v
@@ -169,8 +175,8 @@ FooterMagic:    %v
 Checksum:       %d
 Padding:        %v
 -----------------------------
-	`, n.HeaderMagic, n.Cookie, n.Key, n.Flag, n.Size, n.Data[:16], n.FooterMagic,
-		n.Checksum, n.Padding)
+	`, n.HeaderMagic, n.Cookie, n.Key, n.Flag, n.Size, n.Data[:dn],
+		n.FooterMagic, n.Checksum, n.Padding)
 }
 
 // Parse parse needle from data.

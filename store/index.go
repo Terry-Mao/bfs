@@ -234,7 +234,7 @@ func (i *Indexer) write() {
 
 // Recovery recovery needle cache meta data in memory, index file  will stop
 // at the right parse data offset.
-func (i *Indexer) Recovery(needles map[int64]int64) (noffset uint32, err error) {
+func (i *Indexer) Recovery(fn func(*Index) error) (noffset uint32, err error) {
 	var (
 		rd     *bufio.Reader
 		data   []byte
@@ -264,7 +264,9 @@ func (i *Indexer) Recovery(needles map[int64]int64) (noffset uint32, err error) 
 			log.Info(ix.String())
 		}
 		offset += int64(indexSize)
-		needles[ix.Key] = NeedleCache(ix.Offset, ix.Size)
+		if err = fn(ix); err != nil {
+			break
+		}
 		// save this for recovery supper block
 		noffset = ix.Offset + NeedleOffset(int64(ix.Size))
 	}

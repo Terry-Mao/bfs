@@ -245,7 +245,21 @@ func TestSuperBlock(t *testing.T) {
 		goto failed
 	}
 	defer os.Remove(ifile)
-	if err = b.Recovery(needles, indexer, 0); err != nil {
+	if err = b.Recovery(0, func(rn *Needle, bo uint32) (err1 error) {
+		var (
+			co uint32
+		)
+		if rn.Flag == NeedleStatusOK {
+			if err1 = indexer.Write(n.Key, bo, rn.TotalSize); err1 != nil {
+				return
+			}
+			co = bo
+		} else {
+			co = NeedleCacheDelOffset
+		}
+		needles[rn.Key] = NeedleCache(co, rn.TotalSize)
+		return
+	}); err != nil {
 		t.Errorf("b.Recovery() error(%v)", err)
 		goto failed
 	}
@@ -271,7 +285,21 @@ func TestSuperBlock(t *testing.T) {
 		goto failed
 	}
 	t.Log("Recovery(6)")
-	if err = b.Recovery(needles, indexer, 6); err != nil {
+	if err = b.Recovery(6, func(rn *Needle, bo uint32) (err1 error) {
+		var (
+			co uint32
+		)
+		if rn.Flag == NeedleStatusOK {
+			if err1 = indexer.Write(n.Key, bo, rn.TotalSize); err1 != nil {
+				return
+			}
+			co = bo
+		} else {
+			co = NeedleCacheDelOffset
+		}
+		needles[rn.Key] = NeedleCache(co, rn.TotalSize)
+		return
+	}); err != nil {
 		t.Errorf("b.Recovery() error(%v)", err)
 		goto failed
 	}
@@ -329,10 +357,16 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("NewVolume(1) error(%v)", err)
 		goto failed
 	}
-	if v1, err := b.Compact(0, v); err != nil {
+	if v1, err := b.Compact(0, func(rn *Needle) (err1 error) {
+		err1 = v.Write(rn)
+		return
+	}); err != nil {
 		t.Errorf("b.Compress() error(%v)", err)
 		goto failed
 	} else {
+		if err = v.Flush(); err != nil {
+			return
+		}
 		if v2, err := b.w.Seek(0, os.SEEK_END); err != nil {
 			t.Errorf("b.Seek() error(%v)", err)
 			goto failed

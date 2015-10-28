@@ -256,12 +256,10 @@ func (b *SuperBlock) Del(offset uint32) (err error) {
 
 // Recovery recovery needles map from super block.
 // TODO use func var
-func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset uint32) (err error) {
+func (b *SuperBlock) Recovery(offset uint32, fn func(*Needle, uint32) error) (err error) {
 	var (
 		n    = &Needle{}
-		nc   int64
 		rd   *bufio.Reader
-		size int32
 		data []byte
 	)
 	log.Infof("block: %s recovery from offset: %d", b.File, offset)
@@ -293,26 +291,16 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 		if _, err = rd.Discard(n.DataSize); err != nil {
 			break
 		}
-		size = int32(NeedleHeaderSize + n.DataSize)
-		if n.Flag == NeedleStatusOK {
-			if err = indexer.Write(n.Key, b.Offset, size); err != nil {
-				break
-			}
-			nc = NeedleCache(b.Offset, size)
-		} else {
-			nc = NeedleCache(NeedleCacheDelOffset, size)
-		}
-		needles[n.Key] = nc
 		if log.V(1) {
-			log.Infof("block add offset: %d, size: %d to needles cache", b.Offset, size)
+			log.Infof("block add offset: %d, size: %d to needles cache", b.Offset, n.TotalSize)
 			log.Info(n.String())
 		}
-		b.Offset += NeedleOffset(int64(size))
+		if err = fn(n, b.Offset); err != nil {
+			break
+		}
+		b.Offset += NeedleOffset(int64(n.TotalSize))
 	}
 	if err == io.EOF {
-		if err = indexer.Flush(); err != nil {
-			return
-		}
 		// reset b.w offset, discard left space which can't parse to a needle
 		if _, err = b.w.Seek(blockOffset(b.Offset), os.SEEK_SET); err != nil {
 			log.Errorf("block: %s Seek() error(%v)", b.File, err)
@@ -326,8 +314,7 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 }
 
 // Compact compact the orig block, copy to disk dst block.
-// TODO
-func (b *SuperBlock) Compact(offset int64, v *Volume) (noffset int64, err error) {
+func (b *SuperBlock) Compact(offset int64, fn func(*Needle) error) (noffset int64, err error) {
 	if b.LastErr != nil {
 		err = b.LastErr
 		return
@@ -378,15 +365,11 @@ func (b *SuperBlock) Compact(offset int64, v *Volume) (noffset int64, err error)
 		if n.Flag == NeedleStatusDel {
 			continue
 		}
-		// multi append
-		if err = v.Write(n); err != nil {
+		if err = fn(n); err != nil {
 			break
 		}
 	}
 	if err != io.EOF {
-		return
-	}
-	if err = v.Flush(); err != nil {
 		return
 	}
 	if err = r.Close(); err != nil {

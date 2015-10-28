@@ -123,11 +123,31 @@ failed:
 func (v *Volume) init() (err error) {
 	var offset uint32
 	// recovery from index
-	if offset, err = v.Indexer.Recovery(v.needles); err != nil {
+	if offset, err = v.Indexer.Recovery(
+		func(ix *Index) error {
+			v.needles[ix.Key] = NeedleCache(ix.Offset, ix.Size)
+			return nil
+		}); err != nil {
 		return
 	}
 	// recovery from super block
-	err = v.Block.Recovery(v.needles, v.Indexer, offset)
+	err = v.Block.Recovery(offset, func(n *Needle, bo uint32) (err1 error) {
+		var (
+			co uint32
+		)
+		if n.Flag == NeedleStatusOK {
+			if err1 = v.Indexer.Write(n.Key, bo, n.TotalSize); err1 != nil {
+				return
+			}
+			co = bo
+		} else {
+			co = NeedleCacheDelOffset
+		}
+		v.needles[n.Key] = NeedleCache(co, n.TotalSize)
+		return
+	})
+	// flush index
+	err = v.Indexer.Flush()
 	return
 }
 
@@ -426,7 +446,13 @@ func (v *Volume) StartCompact(nv *Volume) (err error) {
 		return
 	}
 	v.compactTime = time.Now().UnixNano()
-	v.compactOffset, err = v.Block.Compact(v.compactOffset, nv)
+	v.compactOffset, err = v.Block.Compact(v.compactOffset, func(n *Needle) (err1 error) {
+		err1 = nv.Write(n)
+		return
+	})
+	if err = nv.Flush(); err != nil {
+		return
+	}
 	atomic.AddUint64(&v.Stats.TotalCompactProcessed, 1)
 	return
 }
@@ -441,8 +467,12 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 	)
 	v.lock.Lock()
 	if nv != nil {
-		if v.compactOffset, err = v.Block.Compact(v.compactOffset, nv); err != nil {
-			goto failed
+		v.compactOffset, err = v.Block.Compact(v.compactOffset, func(n *Needle) (err1 error) {
+			err1 = nv.Write(n)
+			return
+		})
+		if err = nv.Flush(); err != nil {
+			return
 		}
 		for _, key = range v.compactKeys {
 			if err = nv.Del(key); err != nil {
