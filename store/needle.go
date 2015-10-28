@@ -164,12 +164,12 @@ Key:            %d
 Flag:           %d
 Size:           %d
 
-Data:           %v
+Data:           %v...
 FooterMagic:    %v
 Checksum:       %d
 Padding:        %v
 -----------------------------
-	`, n.HeaderMagic, n.Cookie, n.Key, n.Flag, n.Size, n.Data, n.FooterMagic,
+	`, n.HeaderMagic, n.Cookie, n.Key, n.Flag, n.Size, n.Data[:16], n.FooterMagic,
 		n.Checksum, n.Padding)
 }
 

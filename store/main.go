@@ -18,9 +18,9 @@ func init() {
 func main() {
 	var (
 		c      *Config
-		s      *Store
 		v      *Volume
 		z      *Zookeeper
+		s      *Store
 		d, buf []byte
 		err    error
 	)
@@ -42,6 +42,7 @@ func main() {
 		return
 	}
 	StartStat(s, c.Stat)
+	StartHTTP(s, c.Api)
 	//if _, err = s.AddFreeVolume(10, "/tmp", "/tmp"); err != nil {
 	//	return
 	//}
@@ -69,6 +70,6 @@ func main() {
 		return
 	}
 	log.V(1).Infof("get: %s", d)
-	time.Sleep(60 * time.Second)
+	time.Sleep(6000 * time.Second)
 	return
 }

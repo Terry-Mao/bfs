@@ -9,6 +9,10 @@ pprof:
 # stat api: http://http_stat_addr/stat
 stat: localhost:6061
 
+# api http addr
+# upload: http://http_api_addr/upload
+api: 10.240.135.203:6062
+
 # store index for find volumes
 index: /tmp/hijohn.idx
 

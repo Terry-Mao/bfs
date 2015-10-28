@@ -207,8 +207,10 @@ func (v *Volume) Get(key, cookie int64, buf []byte) (data []byte, err error) {
 	if err = n.ParseData(buf[NeedleHeaderSize:size]); err != nil {
 		goto free
 	}
-	if log.V(1) {
+	if log.V(2) {
 		log.Infof("%v\n", buf[:size])
+	}
+	if log.V(1) {
 		log.Infof("%v\n", n)
 	}
 	if n.Key != key {

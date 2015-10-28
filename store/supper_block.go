@@ -267,7 +267,8 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 	if offset == 0 {
 		offset = NeedleOffset(superBlockHeaderOffset)
 	}
-	if _, err = b.r.Seek(blockOffset(offset), os.SEEK_SET); err != nil {
+	b.Offset = offset
+	if _, err = b.r.Seek(blockOffset(b.Offset), os.SEEK_SET); err != nil {
 		log.Errorf("block: %s Seek() error(%v)", b.File)
 		return
 	}
@@ -293,19 +294,19 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 		}
 		size = int32(NeedleHeaderSize + n.DataSize)
 		if n.Flag == NeedleStatusOK {
-			if err = indexer.Write(n.Key, offset, size); err != nil {
+			if err = indexer.Write(n.Key, b.Offset, size); err != nil {
 				break
 			}
-			nc = NeedleCache(offset, size)
+			nc = NeedleCache(b.Offset, size)
 		} else {
 			nc = NeedleCache(NeedleCacheDelOffset, size)
 		}
 		needles[n.Key] = nc
 		if log.V(1) {
-			log.Infof("block add offset: %d, size: %d to needles cache", offset, size)
+			log.Infof("block add offset: %d, size: %d to needles cache", b.Offset, size)
 			log.Info(n.String())
 		}
-		offset += NeedleOffset(int64(size))
+		b.Offset += NeedleOffset(int64(size))
 	}
 	if err == io.EOF {
 		err = nil
@@ -314,9 +315,10 @@ func (b *SuperBlock) Recovery(needles map[int64]int64, indexer *Indexer, offset 
 		return
 	}
 	// reset b.w offset, discard left space which can't parse to a needle
-	if _, err = b.w.Seek(blockOffset(offset), os.SEEK_SET); err != nil {
+	if _, err = b.w.Seek(blockOffset(b.Offset), os.SEEK_SET); err != nil {
 		log.Errorf("block: %s Seek() error(%v)", b.File, err)
 	}
+	log.Infof("block: %s:%d*8 recovery [ok]", b.File, b.Offset)
 	return
 }
 

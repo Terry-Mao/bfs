@@ -249,6 +249,11 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("b.Recovery() error(%v)", err)
 		goto failed
 	}
+	if b.Offset != 21 {
+		err = fmt.Errorf("b.Offset not match %d", b.Offset)
+		t.Error(err)
+		goto failed
+	}
 	if o, s := NeedleCacheValue(needles[1]); o != NeedleCacheDelOffset && s != 40 {
 		t.Error("needle.Value(1) not match")
 		goto failed

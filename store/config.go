@@ -21,6 +21,7 @@ type Config struct {
 		Timeout time.Duration `yaml: "timeout"`
 		Root    string        `yaml: "root"`
 	}
+	Api  string `yaml: "api"`
 	file string
 	f    *os.File
 }
