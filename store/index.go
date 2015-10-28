@@ -42,6 +42,8 @@ const (
 	indexKeyOffset    = 0
 	indexOffsetOffset = indexKeyOffset + indexKeySize
 	indexSizeOffset   = indexOffsetOffset + indexOffsetSize
+
+	indexMaxSize = 100 * 1024 * 1024 // 100mb
 )
 
 // Indexer used for fast recovery super block needle cache.
@@ -82,6 +84,9 @@ Size:           %d
 
 // NewIndexer new a indexer for async merge index data to disk.
 func NewIndexer(file string, ring int) (i *Indexer, err error) {
+	var (
+		stat os.FileInfo
+	)
 	i = &Indexer{}
 	i.signal = make(chan int, signalNum)
 	i.ring = NewRing(ring)
@@ -91,7 +96,17 @@ func NewIndexer(file string, ring int) (i *Indexer, err error) {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		return
 	}
-	// TODO falloc
+	if stat, err = i.f.Stat(); err != nil {
+		log.Errorf("block: %s Stat() error(%v)", i.File, err)
+		return
+	}
+	if stat.Size() == 0 {
+		// falloc(FALLOC_FL_KEEP_SIZE)
+		if err = Fallocate(i.f.Fd(), 1, 0, indexMaxSize); err != nil {
+			log.Errorf("Fallocate(i.f.Fd(), 1, 0, 100MB) error(err)", err)
+			return
+		}
+	}
 	i.bw = bufio.NewWriterSize(i.f, NeedleMaxSize)
 	go i.write()
 	return
