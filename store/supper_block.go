@@ -55,12 +55,12 @@ func NewSuperBlock(file string) (b *SuperBlock, err error) {
 	b.File = file
 	b.buf = make([]byte, NeedleMaxSize)
 	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
-		log.Errorf("os.OpenFile(\"%s\", os.O_WRONLY|os.O_CREATE, 0664) error(%v)", file, err)
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		return
 	}
 	b.bw = bufio.NewWriterSize(b.w, NeedleMaxSize)
 	if b.r, err = os.OpenFile(file, os.O_RDONLY, 0664); err != nil {
-		log.Errorf("os.OpenFile(\"%s\", os.O_RDONLY, 0664) error(%v)", file, err)
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		goto failed
 	}
 	if err = b.init(); err != nil {
@@ -78,7 +78,7 @@ failed:
 	return
 }
 
-// init block file, add/parse meta info
+// init block file, add/parse meta info.
 func (b *SuperBlock) init() (err error) {
 	var (
 		stat os.FileInfo
@@ -101,8 +101,8 @@ func (b *SuperBlock) init() (err error) {
 			return
 		}
 		// falloc(FALLOC_FL_KEEP_SIZE)
-		if err = Fallocate(b.w.Fd(), 1, superBlockHeaderSize, 1*1024*1024); err != nil {
-			log.Errorf("Fallocate(b.w.Fd(), 1, superBlockHeaderSize, 1*1024*1024) error(err)", err)
+		if err = Fallocate(b.w.Fd(), 1, superBlockHeaderSize, superBlockMaxSize); err != nil {
+			log.Errorf("Fallocate(b.w.Fd(), 1, 8, 4GB) error(err)", err)
 			return
 		}
 	} else {
@@ -125,6 +125,32 @@ func (b *SuperBlock) init() (err error) {
 		}
 	}
 	b.Offset = NeedleOffset(superBlockHeaderOffset)
+	return
+}
+
+// Open open the closed superblock, must called after NewSuperBlock.
+func (b *SuperBlock) Open() (err error) {
+	if b.w, err = os.OpenFile(b.File, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
+		return
+	}
+	b.bw.Reset(b.w)
+	if b.r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
+		goto failed
+	}
+	if err = b.init(); err != nil {
+		log.Errorf("block: %s init error(%v)", b.File, err)
+		goto failed
+	}
+	return
+failed:
+	if b.w != nil {
+		b.w.Close()
+	}
+	if b.r != nil {
+		b.r.Close()
+	}
 	return
 }
 

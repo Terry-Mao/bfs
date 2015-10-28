@@ -282,6 +282,7 @@ func (s *Store) command() {
 		}
 		// close volume
 		if vc != nil {
+			log.Infof("update store volumes, orig block: %s,%s,%d close", vc.Block.File, vc.Indexer.File, vc.Id)
 			vc.Close()
 		}
 		// atomic update ptr
@@ -336,7 +337,8 @@ func (s *Store) AddVolume(id int32) (v *Volume, err error) {
 	if v, err = s.freeVolume(); err != nil {
 		return
 	}
-	if v, err = NewVolume(id, v.Block.File, v.Indexer.File); err != nil {
+	v.Id = id
+	if err = v.Open(); err != nil {
 		return
 	}
 	v.Command = storeAdd
@@ -369,7 +371,7 @@ func (s *Store) Bulk(id int32, bfile, ifile string) (err error) {
 }
 
 // Compact compact a super block to another file.
-func (s *Store) Compact(id int32, bfile, ifile string) (err error) {
+func (s *Store) Compact(id int32) (err error) {
 	var (
 		nv *Volume
 		v  = s.Volume(id)
@@ -378,11 +380,13 @@ func (s *Store) Compact(id int32, bfile, ifile string) (err error) {
 		err = ErrVolumeNotExist
 		return
 	}
-	if nv, err = NewVolume(id, bfile, ifile); err != nil {
+	if nv, err = s.freeVolume(); err != nil {
 		return
 	}
-	// set volume compact flag
-	// copy to new volume
+	nv.Id = id
+	if err = nv.Open(); err != nil {
+		return
+	}
 	if err = v.StartCompact(nv); err != nil {
 		v.StopCompact(nil)
 		return

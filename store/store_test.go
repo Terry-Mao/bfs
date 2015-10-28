@@ -43,7 +43,7 @@ func TestStore(t *testing.T) {
 	}
 	defer s.Close()
 	t.Log("AddFreeVolume")
-	if _, err = s.AddFreeVolume(1, "./test", "./test"); err != nil {
+	if _, err = s.AddFreeVolume(2, "./test", "./test"); err != nil {
 		t.Errorf("s.AddFreeVolume() error(%v)", err)
 		goto failed
 	}
@@ -87,7 +87,7 @@ func TestStore(t *testing.T) {
 		goto failed
 	}
 	t.Log("Compact(1)")
-	if err = s.Compact(1, b3file, i3file); err != nil {
+	if err = s.Compact(1); err != nil {
 		t.Errorf("Compress(1) error(%v)", err)
 		goto failed
 	}

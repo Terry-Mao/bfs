@@ -97,6 +97,28 @@ failed:
 	return
 }
 
+// Open open the closed volume, must called after NewVolume.
+func (v *Volume) Open() (err error) {
+	v.signal = make(chan uint32, volumeDelChNum)
+	if err = v.Block.Open(); err != nil {
+		return
+	}
+	if err = v.Indexer.Open(); err != nil {
+		goto failed
+	}
+	if err = v.init(); err != nil {
+		goto failed
+	}
+	go v.del()
+	return
+failed:
+	v.Block.Close()
+	if v.Indexer != nil {
+		v.Indexer.Close()
+	}
+	return
+}
+
 // init recovery super block from index or super block.
 func (v *Volume) init() (err error) {
 	var offset uint32

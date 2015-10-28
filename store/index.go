@@ -88,7 +88,7 @@ func NewIndexer(file string, ring int) (i *Indexer, err error) {
 	i.sigNum = ring / 2
 	i.File = file
 	if i.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
-		log.Errorf("os.OpenFile(\"%s\", os.O_RDWR|os.O_CREATE, 0664) error(%v)", file, err)
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		return
 	}
 	// TODO falloc
@@ -97,15 +97,15 @@ func NewIndexer(file string, ring int) (i *Indexer, err error) {
 	return
 }
 
-// writeIndex write index data into bufio.
-func writeIndex(w *bufio.Writer, key int64, offset uint32, size int32) (err error) {
-	if err = BigEndian.WriteInt64(w, key); err != nil {
+// Open open the closed indexer, must called after NewIndexer.
+func (i *Indexer) Open() (err error) {
+	i.signal = make(chan int, signalNum)
+	if i.f, err = os.OpenFile(i.File, os.O_RDWR|os.O_CREATE, 0664); err != nil {
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", i.File, err)
 		return
 	}
-	if err = BigEndian.WriteUint32(w, offset); err != nil {
-		return
-	}
-	err = BigEndian.WriteInt32(w, size)
+	i.bw.Reset(i.f)
+	go i.write()
 	return
 }
 
@@ -143,8 +143,17 @@ func (i *Indexer) Write(key int64, offset uint32, size int32) (err error) {
 		err = i.LastErr
 		return
 	}
-	err = writeIndex(i.bw, key, offset, size)
-	i.LastErr = err
+	if err = BigEndian.WriteInt64(i.bw, key); err != nil {
+		i.LastErr = err
+		return
+	}
+	if err = BigEndian.WriteUint32(i.bw, offset); err != nil {
+		i.LastErr = err
+		return
+	}
+	if err = BigEndian.WriteInt32(i.bw, size); err != nil {
+		i.LastErr = err
+	}
 	return
 }
 

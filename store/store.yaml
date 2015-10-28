@@ -21,3 +21,5 @@ zookeeper:
   addrs : ["localhost:2181"]
   timeout: 1s
   root: /rack/bfs-1/
+
+force_recovery: true
