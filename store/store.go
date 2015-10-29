@@ -75,7 +75,7 @@ func NewStore(zk *Zookeeper, file string) (s *Store, err error) {
 	s.ch = make(chan *Volume, storeMap)
 	go s.command()
 	if s.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
-		log.Errorf("os.OpenFile(\"%s\", os.O_RDWR|os.O_CREATE, 0664) error(%v)", file, err)
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		return
 	}
 	if err = s.init(); err != nil {
@@ -93,8 +93,8 @@ func (s *Store) init() (err error) {
 		ok                               bool
 		bfiles, ifiles, bfiles1, ifiles1 []string
 		volume                           *Volume
-		volumeIds, volumeIds1            []int32
-		volumeIdMap, volumeIdMap1        map[int32]struct{}
+		vids, vids1                      []int32
+		vMap, vMap1                      map[int32]struct{}
 		data                             []byte
 		lines                            []string
 	)
@@ -103,51 +103,55 @@ func (s *Store) init() (err error) {
 		return
 	}
 	lines = strings.Split(string(data), volumeIndexSpliter)
-	if volumeIdMap, volumeIds, bfiles, ifiles, err = s.parseIndex(lines); err != nil {
+	if vMap, vids, bfiles, ifiles, err = s.parseIndex(lines); err != nil {
 		return
 	}
 	if lines, err = s.zk.Volumes(); err != nil {
 		return
 	}
-	if volumeIdMap1, volumeIds1, bfiles1, ifiles1, err = s.parseIndex(lines); err != nil {
+	if vMap1, vids1, bfiles1, ifiles1, err = s.parseIndex(lines); err != nil {
 		return
 	}
 	for i = 0; i < len(bfiles); i++ {
-		if _, ok = s.volumes[volumeIds[i]]; ok {
+		if _, ok = s.volumes[vids[i]]; ok {
 			continue
 		}
 		// local index
-		if volume, err = NewVolume(volumeIds[i], bfiles[i], ifiles[i]); err != nil {
-			log.Warningf("fail recovery volume_id: %d, file: %s, index: %s", volumeIds[i], bfiles[i], ifiles[i])
+		if volume, err = NewVolume(vids[i], bfiles[i], ifiles[i]); err != nil {
+			log.Warningf("fail recovery volume_id: %d, file: %s, index: %s",
+				vids[i], bfiles[i], ifiles[i])
 			continue
 		}
 		if volume.Id == VolumeEmptyId {
 			volume.Close()
 			s.freeVolumes = append(s.freeVolumes, volume)
 		} else {
-			s.volumes[volumeIds[i]] = volume
-			if _, ok = volumeIdMap1[volumeIds[i]]; !ok {
+			s.volumes[vids[i]] = volume
+			if _, ok = vMap1[vids[i]]; !ok {
 				// if not exists in zk, must readd to zk
-				log.Infof("volume_id: %d not exist in zk", volumeIds[i])
-				if err = s.zk.AddVolume(volumeIds[i], bfiles[i], ifiles[i]); err != nil {
+				log.Infof("volume_id: %d not exist in zk", vids[i])
+				if err = s.zk.AddVolume(vids[i], bfiles[i], ifiles[i]); err !=
+					nil {
 					return
 				}
 			}
-			log.Infof("load volume: %d", volumeIds[i])
+			log.Infof("load volume: %d", vids[i])
 		}
 	}
 	for i = 0; i < len(bfiles1); i++ {
-		if _, ok = s.volumes[volumeIds1[i]]; ok {
+		if _, ok = s.volumes[vids1[i]]; ok {
 			continue
 		}
 		// zk index
-		if _, ok = volumeIdMap[volumeIds1[i]]; !ok {
+		if _, ok = vMap[vids1[i]]; !ok {
 			// if not exists in local
-			if volume, err = NewVolume(volumeIds1[i], bfiles1[i], ifiles1[i]); err != nil {
-				log.Warningf("fail recovery volume_id: %d, file: %s, index: %s", volumeIds1[i], bfiles1[i], ifiles1[i])
+			if volume, err = NewVolume(vids1[i], bfiles1[i],
+				ifiles1[i]); err != nil {
+				log.Warningf("fail recovery volume_id: %d, file: %s, index: %s",
+					vids1[i], bfiles1[i], ifiles1[i])
 				continue
 			}
-			s.volumes[volumeIds1[i]] = volume
+			s.volumes[vids1[i]] = volume
 		}
 	}
 	err = s.saveIndex()
@@ -155,13 +159,14 @@ func (s *Store) init() (err error) {
 }
 
 // parseIndex parse volume info from a index file.
-func (s *Store) parseIndex(lines []string) (volumeIdMap map[int32]struct{}, volumeIds []int32, bfiles []string, ifiles []string, err error) {
+func (s *Store) parseIndex(lines []string) (vMap map[int32]struct{},
+	vids []int32, bfiles []string, ifiles []string, err error) {
 	var (
 		bfile, ifile, line string
 		seps               []string
 		volumeId           int64
 	)
-	volumeIdMap = make(map[int32]struct{})
+	vMap = make(map[int32]struct{})
 	for _, line = range lines {
 		if len(strings.TrimSpace(line)) == 0 {
 			continue
@@ -178,15 +183,16 @@ func (s *Store) parseIndex(lines []string) (volumeIdMap map[int32]struct{}, volu
 			log.Errorf("volume index: \"%s\" format error", line)
 			return
 		}
-		volumeIds = append(volumeIds, int32(volumeId))
+		vids = append(vids, int32(volumeId))
 		bfiles = append(bfiles, bfile)
 		ifiles = append(ifiles, ifile)
-		volumeIdMap[int32(volumeId)] = struct{}{}
+		vMap[int32(volumeId)] = struct{}{}
 		if int32(volumeId) > s.VolumeId {
 			// reset max volume id
 			s.VolumeId = int32(volumeId)
 		}
-		log.V(1).Infof("parse volume index, volume_id: %d, file: %s, index: %s", volumeId, bfile, ifile)
+		log.V(1).Infof("parse volume index, vid: %d, file: %s, index: %s",
+			volumeId, bfile, ifile)
 	}
 	return
 }
@@ -256,12 +262,14 @@ func (s *Store) command() {
 		}
 		vc = volumes[v.Id]
 		if v.Command == storeAdd {
-			if err = s.zk.AddVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
+			if err = s.zk.AddVolume(v.Id, v.Block.File,
+				v.Indexer.File); err != nil {
 				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
 			}
 			volumes[v.Id] = v
 		} else if v.Command == storeUpdate {
-			if err = s.zk.SetVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
+			if err = s.zk.SetVolume(v.Id, v.Block.File,
+				v.Indexer.File); err != nil {
 				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
 			}
 			volumes[v.Id] = v
@@ -274,7 +282,8 @@ func (s *Store) command() {
 			if err = vc.StopCompact(v); err != nil {
 				continue
 			}
-			if err = s.zk.SetVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
+			if err = s.zk.SetVolume(v.Id, v.Block.File,
+				v.Indexer.File); err != nil {
 				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
 			}
 			volumes[v.Id] = v
@@ -283,7 +292,8 @@ func (s *Store) command() {
 		}
 		// close volume
 		if vc != nil {
-			log.Infof("update store volumes, orig block: %s,%s,%d close", vc.Block.File, vc.Indexer.File, vc.Id)
+			log.Infof("update store volumes, orig block: %s,%s,%d close",
+				vc.Block.File, vc.Indexer.File, vc.Id)
 			vc.Close()
 		}
 		// atomic update ptr
@@ -306,8 +316,10 @@ func (s *Store) AddFreeVolume(n int, bdir, idir string) (sn int, err error) {
 	s.lock.Lock()
 	for i = 0; i < n; i++ {
 		s.VolumeId++
-		bfile = path.Join(bdir, fmt.Sprintf("%s%d", storeFreeVolumePrefix, s.VolumeId))
-		ifile = path.Join(bdir, fmt.Sprintf("%s%d.idx", storeFreeVolumePrefix, s.VolumeId))
+		bfile = path.Join(bdir, fmt.Sprintf("%s%d", storeFreeVolumePrefix,
+			s.VolumeId))
+		ifile = path.Join(bdir, fmt.Sprintf("%s%d.idx", storeFreeVolumePrefix,
+			s.VolumeId))
 		if v, err = NewVolume(VolumeEmptyId, bfile, ifile); err != nil {
 			break
 		}

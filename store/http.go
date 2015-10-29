@@ -68,7 +68,8 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		http.Error(wr, "bad request, param error", http.StatusBadRequest)
 		return
 	}
-	if cookie, err = strconv.ParseInt(params.Get("cookie"), 10, 64); err != nil {
+	if cookie, err = strconv.ParseInt(params.Get("cookie"), 10, 64); err !=
+		nil {
 		http.Error(wr, "bad request, param error", http.StatusBadRequest)
 		return
 	}
@@ -111,17 +112,21 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if vid, err = strconv.ParseInt(r.FormValue("vid"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("vid"), err)
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("vid"),
+			err)
 		res["ret"] = httpParamErr
 		return
 	}
 	if key, err = strconv.ParseInt(r.FormValue("key"), 10, 64); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"),
+			err)
 		res["ret"] = httpParamErr
 		return
 	}
-	if cookie, err = strconv.ParseInt(r.FormValue("cookie"), 10, 64); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("cookie"), err)
+	if cookie, err = strconv.ParseInt(r.FormValue("cookie"), 10, 64); err !=
+		nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("cookie"),
+			err)
 		res["ret"] = httpParamErr
 		return
 	}
@@ -176,7 +181,8 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if vid, err = strconv.ParseInt(r.FormValue("vid"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("vid"), err)
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("vid"),
+			err)
 		res["ret"] = httpParamErr
 		return
 	}
@@ -264,12 +270,14 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	}
 	defer httpPostWriter(r, wr, time.Now(), res)
 	if key, err = strconv.ParseInt(params.Get("key"), 10, 64); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("key"), err)
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("key"),
+			err)
 		res["ret"] = httpParamErr
 		return
 	}
 	if vid, err = strconv.ParseInt(params.Get("vid"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("vid"), err)
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("vid"),
+			err)
 		res["ret"] = httpParamErr
 		return
 	}
@@ -311,7 +319,8 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = httpNoVolume
 		return
 	}
-	if keyStrs = strings.Split(params.Get("keys"), httpParamSpliter); len(keyStrs) > httpMaxDelFiles {
+	if keyStrs = strings.Split(params.Get("keys"),
+		httpParamSpliter); len(keyStrs) > httpMaxDelFiles {
 		res["ret"] = httpDelMaxFile
 		return
 	}
@@ -328,7 +337,8 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func httpPostWriter(r *http.Request, wr http.ResponseWriter, start time.Time, result map[string]interface{}) {
+func httpPostWriter(r *http.Request, wr http.ResponseWriter, start time.Time,
+	result map[string]interface{}) {
 	var (
 		ret      = result["ret"].(int)
 		params   = r.Form
@@ -341,7 +351,6 @@ func httpPostWriter(r *http.Request, wr http.ResponseWriter, start time.Time, re
 	}
 	wr.Header().Set("Content-Type", "application/json;charset=utf-8")
 	if _, err = wr.Write(byteJson); err != nil {
-		log.Errorf("wr.Write(%s, %s) failed (%v)", r.URL.Path, params.Encode(), err)
 		return
 	}
 	log.Infof("%s path:%s(params:%s,time:%f,ret:%v)", r.Method,

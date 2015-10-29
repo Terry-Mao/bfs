@@ -176,7 +176,8 @@ type Info struct {
 }
 
 // retWrite marshal the result and write to client(get).
-func retWrite(w http.ResponseWriter, r *http.Request, res map[string]interface{}, start time.Time) {
+func retWrite(w http.ResponseWriter, r *http.Request,
+	res map[string]interface{}, start time.Time) {
 	var data, err = json.Marshal(res)
 	if err != nil {
 		log.Errorf("json.Marshal(\"%v\") error(%v)", res, err)
@@ -185,7 +186,8 @@ func retWrite(w http.ResponseWriter, r *http.Request, res map[string]interface{}
 	if _, err := w.Write(data); err != nil {
 		log.Errorf("w.Write(\"%s\") error(%v)", string(data), err)
 	}
-	log.Infof("req: \"%s\", ip:\"%s\", time:\"%fs\"", r.URL.String(), r.RemoteAddr, time.Now().Sub(start).Seconds())
+	log.Infof("req: \"%s\", ip:\"%s\", time:\"%fs\"", r.URL.String(),
+		r.RemoteAddr, time.Now().Sub(start).Seconds())
 }
 
 func StartStat(s *Store, addr string) {

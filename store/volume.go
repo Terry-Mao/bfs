@@ -332,12 +332,14 @@ func (v *Volume) Write(n *Needle) (err error) {
 	}
 	if ok {
 		ooffset, _ = NeedleCacheValue(nc)
-		log.Warningf("same key: %d, old offset: %d, new offset: %d", n.Key, ooffset, offset)
+		log.Warningf("same key: %d, old offset: %d, new offset: %d", n.Key,
+			ooffset, offset)
 		err = v.asyncDel(ooffset)
 	}
 	atomic.AddUint64(&v.Stats.TotalWriteProcessed, 1)
 	atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(n.TotalSize))
-	atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
+	atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-
+		now))
 	return
 }
 
@@ -348,7 +350,8 @@ func (v *Volume) Flush() (err error) {
 		return
 	}
 	atomic.AddUint64(&v.Stats.TotalFlushProcessed, 1)
-	atomic.AddUint64(&v.Stats.TotalFlushDelay, uint64(time.Now().UnixNano()-now))
+	atomic.AddUint64(&v.Stats.TotalFlushDelay, uint64(time.Now().UnixNano()-
+		now))
 	return
 }
 
@@ -425,7 +428,8 @@ func (v *Volume) del() {
 			}
 			atomic.AddUint64(&v.Stats.TotalDelProcessed, 1)
 			atomic.AddUint64(&v.Stats.TotalWriteBytes, 1)
-			atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
+			atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(
+				time.Now().UnixNano()-now))
 		}
 		offsets = offsets[:0]
 	}
@@ -446,10 +450,11 @@ func (v *Volume) StartCompact(nv *Volume) (err error) {
 		return
 	}
 	v.compactTime = time.Now().UnixNano()
-	v.compactOffset, err = v.Block.Compact(v.compactOffset, func(n *Needle) (err1 error) {
-		err1 = nv.Write(n)
-		return
-	})
+	v.compactOffset, err = v.Block.Compact(v.compactOffset,
+		func(n *Needle) (err1 error) {
+			err1 = nv.Write(n)
+			return
+		})
 	if err = nv.Flush(); err != nil {
 		return
 	}
@@ -467,10 +472,11 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 	)
 	v.lock.Lock()
 	if nv != nil {
-		v.compactOffset, err = v.Block.Compact(v.compactOffset, func(n *Needle) (err1 error) {
-			err1 = nv.Write(n)
-			return
-		})
+		v.compactOffset, err = v.Block.Compact(v.compactOffset,
+			func(n *Needle) (err1 error) {
+				err1 = nv.Write(n)
+				return
+			})
 		if err = nv.Flush(); err != nil {
 			return
 		}
@@ -479,7 +485,8 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 				goto failed
 			}
 		}
-		atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
+		atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(
+			time.Now().UnixNano()-now))
 	}
 failed:
 	v.Compact = false

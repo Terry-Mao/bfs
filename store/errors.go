@@ -34,6 +34,6 @@ var (
 	ErrStoreNoFreeVolume = errors.New("store has no free volume")
 	// volume
 	ErrVolumeNotExist  = errors.New("volume not exist")
-	ErrVolumeDel       = errors.New("volume del error, may volume del goroutine crash or io too slow")
+	ErrVolumeDel       = errors.New("volume del error")
 	ErrVolumeInCompact = errors.New("volume in compact")
 )

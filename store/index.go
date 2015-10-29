@@ -114,7 +114,8 @@ func NewIndexer(file string, ring int) (i *Indexer, err error) {
 // Open open the closed indexer, must called after NewIndexer.
 func (i *Indexer) Open() (err error) {
 	i.signal = make(chan int, signalNum)
-	if i.f, err = os.OpenFile(i.File, os.O_RDWR|os.O_CREATE, 0664); err != nil {
+	if i.f, err = os.OpenFile(i.File, os.O_RDWR|os.O_CREATE, 0664); err !=
+		nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", i.File, err)
 		return
 	}

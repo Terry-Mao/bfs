@@ -54,7 +54,8 @@ func NewSuperBlock(file string) (b *SuperBlock, err error) {
 	b = &SuperBlock{}
 	b.File = file
 	b.buf = make([]byte, NeedleMaxSize)
-	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
+	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err !=
+		nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		return
 	}
@@ -109,8 +110,10 @@ func (b *SuperBlock) init() (err error) {
 		if _, err = b.r.Read(b.buf[:superBlockHeaderSize]); err != nil {
 			return
 		}
-		b.Magic = b.buf[superBlockMagicOffset : superBlockMagicOffset+superBlockMagicSize]
-		b.Ver = b.buf[superBlockVerOffset : superBlockVerOffset+superBlockVerSize][0]
+		b.Magic = b.buf[superBlockMagicOffset : superBlockMagicOffset+
+			superBlockMagicSize]
+		b.Ver = b.buf[superBlockVerOffset : superBlockVerOffset+
+			superBlockVerSize][0]
 		if !bytes.Equal(b.Magic, superBlockMagic) {
 			err = ErrSuperBlockMagic
 			return
@@ -130,7 +133,8 @@ func (b *SuperBlock) init() (err error) {
 
 // Open open the closed superblock, must called after NewSuperBlock.
 func (b *SuperBlock) Open() (err error) {
-	if b.w, err = os.OpenFile(b.File, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
+	if b.w, err = os.OpenFile(b.File, os.O_WRONLY|os.O_CREATE, 0664); err !=
+		nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
 		return
 	}
@@ -249,14 +253,15 @@ func (b *SuperBlock) Del(offset uint32) (err error) {
 		return
 	}
 	// WriteAt won't update the file offset.
-	_, err = b.w.WriteAt(NeedleStatusDelBytes, blockOffset(offset)+NeedleFlagOffset)
+	_, err = b.w.WriteAt(NeedleStatusDelBytes, blockOffset(offset)+
+		NeedleFlagOffset)
 	b.LastErr = err
 	return
 }
 
 // Recovery recovery needles map from super block.
-// TODO use func var
-func (b *SuperBlock) Recovery(offset uint32, fn func(*Needle, uint32) error) (err error) {
+func (b *SuperBlock) Recovery(offset uint32, fn func(*Needle, uint32) error) (
+	err error) {
 	var (
 		n    = &Needle{}
 		rd   *bufio.Reader
@@ -292,7 +297,8 @@ func (b *SuperBlock) Recovery(offset uint32, fn func(*Needle, uint32) error) (er
 			break
 		}
 		if log.V(1) {
-			log.Infof("block add offset: %d, size: %d to needles cache", b.Offset, n.TotalSize)
+			log.Infof("block add offset: %d, size: %d to needles cache",
+				b.Offset, n.TotalSize)
 			log.Info(n.String())
 		}
 		if err = fn(n, b.Offset); err != nil {
@@ -314,7 +320,8 @@ func (b *SuperBlock) Recovery(offset uint32, fn func(*Needle, uint32) error) (er
 }
 
 // Compact compact the orig block, copy to disk dst block.
-func (b *SuperBlock) Compact(offset int64, fn func(*Needle) error) (noffset int64, err error) {
+func (b *SuperBlock) Compact(offset int64, fn func(*Needle) error) (
+	noffset int64, err error) {
 	if b.LastErr != nil {
 		err = b.LastErr
 		return
@@ -327,7 +334,7 @@ func (b *SuperBlock) Compact(offset int64, fn func(*Needle) error) (noffset int6
 	)
 	log.Infof("block: %s compact", b.File)
 	if r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
-		log.Errorf("os.OpenFile(\"%s\", os.O_RDONLY, 0664) error(%v)", b.File, err)
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
 		return
 	}
 	if offset == 0 {

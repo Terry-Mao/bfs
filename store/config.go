@@ -31,7 +31,7 @@ func NewConfig(file string) (c *Config, err error) {
 	c = &Config{}
 	c.file = file
 	if c.f, err = os.OpenFile(file, os.O_RDONLY, 0664); err != nil {
-		log.Errorf("os.OpenFile(\"%s\", os.O_RDONLY, 0664) error(%v)", file, err)
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		return
 	}
 	if data, err = ioutil.ReadAll(c.f); err != nil {

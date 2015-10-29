@@ -16,7 +16,8 @@ type Zookeeper struct {
 }
 
 // NewZookeeper new a connection to zookeeper.
-func NewZookeeper(addrs []string, timeout time.Duration, fpath string) (z *Zookeeper, err error) {
+func NewZookeeper(addrs []string, timeout time.Duration, fpath string) (
+	z *Zookeeper, err error) {
 	var (
 		s <-chan zk.Event
 	)
@@ -48,7 +49,8 @@ func (z *Zookeeper) createPath(fpath string) (err error) {
 	for _, str = range strings.Split(fpath, "/")[1:] {
 		tpath = path.Join(tpath, "/", str)
 		log.V(1).Infof("create zookeeper path: \"%s\"", tpath)
-		if _, err = z.c.Create(tpath, []byte(""), 0, zk.WorldACL(zk.PermAll)); err != nil {
+		if _, err = z.c.Create(tpath, []byte(""), 0, zk.WorldACL(
+			zk.PermAll)); err != nil {
 			if err != zk.ErrNodeExists {
 				log.Errorf("zk.create(\"%s\") error(%v)", tpath, err)
 				return
@@ -79,7 +81,8 @@ func (z *Zookeeper) Volumes() (lines []string, err error) {
 	}
 	for _, dpath = range paths {
 		if d, _, err = z.c.Get(path.Join(z.fpath, dpath)); err != nil {
-			log.Errorf("zk.Get(\"%s\") error(%v)", path.Join(z.fpath, dpath), err)
+			log.Errorf("zk.Get(\"%s\") error(%v)", path.Join(z.fpath, dpath),
+				err)
 			return
 		}
 		lines = append(lines, string(d))
@@ -92,12 +95,9 @@ func (z *Zookeeper) AddVolume(id int32, bfile, ifile string) (err error) {
 	var (
 		d     = fmt.Sprintf("%s,%s,%d", bfile, ifile, id)
 		dpath = path.Join(z.fpath, strconv.Itoa(int(id)))
-		exists bool
 	)
-	if exists, _, err = z.c.Exists(dpath); err == nil && exists {
-		return
-	}
-	if _, err = z.c.Create(dpath, []byte(d), 0, zk.WorldACL(zk.PermAll)); err != nil {
+	if _, err = z.c.Create(dpath, []byte(d), 0, zk.WorldACL(
+		zk.PermAll)); err != nil {
 		log.Errorf("zk.Create(\"%s\") error(%v)", dpath, err)
 		return
 	}
@@ -131,7 +131,8 @@ func (z *Zookeeper) SetVolume(id int32, bfile, ifile string) (err error) {
 		log.Errorf("zk.Get(\"%s\") error(%v)", dpath, err)
 		return
 	}
-	if _, err = z.c.Set(dpath, []byte(fmt.Sprintf("%s,%s,%d", bfile, ifile, id)), stat.Version); err != nil {
+	if _, err = z.c.Set(dpath, []byte(fmt.Sprintf("%s,%s,%d", bfile, ifile,
+		id)), stat.Version); err != nil {
 		log.Errorf("zk.Set(\"%s\") error(%v)", dpath, err)
 		return
 	}
