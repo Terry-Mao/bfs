@@ -73,7 +73,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		http.Error(wr, "bad request, param error", http.StatusBadRequest)
 		return
 	}
-	if v = h.s.Volume(int32(vid)); v == nil {
+	if v = h.s.Volumes[int32(vid)]; v == nil {
 		http.Error(wr, "volume not found", http.StatusNotFound)
 		return
 	}
@@ -130,7 +130,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = httpParamErr
 		return
 	}
-	if v = h.s.Volume(int32(vid)); v == nil {
+	if v = h.s.Volumes[int32(vid)]; v == nil {
 		res["ret"] = httpNoVolume
 		return
 	}
@@ -218,7 +218,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = httpParamErr
 		return
 	}
-	if v = h.s.Volume(int32(vid)); v == nil {
+	if v = h.s.Volumes[int32(vid)]; v == nil {
 		res["ret"] = httpNoVolume
 		return
 	}
@@ -281,7 +281,7 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = httpParamErr
 		return
 	}
-	if v = h.s.Volume(int32(vid)); v == nil {
+	if v = h.s.Volumes[int32(vid)]; v == nil {
 		res["ret"] = httpNoVolume
 		return
 	}
@@ -315,7 +315,7 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = httpParamErr
 		return
 	}
-	if v = h.s.Volume(int32(vid)); v == nil {
+	if v = h.s.Volumes[int32(vid)]; v == nil {
 		res["ret"] = httpNoVolume
 		return
 	}

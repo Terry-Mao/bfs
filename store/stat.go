@@ -201,21 +201,22 @@ func StartStat(s *Store, addr string) {
 			vid     int32
 			ok      bool
 			res     = map[string]interface{}{}
-			vids    = make([]int32, 0, len(s.volumes))
-			volumes = make([]*Volume, 0, len(s.volumes))
+			vids    = make([]int32, 0, len(s.Volumes))
+			volumes = make([]*Volume, 0, len(s.Volumes))
 		)
 		defer retWrite(w, r, res, time.Now())
-		for vid, v = range s.volumes {
+		for vid, v = range s.Volumes {
 			vids = append(vids, vid)
 		}
 		sort.Sort(Int32Slice(vids))
 		for _, vid = range vids {
-			if v, ok = s.volumes[vid]; ok {
+			if v, ok = s.Volumes[vid]; ok {
 				volumes = append(volumes, v)
 			}
 		}
 		res["server"] = StoreInfo
 		res["volumes"] = volumes
+		res["free_volumes"] = s.FreeVolumes
 		return
 	})
 	go func() {

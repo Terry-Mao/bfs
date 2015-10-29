@@ -59,8 +59,8 @@ type Store struct {
 	ch          chan *Volume
 	file        string
 	VolumeId    int32
-	volumes     map[int32]*Volume
-	freeVolumes []*Volume
+	Volumes     map[int32]*Volume
+	FreeVolumes []*Volume
 	zk          *Zookeeper
 	lock        sync.Mutex
 }
@@ -70,7 +70,7 @@ func NewStore(zk *Zookeeper, file string) (s *Store, err error) {
 	s = &Store{}
 	s.zk = zk
 	s.VolumeId = 1
-	s.volumes = make(map[int32]*Volume)
+	s.Volumes = make(map[int32]*Volume)
 	s.file = file
 	s.ch = make(chan *Volume, storeMap)
 	go s.command()
@@ -113,7 +113,7 @@ func (s *Store) init() (err error) {
 		return
 	}
 	for i = 0; i < len(bfiles); i++ {
-		if _, ok = s.volumes[vids[i]]; ok {
+		if _, ok = s.Volumes[vids[i]]; ok {
 			continue
 		}
 		// local index
@@ -124,9 +124,9 @@ func (s *Store) init() (err error) {
 		}
 		if volume.Id == VolumeEmptyId {
 			volume.Close()
-			s.freeVolumes = append(s.freeVolumes, volume)
+			s.FreeVolumes = append(s.FreeVolumes, volume)
 		} else {
-			s.volumes[vids[i]] = volume
+			s.Volumes[vids[i]] = volume
 			if _, ok = vMap1[vids[i]]; !ok {
 				// if not exists in zk, must readd to zk
 				log.Infof("volume_id: %d not exist in zk", vids[i])
@@ -139,7 +139,7 @@ func (s *Store) init() (err error) {
 		}
 	}
 	for i = 0; i < len(bfiles1); i++ {
-		if _, ok = s.volumes[vids1[i]]; ok {
+		if _, ok = s.Volumes[vids1[i]]; ok {
 			continue
 		}
 		// zk index
@@ -151,7 +151,7 @@ func (s *Store) init() (err error) {
 					vids1[i], bfiles1[i], ifiles1[i])
 				continue
 			}
-			s.volumes[vids1[i]] = volume
+			s.Volumes[vids1[i]] = volume
 		}
 	}
 	err = s.saveIndex()
@@ -205,19 +205,19 @@ func (s *Store) saveIndex() (err error) {
 		ok           bool
 		vid          int32
 		bfile, ifile string
-		vids         = make([]int32, 0, len(s.volumes))
+		vids         = make([]int32, 0, len(s.Volumes))
 		data         []byte
 	)
 	if _, err = s.f.Seek(0, os.SEEK_SET); err != nil {
 		return
 	}
-	for vid, v = range s.volumes {
+	for vid, v = range s.Volumes {
 		vids = append(vids, vid)
 	}
 	sort.Sort(Int32Slice(vids))
 	// volumes
 	for _, vid = range vids {
-		if v, ok = s.volumes[vid]; ok {
+		if v, ok = s.Volumes[vid]; ok {
 			bfile, ifile = v.Block.File, v.Indexer.File
 			data = []byte(fmt.Sprintf("%s,%s,%d\n", bfile, ifile, vid))
 			if n, err = s.f.Write(data); err != nil {
@@ -227,7 +227,7 @@ func (s *Store) saveIndex() (err error) {
 		tn += n
 	}
 	// free volumes
-	for _, v = range s.freeVolumes {
+	for _, v = range s.FreeVolumes {
 		bfile, ifile = v.Block.File, v.Indexer.File
 		data = []byte(fmt.Sprintf("%s,%s,%d\n", bfile, ifile, v.Id))
 		if n, err = s.f.Write(data); err != nil {
@@ -256,8 +256,8 @@ func (s *Store) command() {
 			break
 		}
 		// copy-on-write
-		volumes = make(map[int32]*Volume, len(s.volumes))
-		for volumeId, vt = range s.volumes {
+		volumes = make(map[int32]*Volume, len(s.Volumes))
+		for volumeId, vt = range s.Volumes {
 			volumes[volumeId] = vt
 		}
 		vc = volumes[v.Id]
@@ -297,7 +297,7 @@ func (s *Store) command() {
 			vc.Close()
 		}
 		// atomic update ptr
-		s.volumes = volumes
+		s.Volumes = volumes
 		s.lock.Lock()
 		if err = s.saveIndex(); err != nil {
 			log.Errorf("store save index: %s error(%v)", s.file, err)
@@ -324,7 +324,7 @@ func (s *Store) AddFreeVolume(n int, bdir, idir string) (sn int, err error) {
 			break
 		}
 		v.Close()
-		s.freeVolumes = append(s.freeVolumes, v)
+		s.FreeVolumes = append(s.FreeVolumes, v)
 		sn++
 	}
 	err = s.saveIndex()
@@ -335,11 +335,11 @@ func (s *Store) AddFreeVolume(n int, bdir, idir string) (sn int, err error) {
 // freeVolume get a free volume.
 func (s *Store) freeVolume() (v *Volume, err error) {
 	s.lock.Lock()
-	if len(s.freeVolumes) == 0 {
+	if len(s.FreeVolumes) == 0 {
 		err = ErrStoreNoFreeVolume
 	} else {
-		v = s.freeVolumes[0]
-		s.freeVolumes = s.freeVolumes[1:]
+		v = s.FreeVolumes[0]
+		s.FreeVolumes = s.FreeVolumes[1:]
 	}
 	s.lock.Unlock()
 	return
@@ -361,15 +361,10 @@ func (s *Store) AddVolume(id int32) (v *Volume, err error) {
 
 // DelVolume del the volume by volume id.
 func (s *Store) DelVolume(id int32) {
-	var v = s.Volume(id)
+	var v = s.Volumes[id]
 	v.Command = storeDel
 	s.ch <- v
 	return
-}
-
-// Volume get a volume by volume id.
-func (s *Store) Volume(id int32) *Volume {
-	return s.volumes[id]
 }
 
 // Bulk copy a super block from another store server replace this server.
@@ -387,7 +382,7 @@ func (s *Store) Bulk(id int32, bfile, ifile string) (err error) {
 func (s *Store) Compact(id int32) (err error) {
 	var (
 		nv *Volume
-		v  = s.Volume(id)
+		v  = s.Volumes[id]
 	)
 	if v == nil {
 		err = ErrVolumeNotExist
@@ -421,7 +416,7 @@ func (s *Store) stat() {
 		stat1 = StoreInfo.Stats
 		StoreInfo.Stats = stat
 		stat1.Reset()
-		for _, v = range s.volumes {
+		for _, v = range s.Volumes {
 			v.Stats.Calc()
 			stat1.Merge(v.Stats)
 		}
@@ -440,7 +435,7 @@ func (s *Store) Close() {
 		s.f.Close()
 	}
 	close(s.ch)
-	for _, v = range s.volumes {
+	for _, v = range s.Volumes {
 		v.Close()
 	}
 	s.zk.Close()
