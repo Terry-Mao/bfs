@@ -92,7 +92,11 @@ func (z *Zookeeper) AddVolume(id int32, bfile, ifile string) (err error) {
 	var (
 		d     = fmt.Sprintf("%s,%s,%d", bfile, ifile, id)
 		dpath = path.Join(z.fpath, strconv.Itoa(int(id)))
+		exists bool
 	)
+	if exists, _, err = z.c.Exists(dpath); err == nil && exists {
+		return
+	}
 	if _, err = z.c.Create(dpath, []byte(d), 0, zk.WorldACL(zk.PermAll)); err != nil {
 		log.Errorf("zk.Create(\"%s\") error(%v)", dpath, err)
 		return
