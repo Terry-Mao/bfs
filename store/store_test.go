@@ -53,8 +53,8 @@ func TestStore(t *testing.T) {
 		goto failed
 	}
 	time.Sleep(1 * time.Second)
-	t.Log("Volume(1)")
-	if v = s.Volume(1); v == nil {
+	t.Log("Volumes[1]")
+	if v = s.Volumes[1]; v == nil {
 		err = fmt.Errorf("Volume(1) not exist")
 		t.Error(err)
 		goto failed
@@ -70,8 +70,8 @@ func TestStore(t *testing.T) {
 		goto failed
 	}
 	time.Sleep(3 * time.Second)
-	t.Log("Volume(1)")
-	if v = s.Volume(1); v == nil {
+	t.Log("Volumes[1]")
+	if v = s.Volumes[1]; v == nil {
 		err = fmt.Errorf("Volume(1) not exist")
 		t.Error(err)
 		goto failed
@@ -92,7 +92,7 @@ func TestStore(t *testing.T) {
 		goto failed
 	}
 	time.Sleep(2 * time.Second)
-	if v = s.Volume(1); v == nil {
+	if v = s.Volumes[1]; v == nil {
 		err = fmt.Errorf("Volume(1) not exist")
 		t.Error(err)
 		goto failed
@@ -104,7 +104,7 @@ func TestStore(t *testing.T) {
 	t.Log("DelVolume(1)")
 	s.DelVolume(1)
 	time.Sleep(1 * time.Second)
-	if v = s.Volume(1); v != nil {
+	if v = s.Volumes[1]; v != nil {
 		err = fmt.Errorf("Volume(1) exist")
 		t.Error(err)
 		goto failed

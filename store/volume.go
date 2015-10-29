@@ -60,9 +60,9 @@ type Volume struct {
 	bp            *sync.Pool // buffer pool
 	np            *sync.Pool // needle struct pool
 	Command       int        `json:"-"` // flag used in store
-	Compact       bool       `json:"-"`
-	compactOffset int64
-	compactTime   int64
+	Compact       bool       `json:"compact"`
+	CompactOffset int64      `json:"compact_offset"`
+	CompactTime   int64      `json:"compact_time"`
 	compactKeys   []int64
 }
 
@@ -449,12 +449,13 @@ func (v *Volume) StartCompact(nv *Volume) (err error) {
 	if err != nil {
 		return
 	}
-	v.compactTime = time.Now().UnixNano()
-	v.compactOffset, err = v.Block.Compact(v.compactOffset,
-		func(n *Needle) (err1 error) {
-			err1 = nv.Write(n)
-			return
-		})
+	v.CompactTime = time.Now().UnixNano()
+	if err = v.Block.Compact(&(v.CompactOffset), func(n *Needle) (err1 error) {
+		err1 = nv.Write(n)
+		return
+	}); err != nil {
+		return
+	}
 	if err = nv.Flush(); err != nil {
 		return
 	}
@@ -472,13 +473,15 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 	)
 	v.lock.Lock()
 	if nv != nil {
-		v.compactOffset, err = v.Block.Compact(v.compactOffset,
+		if err = v.Block.Compact(&(v.CompactOffset),
 			func(n *Needle) (err1 error) {
 				err1 = nv.Write(n)
 				return
-			})
+			}); err != nil {
+			goto failed
+		}
 		if err = nv.Flush(); err != nil {
-			return
+			goto failed
 		}
 		for _, key = range v.compactKeys {
 			if err = nv.Del(key); err != nil {
@@ -490,8 +493,8 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 	}
 failed:
 	v.Compact = false
-	v.compactOffset = 0
-	v.compactTime = 0
+	v.CompactOffset = 0
+	v.CompactTime = 0
 	v.compactKeys = v.compactKeys[:0]
 	v.lock.Unlock()
 	return

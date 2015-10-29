@@ -48,6 +48,7 @@ func compareTestNeedle(t *testing.T, key, cookie int64, flag byte, n *Needle, da
 func TestSuperBlock(t *testing.T) {
 	var (
 		v       *Volume
+		v1, v2  int64
 		buf     []byte
 		n       = &Needle{}
 		needles = make(map[int64]int64)
@@ -357,7 +358,7 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("NewVolume(1) error(%v)", err)
 		goto failed
 	}
-	if v1, err := b.Compact(0, func(rn *Needle) (err1 error) {
+	if err = b.Compact(&v1, func(rn *Needle) (err1 error) {
 		err1 = v.Write(rn)
 		return
 	}); err != nil {
@@ -367,7 +368,7 @@ func TestSuperBlock(t *testing.T) {
 		if err = v.Flush(); err != nil {
 			return
 		}
-		if v2, err := b.w.Seek(0, os.SEEK_END); err != nil {
+		if v2, err = b.w.Seek(v2, os.SEEK_END); err != nil {
 			t.Errorf("b.Seek() error(%v)", err)
 			goto failed
 		} else {

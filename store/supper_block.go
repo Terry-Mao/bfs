@@ -320,8 +320,7 @@ func (b *SuperBlock) Recovery(offset uint32, fn func(*Needle, uint32) error) (
 }
 
 // Compact compact the orig block, copy to disk dst block.
-func (b *SuperBlock) Compact(offset int64, fn func(*Needle) error) (
-	noffset int64, err error) {
+func (b *SuperBlock) Compact(offset *int64, fn func(*Needle) error) (err error) {
 	if b.LastErr != nil {
 		err = b.LastErr
 		return
@@ -337,10 +336,10 @@ func (b *SuperBlock) Compact(offset int64, fn func(*Needle) error) (
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
 		return
 	}
-	if offset == 0 {
-		offset = superBlockHeaderOffset
+	if *offset == 0 {
+		*offset = superBlockHeaderOffset
 	}
-	if _, err = r.Seek(offset, os.SEEK_SET); err != nil {
+	if _, err = r.Seek(*offset, os.SEEK_SET); err != nil {
 		log.Errorf("block: %s Seek() error(%v)", b.File, err)
 		return
 	}
@@ -364,7 +363,7 @@ func (b *SuperBlock) Compact(offset int64, fn func(*Needle) error) (
 		if _, err = rd.Discard(n.DataSize); err != nil {
 			break
 		}
-		offset += int64(n.TotalSize)
+		*offset = *offset + int64(n.TotalSize)
 		if log.V(1) {
 			log.Info(n.String())
 		}
@@ -382,7 +381,6 @@ func (b *SuperBlock) Compact(offset int64, fn func(*Needle) error) (
 	if err = r.Close(); err != nil {
 		return
 	}
-	noffset = offset
 	return
 }
 
