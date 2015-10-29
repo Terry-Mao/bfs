@@ -41,6 +41,7 @@ func main() {
 	}
 	StartStat(s, c.Stat)
 	StartApi(s, c.Api)
+	StartAdmin(s, c.Admin)
 	if err = z.SetStore(c.Stat, c.Admin, c.Api); err != nil {
 		log.Errorf("zk.SetStore() error(%v)", err)
 		return

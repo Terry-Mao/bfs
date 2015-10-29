@@ -33,6 +33,7 @@ var (
 	ErrStoreVolumeIndex  = errors.New("store volume index error")
 	ErrStoreNoFreeVolume = errors.New("store has no free volume")
 	// volume
+	ErrVolumeExist     = errors.New("volume exist")
 	ErrVolumeNotExist  = errors.New("volume not exist")
 	ErrVolumeDel       = errors.New("volume del error")
 	ErrVolumeInCompact = errors.New("volume in compact")

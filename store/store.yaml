@@ -16,7 +16,7 @@ stat: localhost:6061
 # delete: http://http_api_addr/del
 # deletes: http://http_api_addr/dels
 # see the store document for more infomation
-api: 10.240.135.203:6062
+api: localhost:6062
 
 # admin http addr
 admin: localhost:6063

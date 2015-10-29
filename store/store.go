@@ -268,14 +268,12 @@ func (s *Store) command() {
 		}
 		vc = volumes[v.Id]
 		if v.Command == storeAdd {
-			if err = s.zk.AddVolume(v.Id, v.Block.File,
-				v.Indexer.File); err != nil {
+			if err = s.zk.AddVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
 				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
 			}
 			volumes[v.Id] = v
 		} else if v.Command == storeUpdate {
-			if err = s.zk.SetVolume(v.Id, v.Block.File,
-				v.Indexer.File); err != nil {
+			if err = s.zk.SetVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
 				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
 			}
 			volumes[v.Id] = v
@@ -288,8 +286,8 @@ func (s *Store) command() {
 			if err = vc.StopCompact(v); err != nil {
 				continue
 			}
-			if err = s.zk.SetVolume(v.Id, v.Block.File,
-				v.Indexer.File); err != nil {
+			// TODO remove file
+			if err = s.zk.SetVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
 				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
 			}
 			volumes[v.Id] = v
@@ -304,6 +302,9 @@ func (s *Store) command() {
 		}
 		// atomic update ptr
 		s.Volumes = volumes
+		if v.Id > s.VolumeId {
+			v.Id = s.VolumeId
+		}
 		s.lock.Lock()
 		if err = s.saveIndex(); err != nil {
 			log.Errorf("store save index: %s error(%v)", s.file, err)
@@ -353,6 +354,10 @@ func (s *Store) freeVolume() (v *Volume, err error) {
 
 // AddVolume add a new volume.
 func (s *Store) AddVolume(id int32) (v *Volume, err error) {
+	if v = s.Volumes[id]; v != nil {
+		err = ErrVolumeExist
+		return
+	}
 	if v, err = s.freeVolume(); err != nil {
 		return
 	}
