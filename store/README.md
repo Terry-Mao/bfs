@@ -84,11 +84,24 @@ pprof:
 # stat api: http://http_stat_addr/stat
 stat: localhost:6061
 
-# store index for find volumes.
+# api http addr
+# upload: http://http_api_addr/upload
+api: 10.240.135.203:6062
+
+# store index for find volumes
 index: /tmp/hijohn.idx
 
-# zookeeper address.
-zk: ["1", "2"]
+# serverid for store server, must unique in cluster, ie. linux shell uuidgen 
+# can get one.
+server_id: 47E273ED-CD3A-4D6A-94CE-554BA9B195EB
+
+# zookeeper
+zookeeper:
+  addrs : ["localhost:2181"]
+  timeout: 1s
+  # /rack/your_machine_rack/
+  root: /rack/bfs-1/
+
 ```
 
 index file contains volume block path, index path and volume id.
@@ -137,6 +150,134 @@ Usage of ./store:
     	log level for V logs
   -vmodule value
     	comma-separated list of pattern=N settings for file-filtered logging
+```
+
+## API
+
+### Get 
+
+get a file
+
+**URL**
+
+http://DOMAIN/get
+
+***HTTP Method***
+
+GET
+
+***Query String***
+
+| name     | required  | type | description |
+| :-----     | :---  | :--- | :---      |
+| vid        | true  | int32  | volume id |
+| key       | true  | int64  | file key |
+| cookie       | true  | int64  | file cookie |
+
+### Upload
+
+upload a file
+
+**URL**
+
+http://DOMAIN/upload
+
+***HTTP Method***
+
+POST multipart/form-data
+
+***Form String***
+
+| name     | required  | type | description |
+| :-----     | :---  | :--- | :---      |
+| vid        | true  | int32  | volume id |
+| key       | true  | int64  | file key |
+| cookie       | true  | int64  | file cookie |
+
+
+### Uploads
+
+upload files, max upload files is 9 one time
+
+**URL**
+
+http://DOMAIN/uploads
+
+***HTTP Method***
+
+POST multipart/form-data
+
+***Form String***
+
+| name     | required  | type | description |
+| :-----     | :---  | :--- | :---      |
+| vid        | true  | int32  | volume id |
+| keys       | true  | string  | file keys (ie. 1,2,3) |
+| cookies       | true  | string  | file cookies (ie. 1,2,3) |
+
+### Delete
+
+delete a file
+
+**URL**
+
+http://DOMAIN/del
+
+***HTTP Method***
+
+DELETE
+
+***Query String***
+
+| name     | required  | type | description |
+| :-----     | :---  | :--- | :---      |
+| vid        | true  | int32  | volume id |
+| key       | true  | int64  | file key |
+
+### Deletes
+
+delete files, max delete files is 9 one time
+
+**URL**
+
+http://DOMAIN/dels
+
+***HTTP Method***
+
+DELETE
+
+***Query String***
+
+| name     | required  | type | description |
+| :-----     | :---  | :--- | :---      |
+| vid        | true  | int32  | volume id |
+| keys       | true  | string  | file keys (ie. 1,2,3) |
+
+### Response
+
+upload/uploads/delete files response a json:
+
+```json
+{"ret": 1}
+```
+
+| error code | description |
+| :---- | :----         |
+| 1      | Succeed       |
+| 1000     | volume not exist |
+| 1001     | upload failed |
+| 1002     | upload exceed max files | 
+| 1003 | delete failed |
+| 1004 | delete exceed max files |
+| 65534 | param error |
+| 65535   | internal error |
+
+exmaples:
+
+```shell
+$ cd test
+$ ./upload.sh
+$ ./uploads.sh
 ```
 
 ## Stat

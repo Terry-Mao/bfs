@@ -133,6 +133,7 @@ func (s *Store) init() (err error) {
 					return
 				}
 			}
+			log.Infof("load volume: %d", volumeIds[i])
 		}
 	}
 	for i = 0; i < len(bfiles1); i++ {

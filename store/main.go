@@ -4,7 +4,6 @@ import (
 	"flag"
 	log "github.com/golang/glog"
 	"path"
-	"time"
 )
 
 var (
@@ -17,12 +16,10 @@ func init() {
 
 func main() {
 	var (
-		c      *Config
-		v      *Volume
-		z      *Zookeeper
-		s      *Store
-		d, buf []byte
-		err    error
+		c   *Config
+		z   *Zookeeper
+		s   *Store
+		err error
 	)
 	flag.Parse()
 	defer log.Flush()
@@ -34,7 +31,8 @@ func main() {
 	if c.Pprof.Enable {
 		StartPprof(c.Pprof.Addr)
 	}
-	if z, err = NewZookeeper(c.Zookeeper.Addrs, c.Zookeeper.Timeout, path.Join(c.Zookeeper.Root, c.ServerId)); err != nil {
+	if z, err = NewZookeeper(c.Zookeeper.Addrs, c.Zookeeper.Timeout,
+		path.Join(c.Zookeeper.Root, c.ServerId)); err != nil {
 		return
 	}
 	if s, err = NewStore(z, c.Index); err != nil {
@@ -43,27 +41,6 @@ func main() {
 	}
 	StartStat(s, c.Stat)
 	StartHTTP(s, c.Api)
-	if _, err = s.AddFreeVolume(10, "/tmp", "/tmp"); err != nil {
-		return
-	}
-	if v, err = s.AddVolume(2); err != nil {
-		return
-	}
-	v.Add(2, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
-	//v.Add(3, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
-	//v.Add(4, 1, []byte("fa;dflkad;lfajdfkladf;ladjf"))
-	time.Sleep(1 * time.Second)
-	if v = s.Volume(2); v == nil {
-		log.Errorf("volume_id: %d not exist", 2)
-		return
-	}
-	buf = v.Buffer()
-	defer v.FreeBuffer(buf)
-	if d, err = v.Get(2, 1, buf); err != nil {
-		log.Errorf("v.Get() error(%v)", err)
-		return
-	}
-	log.V(1).Infof("get: %s", d)
-	time.Sleep(6000 * time.Second)
+	StartSignal()
 	return
 }
