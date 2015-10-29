@@ -1,11 +1,37 @@
 # Store
 Store is part of bfs, it's for small files stored service.
 
+Table of Contents
+=================
+
+* [Store](#store)
+* [Features](#features)
+* [Architechure](#architechure)
+	* [Needles](#needles)
+    * [Needle Cache](#needle-cache)
+    * [Superblock](#superblock)
+    * [Index](#index)
+    * [Volume](#volume)
+* [Installation](#installation)
+* [Config](#config)
+* [Benchmark and Test](#benchmark-and-test)
+* [Run](#run)
+* [API](#api)
+	* [Get](#get)
+    * [Upload](#upload)
+    * [Uploads](#uploads)
+    * [Delete](#delete)
+    * [Deletes](#deletes)
+    * [Response](#response)
+* [Stat](#stat)
+
 ## Features
 * crash safe and fast recovery meta data by index file or block file.
 * add/append (many)/del/get files;
 * compress block when has many del files (logic delete);
 * bulk block when block broken we can copy from another small file in another machine, then replace;
+
+[Back to TOC](#table-of-contents)
 
 ## Architechure
 ### Needles
@@ -54,6 +80,7 @@ index file format:
 ### Volume
 store has many volumes, volume has a unique id in one store server. one volume has one block and one index. we call add/write/get/del all cross volume struct. volume merge all del opertion and sort in memory by offset. volume also contains the needle cache map. the block in volume ensure only one writer can write needle, the reader is lock-free, so we can get photo by many readers.
 
+[Back to TOC](#table-of-contents)
 
 ## Installation
 * bfs/store development files are required.
@@ -66,6 +93,8 @@ $ go get github.com/Terry-Mao/bfs
 $ cd $GOPATH/github.com/Terry-Mao/store
 $ go build
 ```
+
+[Back to TOC](#table-of-contents)
 
 ## Config
 store use yaml as a config file.
@@ -112,7 +141,9 @@ $> cat /tmp/store.idx
 /tmp/hijohn_2,/tmp/hijohn_2.idx,2
 ```
 
-## Benchmark & Test
+[Back to TOC](#table-of-contents)
+
+## Benchmark and Test
 
 ```sh
 # test
@@ -121,6 +152,8 @@ $ go test -v
 # benchmark
 go test -v -bench=. -benchtime=10s
 ```
+
+[Back to TOC](#table-of-contents)
 
 ## Run
 
@@ -151,6 +184,8 @@ Usage of ./store:
   -vmodule value
     	comma-separated list of pattern=N settings for file-filtered logging
 ```
+
+[Back to TOC](#table-of-contents)
 
 ## API
 
@@ -280,6 +315,8 @@ $ ./upload.sh
 $ ./uploads.sh
 ```
 
+[Back to TOC](#table-of-contents)
+
 ## Stat
 
 stat let us get and statistics about the server in a json format that is simple 
@@ -295,3 +332,5 @@ $ curl http://localhost:6061/info
 ```
 
 Have Fun!
+
+[Back to TOC](#table-of-contents)
