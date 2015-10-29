@@ -1,28 +1,12 @@
 package main
 
 import (
-	"encoding/json"
-	log "github.com/golang/glog"
-	"net/http"
-	"sort"
 	"time"
 )
 
 const (
 	statCalcDuration = 1 * time.Second
 )
-
-var (
-	StoreInfo *Info
-)
-
-func init() {
-	StoreInfo = &Info{
-		Ver:       Ver,
-		StartTime: time.Now(),
-		Stats:     &Stats{},
-	}
-}
 
 type Stats struct {
 	// qps & tps
@@ -173,54 +157,4 @@ type Info struct {
 	BlockedClients           uint64 `json:"blocked_clients"`
 	// stats
 	Stats *Stats `json:"stats"`
-}
-
-// retWrite marshal the result and write to client(get).
-func retWrite(w http.ResponseWriter, r *http.Request,
-	res map[string]interface{}, start time.Time) {
-	var data, err = json.Marshal(res)
-	if err != nil {
-		log.Errorf("json.Marshal(\"%v\") error(%v)", res, err)
-		return
-	}
-	if _, err := w.Write(data); err != nil {
-		log.Errorf("w.Write(\"%s\") error(%v)", string(data), err)
-	}
-	log.Infof("req: \"%s\", ip:\"%s\", time:\"%fs\"", r.URL.String(),
-		r.RemoteAddr, time.Now().Sub(start).Seconds())
-}
-
-func StartStat(s *Store, addr string) {
-	http.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		var (
-			v       *Volume
-			vid     int32
-			ok      bool
-			res     = map[string]interface{}{}
-			vids    = make([]int32, 0, len(s.Volumes))
-			volumes = make([]*Volume, 0, len(s.Volumes))
-		)
-		defer retWrite(w, r, res, time.Now())
-		for vid, v = range s.Volumes {
-			vids = append(vids, vid)
-		}
-		sort.Sort(Int32Slice(vids))
-		for _, vid = range vids {
-			if v, ok = s.Volumes[vid]; ok {
-				volumes = append(volumes, v)
-			}
-		}
-		res["server"] = StoreInfo
-		res["volumes"] = volumes
-		res["free_volumes"] = s.FreeVolumes
-		return
-	})
-	go func() {
-		http.ListenAndServe(addr, nil)
-	}()
-	return
 }

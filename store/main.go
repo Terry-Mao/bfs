@@ -40,7 +40,11 @@ func main() {
 		return
 	}
 	StartStat(s, c.Stat)
-	StartHTTP(s, c.Api)
+	StartApi(s, c.Api)
+	if err = z.SetStore(c.Stat, c.Admin, c.Api); err != nil {
+		log.Errorf("zk.SetStore() error(%v)", err)
+		return
+	}
 	StartSignal()
 	return
 }

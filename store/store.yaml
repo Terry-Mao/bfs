@@ -6,12 +6,20 @@ pprof:
   addr: localhost:6060
 
 # stat http addr
-# stat api: http://http_stat_addr/stat
+# stat api: http://http_stat_addr/info
 stat: localhost:6061
 
 # api http addr
+# get: http://http_api_addr/get
 # upload: http://http_api_addr/upload
+# uploads: http://http_api_addr/uploads
+# delete: http://http_api_addr/del
+# deletes: http://http_api_addr/dels
+# see the store document for more infomation
 api: 10.240.135.203:6062
+
+# admin http addr
+admin: localhost:6063
 
 # store index for find volumes
 index: /tmp/hijohn.idx

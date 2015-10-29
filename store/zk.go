@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+const (
+	// addrs & status
+	storeDataJson = "{\"stat\":\"%s\",\"admin\":\"%s\",\"api\":\"%s\",status:0}"
+)
+
 type Zookeeper struct {
 	c     *zk.Conn
 	fpath string
@@ -134,6 +139,22 @@ func (z *Zookeeper) SetVolume(id int32, bfile, ifile string) (err error) {
 	if _, err = z.c.Set(dpath, []byte(fmt.Sprintf("%s,%s,%d", bfile, ifile,
 		id)), stat.Version); err != nil {
 		log.Errorf("zk.Set(\"%s\") error(%v)", dpath, err)
+		return
+	}
+	return
+}
+
+// SetStore set the data into fpath.
+func (z *Zookeeper) SetStore(stat, admin, api string) (err error) {
+	var s *zk.Stat
+	if _, s, err = z.c.Get(z.fpath); err != nil {
+		log.Errorf("zk.Get(\"%s\") error(%v)", z.fpath, err)
+		return
+	}
+	if _, err = z.c.Set(z.fpath, []byte(
+		fmt.Sprintf(storeDataJson, stat, admin, api)),
+		s.Version); err != nil {
+		log.Errorf("zk.Set(\"%s\") error(%v)", z.fpath, err)
 		return
 	}
 	return

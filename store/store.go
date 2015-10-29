@@ -63,12 +63,18 @@ type Store struct {
 	FreeVolumes []*Volume
 	zk          *Zookeeper
 	lock        sync.Mutex
+	Info        *Info
 }
 
 // NewStore
 func NewStore(zk *Zookeeper, file string) (s *Store, err error) {
 	s = &Store{}
 	s.zk = zk
+	s.Info = &Info{
+		Ver:       Ver,
+		StartTime: time.Now(),
+		Stats:     &Stats{},
+	}
 	s.VolumeId = 1
 	s.Volumes = make(map[int32]*Volume)
 	s.file = file
@@ -412,16 +418,16 @@ func (s *Store) stat() {
 		stat1 *Stats
 	)
 	for {
-		*stat = *(StoreInfo.Stats)
-		stat1 = StoreInfo.Stats
-		StoreInfo.Stats = stat
+		*stat = *(s.Info.Stats)
+		stat1 = s.Info.Stats
+		s.Info.Stats = stat
 		stat1.Reset()
 		for _, v = range s.Volumes {
 			v.Stats.Calc()
 			stat1.Merge(v.Stats)
 		}
 		stat1.Calc()
-		StoreInfo.Stats = stat1
+		s.Info.Stats = stat1
 		time.Sleep(storeStatDuration)
 	}
 }

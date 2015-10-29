@@ -16,12 +16,13 @@ type Config struct {
 		Addr   string `yaml: "addr"`
 	}
 	Stat      string `yaml: "stat"`
+	Admin     string `yaml: "admin"`
+	Api       string `yaml: "api"`
 	Zookeeper struct {
 		Addrs   []string      `yaml: "addrs,flow"`
 		Timeout time.Duration `yaml: "timeout"`
 		Root    string        `yaml: "root"`
 	}
-	Api  string `yaml: "api"`
 	file string
 	f    *os.File
 }
