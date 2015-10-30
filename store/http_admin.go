@@ -134,7 +134,7 @@ func (h httpAddFreeVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 		return
 	}
 	defer HttpPostWriter(r, wr, time.Now(), res)
-	bdir, idir = r.FormValue("bdi"), r.FormValue("idir")
+	bdir, idir = r.FormValue("bdir"), r.FormValue("idir")
 	if n, err = strconv.ParseInt(r.FormValue("n"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("vid"),
 			err)

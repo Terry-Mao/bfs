@@ -75,7 +75,7 @@ func NewStore(zk *Zookeeper, file string) (s *Store, err error) {
 		StartTime: time.Now(),
 		Stats:     &Stats{},
 	}
-	s.VolumeId = 1
+	s.VolumeId = 0
 	s.Volumes = make(map[int32]*Volume)
 	s.file = file
 	s.ch = make(chan *Volume, storeMap)
@@ -302,10 +302,10 @@ func (s *Store) command() {
 		}
 		// atomic update ptr
 		s.Volumes = volumes
-		if v.Id > s.VolumeId {
-			v.Id = s.VolumeId
-		}
 		s.lock.Lock()
+		if v.Id > s.VolumeId {
+			s.VolumeId = v.Id
+		}
 		if err = s.saveIndex(); err != nil {
 			log.Errorf("store save index: %s error(%v)", s.file, err)
 		}
