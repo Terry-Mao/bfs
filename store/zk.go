@@ -46,12 +46,12 @@ func NewZookeeper(addrs []string, timeout time.Duration, fpath string) (
 }
 
 // createPath create a zookeeper path.
-func (z *Zookeeper) createPath(fpath string) (err error) {
+func (z *Zookeeper) createPath() (err error) {
 	var (
 		str   string
 		tpath = ""
 	)
-	for _, str = range strings.Split(fpath, "/")[1:] {
+	for _, str = range strings.Split(z.fpath, "/")[1:] {
 		tpath = path.Join(tpath, "/", str)
 		log.V(1).Infof("create zookeeper path: \"%s\"", tpath)
 		if _, err = z.c.Create(tpath, []byte(""), 0, zk.WorldACL(
@@ -69,7 +69,7 @@ func (z *Zookeeper) createPath(fpath string) (err error) {
 
 // init create /rack/store zk path.
 func (z *Zookeeper) init() (err error) {
-	err = z.createPath(z.fpath)
+	err = z.createPath()
 	return
 }
 
