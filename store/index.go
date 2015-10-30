@@ -6,6 +6,7 @@ import (
 	log "github.com/golang/glog"
 	"io"
 	"os"
+	"time"
 )
 
 // Index for fast recovery super block needle cache in memory, index is async
@@ -42,18 +43,20 @@ const (
 	indexOffsetOffset = indexKeyOffset + indexKeySize
 	indexSizeOffset   = indexOffsetOffset + indexOffsetSize
 
-	indexMaxSize = 100 * 1024 * 1024 // 100mb
+	indexMaxSize        = 100 * 1024 * 1024 // 100mb
+	indexSignalDuration = time.Second * 30
 )
 
 // Indexer used for fast recovery super block needle cache.
 type Indexer struct {
-	f       *os.File
-	bw      *bufio.Writer
-	sigNum  int
-	signal  chan int
-	ring    *Ring
-	File    string `json:"file"`
-	LastErr error  `json:"last_err"`
+	f          *os.File
+	bw         *bufio.Writer
+	sigNum     int
+	signal     chan int
+	ring       *Ring
+	File       string `json:"file"`
+	LastErr    error  `json:"last_err"`
+	signalTime time.Time
 }
 
 // Index index data.
@@ -90,6 +93,7 @@ func NewIndexer(file string, ring int) (i *Indexer, err error) {
 	i.signal = make(chan int, signalNum)
 	i.ring = NewRing(ring)
 	i.sigNum = ring / 2
+	i.signalTime = time.Now()
 	i.File = file
 	if i.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
@@ -128,14 +132,17 @@ func (i *Indexer) Open() (err error) {
 func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 	var (
 		index *Index
+		now   time.Time
 	)
 	if i.LastErr != nil {
 		err = i.LastErr
 		return
 	}
-	if i.ring.Buffered() > i.sigNum {
+	now = time.Now()
+	if i.ring.Buffered() > i.sigNum || now.Sub(i.signalTime) > indexSignalDuration {
 		select {
 		case i.signal <- indexReady:
+			i.lastSignalTime = now
 		default:
 		}
 	}

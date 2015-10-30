@@ -64,8 +64,8 @@ func TestStore(t *testing.T) {
 		goto failed
 	}
 	log.Info("123123123")
-	t.Log("Bulk(1)")
-	if err = s.Bulk(1, b2file, i2file); err != nil {
+	t.Log("BulkVolume()")
+	if err = s.BulkVolume(1, b2file, i2file); err != nil {
 		t.Errorf("Bulk(1) error(%v)", err)
 		goto failed
 	}
@@ -86,8 +86,8 @@ func TestStore(t *testing.T) {
 		t.Errorf("v.Get(1) error(%v)", err)
 		goto failed
 	}
-	t.Log("Compact(1)")
-	if err = s.Compact(1); err != nil {
+	t.Log("CompactVolume()")
+	if err = s.CompactVolume(1); err != nil {
 		t.Errorf("Compress(1) error(%v)", err)
 		goto failed
 	}

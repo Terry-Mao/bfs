@@ -378,8 +378,8 @@ func (s *Store) DelVolume(id int32) {
 	return
 }
 
-// Bulk copy a super block from another store server replace this server.
-func (s *Store) Bulk(id int32, bfile, ifile string) (err error) {
+// BulkVolume copy a super block from another store server replace this server.
+func (s *Store) BulkVolume(id int32, bfile, ifile string) (err error) {
 	var v *Volume
 	if v, err = NewVolume(id, bfile, ifile); err != nil {
 		return
@@ -389,8 +389,8 @@ func (s *Store) Bulk(id int32, bfile, ifile string) (err error) {
 	return
 }
 
-// Compact compact a super block to another file.
-func (s *Store) Compact(id int32) (err error) {
+// CompactVolume compact a super block to another file.
+func (s *Store) CompactVolume(id int32) (err error) {
 	var (
 		nv *Volume
 		v  = s.Volumes[id]
