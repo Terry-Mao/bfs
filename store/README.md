@@ -56,10 +56,13 @@ needle file format:
 needle cache saved the offset & size for a photo id. so it can fast get small file meta info without any io operations. needle cache is a map[int64]NeedleCache, NeedleCache also is a int64, high 32 bit is offset, low 32 bit is size.
  
 ### Superblock
-superblock contains many needles, it's the needles container. when store crash, we can recovery from the original block file.                                              
+superblock contains a header and many needles, it's the needles container. superblock header contains magic(4 bytes) version(1 bytes) and padding(3bytes). when store crash, we can recovery from the original block file.                                              
  ---------------                                                            
 | super   block |                                                           
- ---------------                                                            
+ --------------- 
+|     magic     |
+|     version   |
+|     padding   |                                        
 |     needle    |                              
 |     needle    |                                     
 |     ......    |                                 
