@@ -5,7 +5,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -180,8 +179,8 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = RetParamErr
 		return
 	}
-	keyStrs = r.PostForm["keys"]
-	cookieStrs = r.PostForm["cookies"]
+	keyStrs = r.MultipartForm.Value["keys"]
+	cookieStrs = r.MultipartForm.Value["cookies"]
 	if len(keyStrs) != len(cookieStrs) {
 		log.Errorf("param length not match, keys: %d, cookies: %d",
 			len(keyStrs), len(cookieStrs))
@@ -262,22 +261,19 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		v        *Volume
 		key, vid int64
 		res      = map[string]interface{}{"ret": RetOK}
-		params   = r.URL.Query()
 	)
-	if r.Method != "DELETE" {
+	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	defer HttpPostWriter(r, wr, time.Now(), res)
-	if key, err = strconv.ParseInt(params.Get("key"), 10, 64); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("key"),
-			err)
+	if key, err = strconv.ParseInt(r.PostFormValue("key"), 10, 64); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.PostFormValue("key"), err)
 		res["ret"] = RetParamErr
 		return
 	}
-	if vid, err = strconv.ParseInt(params.Get("vid"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("vid"),
-			err)
+	if vid, err = strconv.ParseInt(r.PostFormValue("vid"), 10, 32); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.PostFormValue("vid"), err)
 		res["ret"] = RetParamErr
 		return
 	}
@@ -309,15 +305,14 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		key, vid int64
 		keyStrs  []string
 		res      = map[string]interface{}{"ret": RetOK}
-		params   = r.URL.Query()
 	)
-	if r.Method != "DELETE" {
+	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	defer HttpPostWriter(r, wr, time.Now(), res)
-	if vid, err = strconv.ParseInt(params.Get("vid"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("vid"), err)
+	if vid, err = strconv.ParseInt(r.PostFormValue("vid"), 10, 32); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.PostFormValue("vid"), err)
 		res["ret"] = RetParamErr
 		return
 	}
@@ -325,8 +320,7 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = RetNoVolume
 		return
 	}
-	if keyStrs = strings.Split(params.Get("keys"),
-		HttpParamSpliter); len(keyStrs) > HttpMaxDelFiles {
+	if keyStrs = r.PostForm["keys"]; len(keyStrs) > HttpMaxDelFiles {
 		res["ret"] = RetDelMaxFile
 		return
 	}

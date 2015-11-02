@@ -72,6 +72,7 @@ func NewStore(zk *Zookeeper, file string) (s *Store, err error) {
 	s.zk = zk
 	s.Info = &Info{
 		Ver:       Ver,
+		GitSHA1:   GitSHA1,
 		StartTime: time.Now(),
 		Stats:     &Stats{},
 	}
