@@ -16,10 +16,11 @@ func init() {
 
 func main() {
 	var (
-		c   *Config
-		z   *Zookeeper
-		s   *Store
-		err error
+		c     *Config
+		z     *Zookeeper
+		s     *Store
+		fpath string
+		err   error
 	)
 	flag.Parse()
 	defer log.Flush()
@@ -31,8 +32,9 @@ func main() {
 	if c.Pprof.Enable {
 		StartPprof(c.Pprof.Addr)
 	}
-	if z, err = NewZookeeper(c.Zookeeper.Addrs, c.Zookeeper.Timeout,
-		path.Join(c.Zookeeper.Root, c.ServerId)); err != nil {
+	fpath = path.Join(c.Zookeeper.Root, c.ServerId)
+	log.V(1).Infof("zookeeper path: %s", fpath)
+	if z, err = NewZookeeper(c.Zookeeper.Addrs, c.Zookeeper.Timeout, fpath); err != nil {
 		return
 	}
 	if s, err = NewStore(z, c.Index); err != nil {

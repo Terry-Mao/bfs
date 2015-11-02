@@ -9,22 +9,23 @@ import (
 )
 
 type Config struct {
-	Index    string `yaml: "index"`
-	ServerId string `yaml: "server_id"`
-	Pprof    struct {
+	Pprof struct {
 		Enable bool   `yaml: "enable"`
 		Addr   string `yaml: "addr"`
 	}
-	Stat      string `yaml: "stat"`
-	Admin     string `yaml: "admin"`
-	Api       string `yaml: "api"`
 	Zookeeper struct {
 		Addrs   []string      `yaml: "addrs,flow"`
 		Timeout time.Duration `yaml: "timeout"`
 		Root    string        `yaml: "root"`
 	}
-	file string
-	f    *os.File
+	Stat     string `yaml: "stat"`
+	Admin    string `yaml: "admin"`
+	Api      string `yaml: "api"`
+	Index    string `yaml: "index"`
+	ServerId string `yaml: "serverid"`
+	file     string
+
+	f *os.File
 }
 
 func NewConfig(file string) (c *Config, err error) {
