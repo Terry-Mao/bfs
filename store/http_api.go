@@ -37,8 +37,8 @@ type httpGetHandler struct {
 func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		v                *Volume
-		buf, data        []byte
 		err              error
+		buf, data        []byte
 		vid, key, cookie int64
 		params           = r.URL.Query()
 	)
@@ -80,6 +80,8 @@ type httpUploadHandler struct {
 
 func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
+		ok               bool
+		storeErr         StoreError
 		v                *Volume
 		n                int
 		vid, key, cookie int64
@@ -131,7 +133,11 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	file.Close()
 	v.FreeBuffer(buf)
 	if err != nil {
-		res["ret"] = RetUploadErr
+		if storeErr, ok = err.(StoreError); ok {
+			res["ret"] = int(storeErr)
+		} else {
+			res["ret"] = RetInternalErr
+		}
 	}
 	return
 }
@@ -146,6 +152,8 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		i, wn               int
 		v                   *Volume
 		n                   *Needle
+		ok                  bool
+		storeErr            StoreError
 		buf                 []byte
 		str                 string
 		err                 error
@@ -172,8 +180,8 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = RetParamErr
 		return
 	}
-	keyStrs = strings.Split(r.FormValue("keys"), HttpParamSpliter)
-	cookieStrs = strings.Split(r.FormValue("cookies"), HttpParamSpliter)
+	keyStrs = r.PostForm["keys"]
+	cookieStrs = r.PostForm["cookies"]
 	if len(keyStrs) != len(cookieStrs) {
 		log.Errorf("param length not match, keys: %d, cookies: %d",
 			len(keyStrs), len(cookieStrs))
@@ -233,7 +241,11 @@ free:
 	v.FreeNeedle(n)
 	v.FreeBuffer(buf)
 	if err != nil {
-		res["ret"] = RetUploadErr
+		if storeErr, ok = err.(StoreError); ok {
+			res["ret"] = int(storeErr)
+		} else {
+			res["ret"] = RetInternalErr
+		}
 	}
 	return
 }
@@ -244,7 +256,9 @@ type httpDelHandler struct {
 
 func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
+		ok       bool
 		err      error
+		storeErr StoreError
 		v        *Volume
 		key, vid int64
 		res      = map[string]interface{}{"ret": RetOK}
@@ -272,7 +286,11 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err = v.Del(key); err != nil {
-		res["ret"] = RetDelErr
+		if storeErr, ok = err.(StoreError); ok {
+			res["ret"] = int(storeErr)
+		} else {
+			res["ret"] = RetInternalErr
+		}
 	}
 	return
 }
@@ -283,8 +301,10 @@ type httpDelsHandler struct {
 
 func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		err      error
 		v        *Volume
+		err      error
+		ok       bool
+		storeErr StoreError
 		str      string
 		key, vid int64
 		keyStrs  []string
@@ -317,7 +337,11 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err = v.Del(key); err != nil {
-			res["ret"] = RetDelErr
+			if storeErr, ok = err.(StoreError); ok {
+				res["ret"] = int(storeErr)
+			} else {
+				res["ret"] = RetInternalErr
+			}
 		}
 	}
 	return

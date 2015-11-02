@@ -33,7 +33,9 @@ type httpBulkVolumeHandler struct {
 
 func (h httpBulkVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
+		ok           bool
 		err          error
+		storeErr     StoreError
 		vid          int64
 		bfile, ifile string
 		res          = map[string]interface{}{"ret": RetOK}
@@ -52,8 +54,11 @@ func (h httpBulkVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request
 		return
 	}
 	if err = h.s.BulkVolume(int32(vid), bfile, ifile); err != nil {
-		log.Errorf("s.BulkVolume() error(%v)", err)
-		res["ret"] = RetBulkErr
+		if storeErr, ok = err.(StoreError); ok {
+			res["ret"] = int(storeErr)
+		} else {
+			res["ret"] = RetInternalErr
+		}
 	}
 	return
 }
@@ -97,9 +102,11 @@ type httpAddVolumeHandler struct {
 
 func (h httpAddVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		err error
-		vid int64
-		res = map[string]interface{}{"ret": RetOK}
+		ok       bool
+		err      error
+		storeErr StoreError
+		vid      int64
+		res      = map[string]interface{}{"ret": RetOK}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
@@ -113,8 +120,11 @@ func (h httpAddVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request)
 		return
 	}
 	if _, err = h.s.AddVolume(int32(vid)); err != nil {
-		log.Errorf("s.AddVolume() error(%v)", err)
-		res["ret"] = RetAddVolumeErr
+		if storeErr, ok = err.(StoreError); ok {
+			res["ret"] = int(storeErr)
+		} else {
+			res["ret"] = RetInternalErr
+		}
 	}
 	return
 }
@@ -126,6 +136,8 @@ type httpAddFreeVolumeHandler struct {
 
 func (h httpAddFreeVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
+		ok         bool
+		storeErr   StoreError
 		err        error
 		sn         int
 		n          int64
@@ -145,7 +157,11 @@ func (h httpAddFreeVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 		return
 	}
 	if sn, err = h.s.AddFreeVolume(int(n), bdir, idir); err != nil {
-		res["ret"] = RetAddVolumeErr
+		if storeErr, ok = err.(StoreError); ok {
+			res["ret"] = int(storeErr)
+		} else {
+			res["ret"] = RetInternalErr
+		}
 	}
 	res["succeed"] = sn
 	return

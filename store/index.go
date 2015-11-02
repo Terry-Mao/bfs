@@ -142,7 +142,7 @@ func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 	if i.ring.Buffered() > i.sigNum || now.Sub(i.signalTime) > indexSignalDuration {
 		select {
 		case i.signal <- indexReady:
-			i.lastSignalTime = now
+			i.signalTime = now
 		default:
 		}
 	}

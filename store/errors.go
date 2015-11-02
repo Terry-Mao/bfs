@@ -1,40 +1,124 @@
 package main
 
-import (
-	"errors"
+const (
+	// common
+	RetOK            = 1
+	RetNoVolume      = 2
+	RetUploadMaxFile = 3
+	RetDelMaxFile    = 4
+	RetParamErr      = 65534
+	RetInternalErr   = 65535
+	// api
+	// block
+	RetSuperBlockMagic      = 3000
+	RetSuperBlockVer        = 3001
+	RetSuperBlockPadding    = 3002
+	RetSuperBlockNoSpace    = 3003
+	RetSuperBlockRepairSize = 3004
+	// index
+	RetIndexSize = 4000
+	// needle
+	RetNeedleExist       = 5000
+	RetNoNeedle          = 5001
+	RetNeedleChecksum    = 5002
+	RetNeedleFlag        = 5003
+	RetNeedleSize        = 5004
+	RetNeedleHeaderMagic = 5005
+	RetNeedleFooterMagic = 5006
+	RetNeedleKey         = 5007
+	RetNeedlePadding     = 5008
+	RetNeedleCookie      = 5009
+	RetNeedleDeleted     = 5010
+	RetNeedleTooLarge    = 5011
+	// ring
+	RetRingEmpty = 6000
+	RetRingFull  = 6001
+	// store
+	RetStoreVolumeIndex  = 7000
+	RetStoreNoFreeVolume = 7001
+	// volume
+	RetVolumeExist     = 8000
+	RetVolumeNotExist  = 8001
+	RetVolumeDel       = 8002
+	RetVolumeInCompact = 8003
 )
+
+type StoreError int
+
+func (e StoreError) Error() string {
+	return storeErrorMsg[int(e)]
+}
 
 var (
 	// block
-	ErrSuperBlockMagic      = errors.New("super block magic error")
-	ErrSuperBlockVer        = errors.New("super block ver error")
-	ErrSuperBlockPadding    = errors.New("super block padding error")
-	ErrSuperBlockNoSpace    = errors.New("super block no left free space")
-	ErrSuperBlockRepairSize = errors.New("super block repair size")
+	ErrSuperBlockMagic      = StoreError(RetSuperBlockMagic)
+	ErrSuperBlockVer        = StoreError(RetSuperBlockVer)
+	ErrSuperBlockPadding    = StoreError(RetSuperBlockPadding)
+	ErrSuperBlockNoSpace    = StoreError(RetSuperBlockNoSpace)
+	ErrSuperBlockRepairSize = StoreError(RetSuperBlockRepairSize)
 	// index
-	ErrIndexSize = errors.New("index size error")
+	ErrIndexSize = StoreError(RetIndexSize)
 	// needle
-	ErrNeedleExists      = errors.New("needle already exists")
-	ErrNoNeedle          = errors.New("needle not exists")
-	ErrNeedleChecksum    = errors.New("needle checksum error")
-	ErrNeedleFlag        = errors.New("needle flag error")
-	ErrNeedleSize        = errors.New("needle size error")
-	ErrNeedleHeaderMagic = errors.New("needle header magic number error")
-	ErrNeedleFooterMagic = errors.New("needle footer magic number error")
-	ErrNeedleKey         = errors.New("needle key not match")
-	ErrNeedlePadding     = errors.New("needle padding error")
-	ErrNeedleCookie      = errors.New("needle cookie error")
-	ErrNeedleDeleted     = errors.New("needle deleted")
-	ErrNeedleTooLarge    = errors.New("needle too large")
+	ErrNeedleExist       = StoreError(RetNeedleExist)
+	ErrNoNeedle          = StoreError(RetNoNeedle)
+	ErrNeedleChecksum    = StoreError(RetNeedleChecksum)
+	ErrNeedleFlag        = StoreError(RetNeedleFlag)
+	ErrNeedleSize        = StoreError(RetNeedleSize)
+	ErrNeedleHeaderMagic = StoreError(RetNeedleHeaderMagic)
+	ErrNeedleFooterMagic = StoreError(RetNeedleFooterMagic)
+	ErrNeedleKey         = StoreError(RetNeedleKey)
+	ErrNeedlePadding     = StoreError(RetNeedlePadding)
+	ErrNeedleCookie      = StoreError(RetNeedleCookie)
+	ErrNeedleDeleted     = StoreError(RetNeedleDeleted)
+	ErrNeedleTooLarge    = StoreError(RetNeedleTooLarge)
 	// ring
-	ErrRingEmpty = errors.New("ring buffer empty")
-	ErrRingFull  = errors.New("ring buffer full")
+	ErrRingEmpty = StoreError(RetRingEmpty)
+	ErrRingFull  = StoreError(RetRingFull)
 	// store
-	ErrStoreVolumeIndex  = errors.New("store volume index error")
-	ErrStoreNoFreeVolume = errors.New("store has no free volume")
+	ErrStoreVolumeIndex  = StoreError(RetStoreVolumeIndex)
+	ErrStoreNoFreeVolume = StoreError(RetStoreNoFreeVolume)
 	// volume
-	ErrVolumeExist     = errors.New("volume exist")
-	ErrVolumeNotExist  = errors.New("volume not exist")
-	ErrVolumeDel       = errors.New("volume del error")
-	ErrVolumeInCompact = errors.New("volume in compact")
+	ErrVolumeExist     = StoreError(RetVolumeExist)
+	ErrVolumeNotExist  = StoreError(RetVolumeNotExist)
+	ErrVolumeDel       = StoreError(RetVolumeDel)
+	ErrVolumeInCompact = StoreError(RetVolumeInCompact)
+)
+
+var (
+	storeErrorMsg = map[int]string{
+		// common
+		RetOK: "ok",
+		// block
+		RetSuperBlockMagic:      "super block magic not match",
+		RetSuperBlockVer:        "super block ver not match",
+		RetSuperBlockPadding:    "super block padding not match",
+		RetSuperBlockNoSpace:    "super block no left free space",
+		RetSuperBlockRepairSize: "super block repair size must equal original",
+		// index
+		RetIndexSize: "index size error",
+		// needle
+		RetNeedleExist:       "needle already exist",
+		RetNoNeedle:          "needle not exist",
+		RetNeedleChecksum:    "needle data checksum not match",
+		RetNeedleFlag:        "needle flag not match",
+		RetNeedleSize:        "needle size error",
+		RetNeedleHeaderMagic: "needle header magic not match",
+		RetNeedleFooterMagic: "needle footer magic not match",
+		RetNeedleKey:         "needle key not match",
+		RetNeedlePadding:     "needle padding not match",
+		RetNeedleCookie:      "needle cookie not match",
+		RetNeedleDeleted:     "needle deleted",
+		RetNeedleTooLarge:    "needle has no left free space",
+		// ring
+		RetRingEmpty: "index ring buffer empty",
+		RetRingFull:  "index ring buffer full",
+		// store
+		RetStoreVolumeIndex:  "store volume index",
+		RetStoreNoFreeVolume: "",
+		// volume
+		RetVolumeExist:     "volume exist",
+		RetVolumeNotExist:  "volume not exist",
+		RetVolumeDel:       "volume deleted",
+		RetVolumeInCompact: "volume in compacting",
+	}
 )

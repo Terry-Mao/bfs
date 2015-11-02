@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-func init() {
-	StartPprof("localhost:6060")
-}
-
 func TestVolume(t *testing.T) {
 	var (
 		v      *Volume

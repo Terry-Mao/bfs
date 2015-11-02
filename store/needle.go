@@ -54,6 +54,8 @@ const (
 	NeedleFooterSize   = needleMagicSize + needleChecksumSize // +padding
 	// our offset is aligned with padding size(8)
 	// so a uint32 can store 4GB * 8 offset
+	// if you want a block much more larger, modify this constant, but must
+	// bigger than 8
 	NeedlePaddingSize = 8
 	// flags
 	NeedleStatusOK  = byte(0)

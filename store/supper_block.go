@@ -8,31 +8,38 @@ import (
 	"os"
 )
 
+// Super block has a header.
+// super block header format:
+//  --------------
+// | magic number |   ---- 4bytes
+// | version      |   ---- 1byte
+// | padding      |   ---- aligned with needle padding size (for futer used)
+//  --------------
+//
+
 const (
-	// offset
-	superBlockHeaderOffset = 8
 	// size
-	superBlockHeaderSize  = 8
+	superBlockHeaderSize  = NeedlePaddingSize
 	superBlockMagicSize   = 4
 	superBlockVerSize     = 1
-	superBlockPaddingSize = superBlockHeaderSize - superBlockMagicSize -
-		superBlockVerSize
+	superBlockPaddingSize = superBlockHeaderSize - superBlockMagicSize - superBlockVerSize
 	// offset
+	superBlockHeaderOffset  = superBlockHeaderSize
 	superBlockMagicOffset   = 0
 	superBlockVerOffset     = superBlockMagicOffset + superBlockVerSize
 	superBlockPaddingOffset = superBlockVerOffset + superBlockPaddingSize
 	// ver
 	superBlockVer1 = byte(1)
 	// limits
-	// 32GB, offset aligned 8 bytes, 4GB * 8
-	superBlockMaxSize   = 4 * 1024 * 1024 * 1024 * 8
+	// offset aligned 8 bytes, 4GB * needle_padding_size
+	superBlockMaxSize   = 4 * 1024 * 1024 * 1024 * NeedlePaddingSize
 	superBlockMaxOffset = 4294967295
 )
 
 var (
 	superBlockMagic   = []byte{0xab, 0xcd, 0xef, 0x00}
 	superBlockVer     = []byte{superBlockVer1}
-	superBlockPadding = []byte{0x00, 0x00, 0x00}
+	superBlockPadding = bytes.Repeat([]byte{0x0}, superBlockPaddingSize)
 )
 
 // An Volume contains one superblock and many needles.
@@ -49,41 +56,36 @@ type SuperBlock struct {
 	Ver   byte   `json:"ver"`
 }
 
-// NewSuperBlock new a super block struct.
+// NewSuperBlock creae a new super block.
 func NewSuperBlock(file string) (b *SuperBlock, err error) {
 	b = &SuperBlock{}
 	b.File = file
 	b.buf = make([]byte, NeedleMaxSize)
-	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err !=
-		nil {
+	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		return
 	}
-	b.bw = bufio.NewWriterSize(b.w, NeedleMaxSize)
 	if b.r, err = os.OpenFile(file, os.O_RDONLY, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		goto failed
 	}
+	b.bw = bufio.NewWriterSize(b.w, NeedleMaxSize)
 	if err = b.init(); err != nil {
 		log.Errorf("block: %s init() error(%v)", file, err)
 		goto failed
 	}
 	return
 failed:
-	if b.w != nil {
-		b.w.Close()
-	}
+	b.w.Close()
 	if b.r != nil {
 		b.r.Close()
 	}
 	return
 }
 
-// init block file, add/parse meta info.
+// init init block file, add/parse meta info.
 func (b *SuperBlock) init() (err error) {
-	var (
-		stat os.FileInfo
-	)
+	var stat os.FileInfo
 	if stat, err = b.r.Stat(); err != nil {
 		log.Errorf("block: %s Stat() error(%v)", b.File, err)
 		return
@@ -91,50 +93,62 @@ func (b *SuperBlock) init() (err error) {
 	if stat.Size() == 0 {
 		// falloc(FALLOC_FL_KEEP_SIZE)
 		if err = Fallocate(b.w.Fd(), 1, 0, superBlockMaxSize); err != nil {
-			log.Errorf("Fallocate(b.w.Fd(), 1, 0, 4GB) error(err)", err)
+			log.Errorf("block: %s Fallocate() error(%s)", b.File, err)
 			return
 		}
-		// magic
-		if _, err = b.w.Write(superBlockMagic); err != nil {
-			return
-		}
-		// ver
-		if _, err = b.w.Write(superBlockVer); err != nil {
-			return
-		}
-		// padding
-		if _, err = b.w.Write(superBlockPadding); err != nil {
+		if err = b.writeMeta(); err != nil {
+			log.Errorf("block: %s writeMeta() error(%v)", b.File, err)
 			return
 		}
 	} else {
-		if _, err = b.r.Read(b.buf[:superBlockHeaderSize]); err != nil {
-			return
-		}
-		b.Magic = b.buf[superBlockMagicOffset : superBlockMagicOffset+
-			superBlockMagicSize]
-		b.Ver = b.buf[superBlockVerOffset : superBlockVerOffset+
-			superBlockVerSize][0]
-		if !bytes.Equal(b.Magic, superBlockMagic) {
-			err = ErrSuperBlockMagic
-			return
-		}
-		if b.Ver == superBlockVer1 {
-			err = ErrSuperBlockVer
+		if err = b.parseMeta(); err != nil {
+			log.Errorf("block: %s parseMeta() error(%v)", b.File, err)
 			return
 		}
 		if _, err = b.w.Seek(superBlockHeaderOffset, os.SEEK_SET); err != nil {
 			log.Errorf("block: %s Seek() error(%v)", b.File, err)
 			return
 		}
+		b.Offset = NeedleOffset(superBlockHeaderOffset)
 	}
-	b.Offset = NeedleOffset(superBlockHeaderOffset)
+	return
+}
+
+// writeMeta write block meta info.
+func (b *SuperBlock) writeMeta() (err error) {
+	// magic
+	if _, err = b.w.Write(superBlockMagic); err != nil {
+		return
+	}
+	// ver
+	if _, err = b.w.Write(superBlockVer); err != nil {
+		return
+	}
+	// padding
+	_, err = b.w.Write(superBlockPadding)
+	return
+}
+
+// parseMeta parse block meta info.
+func (b *SuperBlock) parseMeta() (err error) {
+	if _, err = b.r.Read(b.buf[:superBlockHeaderSize]); err != nil {
+		return
+	}
+	b.Magic = b.buf[superBlockMagicOffset : superBlockMagicOffset+superBlockMagicSize]
+	b.Ver = b.buf[superBlockVerOffset : superBlockVerOffset+superBlockVerSize][0]
+	if !bytes.Equal(b.Magic, superBlockMagic) {
+		err = ErrSuperBlockMagic
+		return
+	}
+	if b.Ver == superBlockVer1 {
+		err = ErrSuperBlockVer
+	}
 	return
 }
 
 // Open open the closed superblock, must called after NewSuperBlock.
 func (b *SuperBlock) Open() (err error) {
-	if b.w, err = os.OpenFile(b.File, os.O_WRONLY|os.O_CREATE, 0664); err !=
-		nil {
+	if b.w, err = os.OpenFile(b.File, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
 		return
 	}
@@ -149,9 +163,7 @@ func (b *SuperBlock) Open() (err error) {
 	}
 	return
 failed:
-	if b.w != nil {
-		b.w.Close()
-	}
+	b.w.Close()
 	if b.r != nil {
 		b.r.Close()
 	}
@@ -253,8 +265,7 @@ func (b *SuperBlock) Del(offset uint32) (err error) {
 		return
 	}
 	// WriteAt won't update the file offset.
-	_, err = b.w.WriteAt(NeedleStatusDelBytes, blockOffset(offset)+
-		NeedleFlagOffset)
+	_, err = b.w.WriteAt(NeedleStatusDelBytes, blockOffset(offset)+NeedleFlagOffset)
 	b.LastErr = err
 	return
 }
@@ -297,8 +308,7 @@ func (b *SuperBlock) Recovery(offset uint32, fn func(*Needle, uint32) error) (
 			break
 		}
 		if log.V(1) {
-			log.Infof("block add offset: %d, size: %d to needles cache",
-				b.Offset, n.TotalSize)
+			log.Infof("block add offset: %d, size: %d to needles cache", b.Offset, n.TotalSize)
 			log.Info(n.String())
 		}
 		if err = fn(n, b.Offset); err != nil {
@@ -311,11 +321,11 @@ func (b *SuperBlock) Recovery(offset uint32, fn func(*Needle, uint32) error) (
 		if _, err = b.w.Seek(blockOffset(b.Offset), os.SEEK_SET); err != nil {
 			log.Errorf("block: %s Seek() error(%v)", b.File, err)
 		} else {
-			log.Infof("block: %s:%d*8 recovery [ok]", b.File, b.Offset)
+			log.Infof("block: %s:%d recovery [ok]", b.File, blockOffset(b.Offset))
 			return
 		}
 	}
-	log.Infof("block: %s recovery [failed]", b.File)
+	log.Infof("block: %s recovery error(%v) [failed]", b.File, err)
 	return
 }
 
@@ -375,12 +385,15 @@ func (b *SuperBlock) Compact(offset *int64, fn func(*Needle) error) (err error) 
 			break
 		}
 	}
-	if err != io.EOF {
-		return
+	if err == io.EOF {
+		if err = r.Close(); err != nil {
+			log.Errorf("block: %s Close() error(%v)", b.File, err)
+		} else {
+			log.Infof("block: %s:%d compact [ok]", b.File, *offset)
+			return
+		}
 	}
-	if err = r.Close(); err != nil {
-		return
-	}
+	log.Errorf("block: %s compact error(%v) [failed]", b.File, err)
 	return
 }
 
