@@ -48,7 +48,8 @@ func compareTestNeedle(t *testing.T, key, cookie int64, flag byte, n *Needle, da
 func TestSuperBlock(t *testing.T) {
 	var (
 		v       *Volume
-		v1, v2  int64
+		v1      uint32
+		v3      int64
 		buf     []byte
 		n       = &Needle{}
 		needles = make(map[int64]int64)
@@ -246,19 +247,15 @@ func TestSuperBlock(t *testing.T) {
 		goto failed
 	}
 	defer os.Remove(ifile)
-	if err = b.Recovery(0, func(rn *Needle, bo uint32) (err1 error) {
-		var (
-			co uint32
-		)
+	if err = b.Recovery(0, func(rn *Needle, so, eo uint32) (err1 error) {
 		if rn.Flag == NeedleStatusOK {
-			if err1 = indexer.Write(n.Key, bo, rn.TotalSize); err1 != nil {
+			if err1 = indexer.Write(n.Key, so, rn.TotalSize); err1 != nil {
 				return
 			}
-			co = bo
 		} else {
-			co = NeedleCacheDelOffset
+			so = NeedleCacheDelOffset
 		}
-		needles[rn.Key] = NeedleCache(co, rn.TotalSize)
+		needles[rn.Key] = NeedleCache(so, rn.TotalSize)
 		return
 	}); err != nil {
 		t.Errorf("b.Recovery() error(%v)", err)
@@ -286,19 +283,15 @@ func TestSuperBlock(t *testing.T) {
 		goto failed
 	}
 	t.Log("Recovery(6)")
-	if err = b.Recovery(6, func(rn *Needle, bo uint32) (err1 error) {
-		var (
-			co uint32
-		)
+	if err = b.Recovery(6, func(rn *Needle, so, eo uint32) (err1 error) {
 		if rn.Flag == NeedleStatusOK {
-			if err1 = indexer.Write(n.Key, bo, rn.TotalSize); err1 != nil {
+			if err1 = indexer.Write(n.Key, so, rn.TotalSize); err1 != nil {
 				return
 			}
-			co = bo
 		} else {
-			co = NeedleCacheDelOffset
+			so = NeedleCacheDelOffset
 		}
-		needles[rn.Key] = NeedleCache(co, rn.TotalSize)
+		needles[rn.Key] = NeedleCache(so, rn.TotalSize)
 		return
 	}); err != nil {
 		t.Errorf("b.Recovery() error(%v)", err)
@@ -358,8 +351,10 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("NewVolume(1) error(%v)", err)
 		goto failed
 	}
-	if err = b.Compact(&v1, func(rn *Needle) (err1 error) {
-		err1 = v.Write(rn)
+	if err = b.Compact(v1, func(rn *Needle, so, eo uint32) (err1 error) {
+		if err1 = v.Write(rn); err1 == nil {
+			v1 = eo
+		}
 		return
 	}); err != nil {
 		t.Errorf("b.Compress() error(%v)", err)
@@ -368,19 +363,20 @@ func TestSuperBlock(t *testing.T) {
 		if err = v.Flush(); err != nil {
 			return
 		}
-		if v2, err = b.w.Seek(v2, os.SEEK_END); err != nil {
+		if v3, err = b.w.Seek(0, os.SEEK_END); err != nil {
 			t.Errorf("b.Seek() error(%v)", err)
 			goto failed
 		} else {
-			if v1 != v2 {
-				err = fmt.Errorf("compress offset %d != %d not match", v1, v2)
+			if v1 != NeedleOffset(v3) {
+				err = fmt.Errorf("compress offset %d != %d not match", v1, v3)
 				t.Error(err)
 				goto failed
 			}
 		}
 	}
-	if o, s := NeedleCacheValue(v.needles[1]); o != 0 && s != 0 {
-		t.Error("needle.Value(1) not match")
+	// compact
+	if o, s := NeedleCacheValue(v.needles[1]); o != 1 && s != 40 {
+		t.Errorf("needle.Value(1) not match, o: %d, s: %d", o, s)
 		goto failed
 	}
 	if o, s := NeedleCacheValue(v.needles[2]); o != 6 && s != 40 {

@@ -60,6 +60,7 @@ type SuperBlock struct {
 func NewSuperBlock(file string) (b *SuperBlock, err error) {
 	b = &SuperBlock{}
 	b.File = file
+	b.Offset = NeedleOffset(superBlockHeaderSize)
 	b.buf = make([]byte, NeedleMaxSize)
 	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
@@ -270,24 +271,23 @@ func (b *SuperBlock) Del(offset uint32) (err error) {
 	return
 }
 
-// Recovery recovery needles map from super block.
-func (b *SuperBlock) Recovery(offset uint32, fn func(*Needle, uint32) error) (
-	err error) {
+// Scan scan a block file.
+func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*Needle, uint32, uint32) error) (err error) {
 	var (
-		n    = &Needle{}
-		rd   *bufio.Reader
-		data []byte
+		soffset, eoffset uint32
+		data             []byte
+		n                = &Needle{}
+		rd               = bufio.NewReaderSize(r, NeedleMaxSize)
 	)
-	log.Infof("block: %s recovery from offset: %d", b.File, offset)
 	if offset == 0 {
 		offset = NeedleOffset(superBlockHeaderOffset)
 	}
-	b.Offset = offset
-	if _, err = b.r.Seek(blockOffset(b.Offset), os.SEEK_SET); err != nil {
+	soffset, eoffset = offset, offset
+	log.Infof("scan block: %s from offset: %d", b.File, offset)
+	if _, err = r.Seek(blockOffset(offset), os.SEEK_SET); err != nil {
 		log.Errorf("block: %s Seek() error(%v)", b.File)
 		return
 	}
-	rd = bufio.NewReaderSize(b.r, NeedleMaxSize)
 	for {
 		if data, err = rd.Peek(NeedleHeaderSize); err != nil {
 			break
@@ -308,92 +308,61 @@ func (b *SuperBlock) Recovery(offset uint32, fn func(*Needle, uint32) error) (
 			break
 		}
 		if log.V(1) {
-			log.Infof("block add offset: %d, size: %d to needles cache", b.Offset, n.TotalSize)
 			log.Info(n.String())
 		}
-		if err = fn(n, b.Offset); err != nil {
+		eoffset += NeedleOffset(int64(n.TotalSize))
+		if err = fn(n, soffset, eoffset); err != nil {
 			break
 		}
-		b.Offset += NeedleOffset(int64(n.TotalSize))
+		soffset = eoffset
 	}
-	if err == io.EOF {
-		// reset b.w offset, discard left space which can't parse to a needle
-		if _, err = b.w.Seek(blockOffset(b.Offset), os.SEEK_SET); err != nil {
-			log.Errorf("block: %s Seek() error(%v)", b.File, err)
-		} else {
-			log.Infof("block: %s:%d recovery [ok]", b.File, blockOffset(b.Offset))
-			return
+	if err != io.EOF {
+		log.Infof("scan block: %s to offset: %d error(%v) [failed]", b.File, eoffset, err)
+	} else {
+		err = nil
+		log.Infof("scan block: %s to offset: %d [ok]", b.File, eoffset)
+	}
+	return
+}
+
+// Recovery recovery needles map from super block.
+func (b *SuperBlock) Recovery(offset uint32, fn func(*Needle, uint32, uint32) error) (err error) {
+	if err = b.Scan(b.r, offset, func(n *Needle, so, eo uint32) (err1 error) {
+		if err1 = fn(n, so, eo); err != nil {
+			b.Offset = eo
 		}
+		return
+	}); err != nil {
+		return
 	}
-	log.Infof("block: %s recovery error(%v) [failed]", b.File, err)
+	// reset b.w offset, discard left space which can't parse to a needle
+	if _, err = b.w.Seek(blockOffset(b.Offset), os.SEEK_SET); err != nil {
+		log.Errorf("block: %s Seek() error(%v)", b.File, err)
+	}
 	return
 }
 
 // Compact compact the orig block, copy to disk dst block.
-func (b *SuperBlock) Compact(offset *int64, fn func(*Needle) error) (err error) {
+func (b *SuperBlock) Compact(offset uint32, fn func(*Needle, uint32, uint32) error) (err error) {
 	if b.LastErr != nil {
 		err = b.LastErr
 		return
 	}
-	var (
-		r    *os.File
-		rd   *bufio.Reader
-		data []byte
-		n    = &Needle{}
-	)
-	log.Infof("block: %s compact", b.File)
+	var r *os.File
 	if r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
 		return
 	}
-	if *offset == 0 {
-		*offset = superBlockHeaderOffset
-	}
-	if _, err = r.Seek(*offset, os.SEEK_SET); err != nil {
-		log.Errorf("block: %s Seek() error(%v)", b.File, err)
+	if err = b.Scan(r, offset, func(n *Needle, so, eo uint32) (err1 error) {
+		err1 = fn(n, so, eo)
+		return
+	}); err != nil {
+		r.Close()
 		return
 	}
-	rd = bufio.NewReaderSize(r, NeedleMaxSize)
-	for {
-		if data, err = rd.Peek(NeedleHeaderSize); err != nil {
-			break
-		}
-		if err = n.ParseHeader(data); err != nil {
-			break
-		}
-		if _, err = rd.Discard(NeedleHeaderSize); err != nil {
-			break
-		}
-		if data, err = rd.Peek(n.DataSize); err != nil {
-			break
-		}
-		if err = n.ParseData(data); err != nil {
-			break
-		}
-		if _, err = rd.Discard(n.DataSize); err != nil {
-			break
-		}
-		*offset = *offset + int64(n.TotalSize)
-		if log.V(1) {
-			log.Info(n.String())
-		}
-		// skip delete needle
-		if n.Flag == NeedleStatusDel {
-			continue
-		}
-		if err = fn(n); err != nil {
-			break
-		}
+	if err = r.Close(); err != nil {
+		log.Errorf("block: %s Close() error(%v)", b.File, err)
 	}
-	if err == io.EOF {
-		if err = r.Close(); err != nil {
-			log.Errorf("block: %s Close() error(%v)", b.File, err)
-		} else {
-			log.Infof("block: %s:%d compact [ok]", b.File, *offset)
-			return
-		}
-	}
-	log.Errorf("block: %s compact error(%v) [failed]", b.File, err)
 	return
 }
 

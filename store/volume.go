@@ -61,7 +61,7 @@ type Volume struct {
 	np            *sync.Pool // needle struct pool
 	Command       int        `json:"-"` // flag used in store
 	Compact       bool       `json:"compact"`
-	CompactOffset int64      `json:"compact_offset"`
+	CompactOffset uint32     `json:"compact_offset"`
 	CompactTime   int64      `json:"compact_time"`
 	compactKeys   []int64
 }
@@ -131,19 +131,15 @@ func (v *Volume) init() (err error) {
 		return
 	}
 	// recovery from super block
-	err = v.Block.Recovery(offset, func(n *Needle, bo uint32) (err1 error) {
-		var (
-			co uint32
-		)
+	err = v.Block.Recovery(offset, func(n *Needle, so, eo uint32) (err1 error) {
 		if n.Flag == NeedleStatusOK {
-			if err1 = v.Indexer.Write(n.Key, bo, n.TotalSize); err1 != nil {
+			if err1 = v.Indexer.Write(n.Key, so, n.TotalSize); err1 != nil {
 				return
 			}
-			co = bo
 		} else {
-			co = NeedleCacheDelOffset
+			so = NeedleCacheDelOffset
 		}
-		v.needles[n.Key] = NeedleCache(co, n.TotalSize)
+		v.needles[n.Key] = NeedleCache(so, n.TotalSize)
 		return
 	})
 	// flush index
@@ -436,6 +432,20 @@ func (v *Volume) del() {
 	return
 }
 
+// compact compact v to new v.
+func (v *Volume) compact(nv *Volume) (err error) {
+	err = v.Block.Compact(v.CompactOffset, func(n *Needle, so, eo uint32) (err1 error) {
+		if n.Flag != NeedleStatusDel {
+			if err1 = nv.Write(n); err1 != nil {
+				return
+			}
+		}
+		v.CompactOffset = eo
+		return
+	})
+	return
+}
+
 // Compact copy the super block to another space, and drop the "delete"
 // needle, so this can reduce disk space cost.
 func (v *Volume) StartCompact(nv *Volume) (err error) {
@@ -450,10 +460,7 @@ func (v *Volume) StartCompact(nv *Volume) (err error) {
 		return
 	}
 	v.CompactTime = time.Now().UnixNano()
-	if err = v.Block.Compact(&(v.CompactOffset), func(n *Needle) (err1 error) {
-		err1 = nv.Write(n)
-		return
-	}); err != nil {
+	if err = v.compact(nv); err != nil {
 		return
 	}
 	if err = nv.Flush(); err != nil {
@@ -473,11 +480,7 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 	)
 	v.lock.Lock()
 	if nv != nil {
-		if err = v.Block.Compact(&(v.CompactOffset),
-			func(n *Needle) (err1 error) {
-				err1 = nv.Write(n)
-				return
-			}); err != nil {
+		if err = v.compact(nv); err != nil {
 			goto failed
 		}
 		if err = nv.Flush(); err != nil {
