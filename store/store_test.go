@@ -36,6 +36,7 @@ func TestStore(t *testing.T) {
 		t.Errorf("NewZookeeper() error(%v)", err)
 		goto failed
 	}
+	z.DelVolume(1)
 	if s, err = NewStore(z, file); err != nil {
 		t.Errorf("NewStore() error(%v)", err)
 		goto failed

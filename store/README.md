@@ -22,7 +22,14 @@ Table of Contents
     * [Uploads](#uploads)
     * [Delete](#delete)
     * [Deletes](#deletes)
-    * [Response](#response)
+    * [Response](#apiresponse)
+* [Admin](#admin)
+	* [AddFreeVolume](#addfreevolume)
+    * [AddVolume](#addvolume)
+    * [BulkVolume](#bulkvolume)
+    * [CompactVolume](#compactvolume)
+    * [Response](#adminresponse)
+
 * [Stat](#stat)
 
 ## Features
@@ -263,7 +270,7 @@ http://DOMAIN/del
 
 ***HTTP Method***
 
-DELETE
+POST application/x-www-form-urlencoded
 
 ***Query String***
 
@@ -282,7 +289,7 @@ http://DOMAIN/dels
 
 ***HTTP Method***
 
-DELETE
+POST application/x-www-form-urlencoded
 
 ***Query String***
 
@@ -291,9 +298,9 @@ DELETE
 | vid        | true  | int32  | volume id |
 | keys       | true  | string  | file keys (ie. 1,2,3) |
 
-### Response
+### ApiResponse
 
-upload/uploads/delete files response a json:
+response a json:
 
 ```json
 {"ret": 1}
@@ -302,21 +309,122 @@ upload/uploads/delete files response a json:
 | error code | description |
 | :---- | :----         |
 | 1      | Succeed       |
-| 1000     | volume not exist |
-| 1001     | upload failed |
-| 1002     | upload exceed max files | 
-| 1003 | delete failed |
-| 1004 | delete exceed max files |
 | 65534 | param error |
 | 65535   | internal error |
+
+for more error code, see the [errors.go](https://github.com/Terry-Mao/bfs/blob/master/store/errors.go)
 
 exmaples:
 
 ```shell
 $ cd test
-$ ./upload.sh
-$ ./uploads.sh
+$ ./test.sh
 ```
+
+[Back to TOC](#table-of-contents)
+
+## Admin
+### AddFreeVolume 
+
+add a free(empty) volume
+
+**URL**
+
+http://DOMAIN/add\_free\_volume
+
+***HTTP Method***
+
+POST application/x-www-form-urlencoded
+
+***Form String***
+
+| name     | required  | type | description |
+| :-----     | :---  | :--- | :---      |
+| n        | true  | int32  | add volume number |
+| bdir       | true  | int64  | block file dir |
+| idir       | true  | int64  | index file dir |
+
+### AddVolume 
+
+add a volume with specified volume id, this method will find a free volume to use.
+
+**URL**
+
+http://DOMAIN/add\_volume
+
+***HTTP Method***
+
+POST application/x-www-form-urlencoded
+
+***Form String***
+
+| name     | required  | type | description |
+| :-----     | :---  | :--- | :---      |
+| vid        | true  | int32  | volume id |
+
+### CompactVolume 
+
+compact a volume for save disk space, after compact block file all duplicated and deleted needles will ignore write to new block file, this method will find a free volume to use. (ONLINE)
+
+**URL**
+
+http://DOMAIN/compact\_volume
+
+***HTTP Method***
+
+POST application/x-www-form-urlencoded
+
+***Form String***
+
+| name     | required  | type | description |
+| :-----     | :---  | :--- | :---      |
+| vid        | true  | int32  | volume id |
+
+
+### BulkVolume 
+
+bulk a volume from specified block file and index for recovery a new store machine.
+
+**URL**
+
+http://DOMAIN/bulk\_volume
+
+***HTTP Method***
+
+POST application/x-www-form-urlencoded
+
+***Form String***
+
+| name     | required  | type | description |
+| :-----     | :---  | :--- | :---      |
+| vid        | true  | int32  | volume id |
+| bfile        | true  | string  | block file path |
+| ifile        | true  | string  | index file path |
+
+
+### AdminResponse
+
+response a json:
+
+```json
+{"ret": 1}
+```
+
+| error code | description |
+| :---- | :----         |
+| 1      | Succeed       |
+| 65534 | param error |
+| 65535   | internal error |
+
+for more error code, see the [errors.go](https://github.com/Terry-Mao/bfs/blob/master/store/errors.go)
+
+exmaples:
+
+```shell
+$ cd test
+$ ./test.sh
+```
+
 
 [Back to TOC](#table-of-contents)
 
