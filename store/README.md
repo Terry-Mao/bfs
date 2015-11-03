@@ -24,7 +24,7 @@ Table of Contents
     * [Deletes](#deletes)
     * [Response](#apiresponse)
 * [Admin](#admin)
-	* [AddFreeVolume](#addfreevolume)
+    * [AddFreeVolume](#addfreevolume)
     * [AddVolume](#addvolume)
     * [BulkVolume](#bulkvolume)
     * [CompactVolume](#compactvolume)
