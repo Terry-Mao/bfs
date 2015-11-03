@@ -123,11 +123,11 @@ failed:
 func (v *Volume) init() (err error) {
 	var offset uint32
 	// recovery from index
-	if offset, err = v.Indexer.Recovery(
-		func(ix *Index) error {
-			v.needles[ix.Key] = NeedleCache(ix.Offset, ix.Size)
-			return nil
-		}); err != nil {
+	if err = v.Indexer.Recovery(func(ix *Index) (err1 error) {
+		v.needles[ix.Key] = NeedleCache(ix.Offset, ix.Size)
+		offset = ix.Offset + NeedleOffset(int64(ix.Size))
+		return
+	}); err != nil {
 		return
 	}
 	// recovery from super block

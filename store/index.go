@@ -240,21 +240,18 @@ func (i *Indexer) write() {
 	return
 }
 
-// Recovery recovery needle cache meta data in memory, index file  will stop
-// at the right parse data offset.
-func (i *Indexer) Recovery(fn func(*Index) error) (noffset uint32, err error) {
+// Scan scan a indexer file.
+func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 	var (
-		rd     *bufio.Reader
-		data   []byte
-		offset int64
-		ix     = &Index{}
+		data []byte
+		ix   = &Index{}
+		rd   = bufio.NewReaderSize(r, NeedleMaxSize)
 	)
-	log.Infof("index: %s recovery", i.File)
-	if offset, err = i.f.Seek(0, os.SEEK_SET); err != nil {
+	log.Infof("scan index: %s", i.File)
+	if _, err = r.Seek(0, os.SEEK_SET); err != nil {
 		log.Errorf("index: %s Seek() error(%v)", i.File, err)
 		return
 	}
-	rd = bufio.NewReaderSize(i.f, NeedleMaxSize)
 	for {
 		if data, err = rd.Peek(indexSize); err != nil {
 			break
@@ -271,23 +268,34 @@ func (i *Indexer) Recovery(fn func(*Index) error) (noffset uint32, err error) {
 		if log.V(1) {
 			log.Info(ix.String())
 		}
-		offset += int64(indexSize)
 		if err = fn(ix); err != nil {
 			break
 		}
-		// save this for recovery supper block
-		noffset = ix.Offset + NeedleOffset(int64(ix.Size))
 	}
-	if err == io.EOF {
-		// reset b.w offset, discard left space which can't parse to a needle
-		if _, err = i.f.Seek(offset, os.SEEK_SET); err != nil {
-			log.Errorf("index: %s Seek() error(%v)", i.File, err)
-		} else {
-			log.Infof("index: %s recovery [ok]", i.File)
-			return
-		}
+	if err != io.EOF {
+		log.Infof("scan index: %s error(%v) [failed]", i.File, err)
+	} else {
+		err = nil
+		log.Infof("scan index: %s [ok]", i.File)
 	}
-	log.Errorf("index: %s recovery [failed], error(%v)", i.File, err)
+	return
+}
+
+// Recovery recovery needle cache meta data in memory, index file  will stop
+// at the right parse data offset.
+func (i *Indexer) Recovery(fn func(*Index) error) (err error) {
+	var offset int64
+	if i.Scan(i.f, func(ix *Index) (err1 error) {
+		offset += int64(indexSize)
+		err1 = fn(ix)
+		return
+	}); err != nil {
+		return
+	}
+	// reset b.w offset, discard left space which can't parse to a needle
+	if _, err = i.f.Seek(offset, os.SEEK_SET); err != nil {
+		log.Errorf("index: %s Seek() error(%v)", i.File, err)
+	}
 	return
 }
 
