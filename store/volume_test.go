@@ -137,7 +137,7 @@ func BenchmarkVolumeAdd(b *testing.B) {
 		err   error
 		file  = "./test/testb1"
 		ifile = "./test/testb1.idx"
-		data  = make([]byte, 1*1024)
+		data  = make([]byte, 16777183) // 16kb
 	)
 	os.Remove(file)
 	os.Remove(ifile)
@@ -184,7 +184,7 @@ func BenchmarkVolumeWrite(b *testing.B) {
 		err   error
 		file  = "./test/testb2"
 		ifile = "./test/testb2.idx"
-		data  = make([]byte, 1*1024)
+		data  = make([]byte, 16777183) // 16kb
 	)
 	os.Remove(file)
 	os.Remove(ifile)
@@ -244,7 +244,7 @@ func BenchmarkVolumeGet(b *testing.B) {
 		err   error
 		file  = "./test/testb3"
 		ifile = "./test/testb3.idx"
-		data  = make([]byte, 1*1024)
+		data  = make([]byte, 16777183) // 16kb
 		n     = &Needle{}
 	)
 	defer os.Remove(file)
