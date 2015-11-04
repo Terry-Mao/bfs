@@ -82,7 +82,8 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ok               bool
 		storeErr         StoreError
 		v                *Volume
-		n                int
+		n                *Needle
+		rn               int
 		vid, key, cookie int64
 		err              error
 		buf              []byte
@@ -125,12 +126,17 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = RetInternalErr
 		return
 	}
+	n = v.Needle()
 	buf = v.Buffer()
-	if n, err = file.Read(buf); err == nil {
-		err = v.Add(key, cookie, buf[:n])
-	}
+	rn, err = file.Read(buf)
 	file.Close()
+	if err == nil {
+		if err = n.Parse(key, cookie, buf[:rn]); err == nil {
+			err = v.Add(n)
+		}
+	}
 	v.FreeBuffer(buf)
+	v.FreeNeedle(n)
 	if err != nil {
 		if storeErr, ok = err.(StoreError); ok {
 			res["ret"] = int(storeErr)
@@ -222,19 +228,20 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	n = v.Needle()
 	v.Lock()
 	for i, fh = range fhs {
-		if file, err = fh.Open(); err == nil {
+		file, err = fh.Open()
+		file.Close()
+		if err == nil {
 			if wn, err = file.Read(buf); err == nil {
 				if err = n.Parse(keys[i], cookies[i], buf[:wn]); err == nil {
 					err = v.Write(n)
 				}
 			}
-			file.Close()
 		}
 		if err != nil {
 			goto free
 		}
 	}
-	v.Flush()
+	err = v.Flush()
 free:
 	v.Unlock()
 	v.FreeNeedle(n)

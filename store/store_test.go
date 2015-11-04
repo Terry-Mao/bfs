@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	log "github.com/golang/glog"
 	"os"
 	"testing"
 	"time"
@@ -16,6 +15,7 @@ func TestStore(t *testing.T) {
 		err    error
 		buf    []byte
 		data   = []byte("test")
+		n      = &Needle{}
 		file   = "./test/store.idx"
 		bfile  = "./test/block_1"
 		ifile  = "./test/block_1.idx"
@@ -24,6 +24,13 @@ func TestStore(t *testing.T) {
 		b3file = "./test/block_3"
 		i3file = "./test/block_3.idx"
 	)
+	os.Remove(file)
+	os.Remove(bfile)
+	os.Remove(ifile)
+	os.Remove(b2file)
+	os.Remove(i2file)
+	os.Remove(b3file)
+	os.Remove(i3file)
 	defer os.Remove(file)
 	defer os.Remove(bfile)
 	defer os.Remove(ifile)
@@ -60,11 +67,20 @@ func TestStore(t *testing.T) {
 		t.Error(err)
 		goto failed
 	}
-	if err = v.Add(1, 1, data); err != nil {
+	if err = n.Parse(1, 1, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		goto failed
+	}
+	if err = v.Add(n); err != nil {
 		t.Errorf("v.Add(1) error(%v)", err)
 		goto failed
 	}
-	log.Info("123123123")
+	buf = v.Buffer()
+	defer v.FreeBuffer(buf)
+	if _, err = v.Get(1, 1, buf); err != nil {
+		t.Errorf("v.Get(1) error(%v)", err)
+		goto failed
+	}
 	t.Log("BulkVolume()")
 	if err = s.BulkVolume(1, b2file, i2file); err != nil {
 		t.Errorf("Bulk(1) error(%v)", err)
@@ -77,12 +93,10 @@ func TestStore(t *testing.T) {
 		t.Error(err)
 		goto failed
 	}
-	if err = v.Add(1, 1, data); err != nil {
+	if err = v.Add(n); err != nil {
 		t.Errorf("v.Add(1) error(%v)", err)
 		goto failed
 	}
-	buf = v.Buffer()
-	defer v.FreeBuffer(buf)
 	if _, err = v.Get(1, 1, buf); err != nil {
 		t.Errorf("v.Get(1) error(%v)", err)
 		goto failed

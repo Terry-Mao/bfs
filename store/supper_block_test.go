@@ -60,7 +60,14 @@ func TestSuperBlock(t *testing.T) {
 		ifile   = "./test/test.idx"
 		indexer *Indexer
 	)
+	os.Remove(file)
+	os.Remove(ifile)
+	os.Remove(bfile)
+	os.Remove(bifile)
 	defer os.Remove(file)
+	defer os.Remove(ifile)
+	defer os.Remove(bfile)
+	defer os.Remove(bifile)
 	// test new block file
 	t.Log("NewSuperBlock() create a new file")
 	b, err := NewSuperBlock(file)
@@ -246,7 +253,6 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("NewIndexer() error(%v)", err)
 		goto failed
 	}
-	defer os.Remove(ifile)
 	if err = b.Recovery(0, func(rn *Needle, so, eo uint32) (err1 error) {
 		if rn.Flag == NeedleStatusOK {
 			if err1 = indexer.Write(n.Key, so, rn.TotalSize); err1 != nil {

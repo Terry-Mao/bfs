@@ -256,43 +256,38 @@ free:
 
 // Add add a new needle, if key exists append to super block, then update
 // needle cache offset to new offset.
-func (v *Volume) Add(key, cookie int64, data []byte) (err error) {
+func (v *Volume) Add(n *Needle) (err error) {
 	var (
 		now             = time.Now().UnixNano()
 		ok              bool
 		nc              int64
-		size            int32
 		offset, ooffset uint32
-		n               = v.Needle()
 	)
-	if err = n.Parse(key, cookie, data); err != nil {
-		return
-	}
-	size = n.TotalSize
 	v.lock.Lock()
 	offset = v.Block.Offset
 	if err = v.Block.Add(n); err == nil {
-		if err = v.Indexer.Add(key, offset, size); err == nil {
-			nc, ok = v.needles[key]
-			v.needles[key] = NeedleCache(offset, size)
+		if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err == nil {
+			nc, ok = v.needles[n.Key]
+			v.needles[n.Key] = NeedleCache(offset, n.TotalSize)
 		}
 	}
 	v.lock.Unlock()
-	v.FreeNeedle(n)
 	if err != nil {
 		return
 	}
 	if log.V(1) {
-		log.Infof("add needle, offset: %d, size: %d", offset, size)
+		log.Infof("add needle, offset: %d, size: %d", offset, n.TotalSize)
 	}
 	if ok {
 		ooffset, _ = NeedleCacheValue(nc)
-		log.Warningf("same key: %d, old offset: %d, new offset: %d", key,
+		log.Warningf("same key: %d, old offset: %d, new offset: %d", n.Key,
 			ooffset, offset)
-		err = v.asyncDel(ooffset)
+		if err = v.asyncDel(ooffset); err != nil {
+			return
+		}
 	}
 	atomic.AddUint64(&v.Stats.TotalAddProcessed, 1)
-	atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(size))
+	atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(n.TotalSize))
 	atomic.AddUint64(&v.Stats.TotalAddDelay, uint64(time.Now().UnixNano()-now))
 	return
 }
@@ -334,8 +329,7 @@ func (v *Volume) Write(n *Needle) (err error) {
 	}
 	atomic.AddUint64(&v.Stats.TotalWriteProcessed, 1)
 	atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(n.TotalSize))
-	atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-
-		now))
+	atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 	return
 }
 
@@ -346,8 +340,7 @@ func (v *Volume) Flush() (err error) {
 		return
 	}
 	atomic.AddUint64(&v.Stats.TotalFlushProcessed, 1)
-	atomic.AddUint64(&v.Stats.TotalFlushDelay, uint64(time.Now().UnixNano()-
-		now))
+	atomic.AddUint64(&v.Stats.TotalFlushDelay, uint64(time.Now().UnixNano()-now))
 	return
 }
 
@@ -424,8 +417,7 @@ func (v *Volume) del() {
 			}
 			atomic.AddUint64(&v.Stats.TotalDelProcessed, 1)
 			atomic.AddUint64(&v.Stats.TotalWriteBytes, 1)
-			atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(
-				time.Now().UnixNano()-now))
+			atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 		}
 		offsets = offsets[:0]
 	}
@@ -491,8 +483,7 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 				goto failed
 			}
 		}
-		atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(
-			time.Now().UnixNano()-now))
+		atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 	}
 failed:
 	v.Compact = false

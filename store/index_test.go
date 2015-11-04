@@ -16,6 +16,7 @@ func TestIndex(t *testing.T) {
 		needles = make(map[int64]int64)
 		noffset uint32
 	)
+	os.Remove(file)
 	defer os.Remove(file)
 	i, err := NewIndexer(file, 10)
 	if err != nil {

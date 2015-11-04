@@ -21,6 +21,8 @@ func TestVolume(t *testing.T) {
 		ifile  = "./test/test1.idx"
 		n      = &Needle{}
 	)
+	os.Remove(bfile)
+	os.Remove(ifile)
 	defer os.Remove(bfile)
 	defer os.Remove(ifile)
 	offset = 134
@@ -46,12 +48,16 @@ func TestVolume(t *testing.T) {
 	}
 	defer v.FreeBuffer(buf)
 	t.Log("Add(1)")
-	if err = v.Add(1, 1, data); err != nil {
+	if err = n.Parse(1, 1, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		t.FailNow()
+	}
+	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
 	t.Log("Dup Add(1)")
-	if err = v.Add(1, 1, data); err != nil {
+	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
@@ -61,12 +67,20 @@ func TestVolume(t *testing.T) {
 		t.FailNow()
 	}
 	t.Log("Add(2)")
-	if err = v.Add(2, 2, data); err != nil {
+	if err = n.Parse(2, 2, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		t.FailNow()
+	}
+	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
 	t.Log("Add(3)")
-	if err = v.Add(3, 3, data); err != nil {
+	if err = n.Parse(3, 3, data); err != nil {
+		t.Errorf("n.Parse() error(%v)", err)
+		t.FailNow()
+	}
+	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
@@ -124,7 +138,6 @@ func BenchmarkVolumeAdd(b *testing.B) {
 		file  = "./test/testb1"
 		ifile = "./test/testb1.idx"
 		data  = make([]byte, 1*1024)
-		n     = &Needle{}
 	)
 	os.Remove(file)
 	os.Remove(ifile)
@@ -138,19 +151,22 @@ func BenchmarkVolumeAdd(b *testing.B) {
 		b.Errorf("NewVolume() error(%v)", err)
 		b.FailNow()
 	}
-	if err = n.Parse(1, 1, data); err != nil {
-		b.FailNow()
-	}
 	b.SetParallelism(8)
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		var (
 			t    int64
 			err1 error
+			n    = &Needle{}
 		)
+		if err = n.Parse(1, 1, data); err != nil {
+			b.FailNow()
+		}
 		for pb.Next() {
 			t = mrand.Int63()
-			if err1 = v.Add(t, t, data); err1 != nil {
+			n.Key = t
+			n.Cookie = t
+			if err1 = v.Add(n); err1 != nil {
 				b.Errorf("Add() error(%v)", err1)
 				b.FailNow()
 			}
@@ -229,6 +245,7 @@ func BenchmarkVolumeGet(b *testing.B) {
 		file  = "./test/testb3"
 		ifile = "./test/testb3.idx"
 		data  = make([]byte, 1*1024)
+		n     = &Needle{}
 	)
 	defer os.Remove(file)
 	defer os.Remove(ifile)
@@ -241,9 +258,15 @@ func BenchmarkVolumeGet(b *testing.B) {
 		b.FailNow()
 	}
 	defer v.Close()
+	if err = n.Parse(1, 1, data); err != nil {
+		b.Errorf("n.Parse() error(%v)", err)
+		b.FailNow()
+	}
 	for i = 0; i < 1000000; i++ {
 		t = int64(i)
-		if err = v.Add(t, t, data); err != nil {
+		n.Key = t
+		n.Cookie = t
+		if err = v.Add(n); err != nil {
 			b.Errorf("Add() error(%v)", err)
 			b.FailNow()
 		}

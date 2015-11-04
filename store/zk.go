@@ -10,6 +10,18 @@ import (
 	"time"
 )
 
+// zookeeper save the store meta data.
+//
+//                                 /rack -- rack root path
+//									 |
+//                   /rack-a -------- --------- /rack-b -- rack node path
+//                     |
+//         /store-a -------- /store-b -- store node path (data: {"stat":"localhost:6061","admin":"localhost:6063","api":"localhost:6062",status:0})
+//            |                 |
+// /volume-1 -                   - /volume-4 volume node path (data: /tmp/block_1,/tmp/block_1.idx,1)
+// /volume-2 -                   - /volume-5
+// /volume-3 -                   - /volume-6
+
 const (
 	// addrs & status
 	storeDataJson = "{\"stat\":\"%s\",\"admin\":\"%s\",\"api\":\"%s\",status:0}"
