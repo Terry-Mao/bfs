@@ -222,11 +222,11 @@ func BenchmarkVolumeWrite(b *testing.B) {
 					v.Unlock()
 					b.FailNow()
 				}
-				if err1 = v.Flush(); err1 != nil {
-					b.Errorf("Flush() error(%v)", err1)
-					v.Unlock()
-					b.FailNow()
-				}
+			}
+			if err1 = v.Flush(); err1 != nil {
+				b.Errorf("Flush() error(%v)", err1)
+				v.Unlock()
+				b.FailNow()
 			}
 			v.Unlock()
 			b.SetBytes(int64(n.TotalSize) * 9)
