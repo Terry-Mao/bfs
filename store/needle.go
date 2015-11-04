@@ -56,7 +56,8 @@ const (
 	// so a uint32 can store 4GB * 8 offset
 	// if you want a block much more larger, modify this constant, but must
 	// bigger than 8
-	NeedlePaddingSize = 8
+	NeedlePaddingSize  = 8
+	needlePaddingAlign = NeedlePaddingSize - 1
 	// flags
 	NeedleStatusOK  = byte(0)
 	NeedleStatusDel = byte(1)
@@ -125,7 +126,7 @@ func (n *Needle) ParseHeader(buf []byte) (err error) {
 		return
 	}
 	n.TotalSize = NeedleHeaderSize + n.Size + NeedleFooterSize
-	n.PaddingSize = NeedlePaddingSize - (n.TotalSize % NeedlePaddingSize)
+	n.PaddingSize = needleAlign(n.TotalSize) - n.TotalSize
 	n.TotalSize += n.PaddingSize
 	n.DataSize = int(n.Size + n.PaddingSize + NeedleFooterSize)
 	return
@@ -185,7 +186,7 @@ Padding:        %v
 func (n *Needle) Parse(key, cookie int64, data []byte) (err error) {
 	var dataSize = int32(len(data))
 	n.TotalSize = int32(NeedleHeaderSize + dataSize + NeedleFooterSize)
-	n.PaddingSize = NeedlePaddingSize - (n.TotalSize % NeedlePaddingSize)
+	n.PaddingSize = needleAlign(n.TotalSize) - n.TotalSize
 	n.TotalSize += n.PaddingSize
 	if n.TotalSize > NeedleMaxSize {
 		err = ErrNeedleTooLarge
@@ -280,4 +281,9 @@ func (n *Needle) Fill(buf []byte) {
 // NeedleOffset convert offset to needle offset.
 func NeedleOffset(offset int64) uint32 {
 	return uint32(offset / NeedlePaddingSize)
+}
+
+// needleAlign get align size
+func needleAlign(d int32) int32 {
+	return (d + needlePaddingAlign) & ^needlePaddingAlign
 }
