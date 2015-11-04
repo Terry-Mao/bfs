@@ -267,8 +267,10 @@ func (v *Volume) Add(n *Needle) (err error) {
 	offset = v.Block.Offset
 	if err = v.Block.Add(n); err == nil {
 		if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err == nil {
-			nc, ok = v.needles[n.Key]
-			v.needles[n.Key] = NeedleCache(offset, n.TotalSize)
+			if err = v.Flush(); err == nil {
+				nc, ok = v.needles[n.Key]
+				v.needles[n.Key] = NeedleCache(offset, n.TotalSize)
+			}
 		}
 	}
 	v.lock.Unlock()
