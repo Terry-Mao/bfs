@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/Terry-Mao/bfs/store/errors"
 	log "github.com/golang/glog"
 	"net/http"
 	"strconv"
@@ -35,10 +36,10 @@ func (h httpBulkVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request
 	var (
 		ok           bool
 		err          error
-		storeErr     StoreError
+		storeErr     errors.StoreError
 		vid          int64
 		bfile, ifile string
-		res          = map[string]interface{}{"ret": RetOK}
+		res          = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
@@ -50,14 +51,14 @@ func (h httpBulkVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request
 	if vid, err = strconv.ParseInt(r.FormValue("vid"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("vid"),
 			err)
-		res["ret"] = RetParamErr
+		res["ret"] = errors.RetParamErr
 		return
 	}
 	if err = h.s.BulkVolume(int32(vid), bfile, ifile); err != nil {
-		if storeErr, ok = err.(StoreError); ok {
+		if storeErr, ok = err.(errors.StoreError); ok {
 			res["ret"] = int(storeErr)
 		} else {
-			res["ret"] = RetInternalErr
+			res["ret"] = errors.RetInternalErr
 		}
 	}
 	return
@@ -72,7 +73,7 @@ func (h httpCompactVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 	var (
 		err error
 		vid int64
-		res = map[string]interface{}{"ret": RetOK}
+		res = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
@@ -82,7 +83,7 @@ func (h httpCompactVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 	if vid, err = strconv.ParseInt(r.FormValue("vid"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("vid"),
 			err)
-		res["ret"] = RetParamErr
+		res["ret"] = errors.RetParamErr
 		return
 	}
 	// long time processing, not block, we can from info stat api get status.
@@ -91,7 +92,7 @@ func (h httpCompactVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 			log.Errorf("s.CompactVolume() error(%v)", err)
 		}
 	}()
-	res["ret"] = RetOK
+	res["ret"] = errors.RetOK
 	return
 }
 
@@ -104,9 +105,9 @@ func (h httpAddVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request)
 	var (
 		ok       bool
 		err      error
-		storeErr StoreError
+		storeErr errors.StoreError
 		vid      int64
-		res      = map[string]interface{}{"ret": RetOK}
+		res      = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
@@ -116,14 +117,14 @@ func (h httpAddVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request)
 	if vid, err = strconv.ParseInt(r.FormValue("vid"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("vid"),
 			err)
-		res["ret"] = RetParamErr
+		res["ret"] = errors.RetParamErr
 		return
 	}
 	if _, err = h.s.AddVolume(int32(vid)); err != nil {
-		if storeErr, ok = err.(StoreError); ok {
+		if storeErr, ok = err.(errors.StoreError); ok {
 			res["ret"] = int(storeErr)
 		} else {
-			res["ret"] = RetInternalErr
+			res["ret"] = errors.RetInternalErr
 		}
 	}
 	return
@@ -137,12 +138,12 @@ type httpAddFreeVolumeHandler struct {
 func (h httpAddFreeVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		ok         bool
-		storeErr   StoreError
+		storeErr   errors.StoreError
 		err        error
 		sn         int
 		n          int64
 		bdir, idir string
-		res        = map[string]interface{}{"ret": RetOK}
+		res        = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
@@ -153,14 +154,14 @@ func (h httpAddFreeVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 	if n, err = strconv.ParseInt(r.FormValue("n"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("vid"),
 			err)
-		res["ret"] = RetParamErr
+		res["ret"] = errors.RetParamErr
 		return
 	}
 	if sn, err = h.s.AddFreeVolume(int(n), bdir, idir); err != nil {
-		if storeErr, ok = err.(StoreError); ok {
+		if storeErr, ok = err.(errors.StoreError); ok {
 			res["ret"] = int(storeErr)
 		} else {
-			res["ret"] = RetInternalErr
+			res["ret"] = errors.RetInternalErr
 		}
 	}
 	res["succeed"] = sn

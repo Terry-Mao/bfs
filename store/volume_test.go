@@ -2,7 +2,8 @@ package main
 
 import (
 	"crypto/rand"
-	"fmt"
+	"github.com/Terry-Mao/bfs/store/errors"
+	"github.com/Terry-Mao/bfs/store/needle"
 	mrand "math/rand"
 	"os"
 	"testing"
@@ -10,121 +11,75 @@ import (
 
 func TestVolume(t *testing.T) {
 	var (
-		v      *Volume
-		nc     int64
-		err    error
-		offset uint32
-		size   int32
-		data   = []byte("test")
-		buf    []byte
-		bfile  = "./test/test1"
-		ifile  = "./test/test1.idx"
-		n      = &Needle{}
+		v     *Volume
+		err   error
+		data  = []byte("test")
+		buf   []byte
+		bfile = "./test/test1"
+		ifile = "./test/test1.idx"
+		n     = &needle.Needle{}
 	)
 	os.Remove(bfile)
 	os.Remove(ifile)
 	defer os.Remove(bfile)
 	defer os.Remove(ifile)
-	offset = 134
-	size = 1064
-	t.Log("NeedleCache")
-	nc = NeedleCache(offset, size)
-	if offset, size = NeedleCacheValue(nc); offset != 134 || size != 1064 {
-		err = fmt.Errorf("NeedlecacheValue() not match")
-		t.Error(err)
-		t.FailNow()
-	}
-	t.Log("NewVolume()")
-	if v, err = NewVolume(1, bfile, ifile); err != nil {
+	if v, err = NewVolume(1, bfile, ifile, testConf); err != nil {
 		t.Errorf("NewVolume() error(%v)", err)
 		t.FailNow()
 	}
+	v.Close()
+	// test open
+	if err = v.Open(); err != nil {
+		t.Errorf("Open() error(%v)", err)
+		t.FailNow()
+	}
 	defer v.Close()
-	t.Log("Buffer()")
-	if buf = v.Buffer(); len(buf) != NeedleMaxSize {
-		err = fmt.Errorf("buf size: %d not match %d", len(buf), NeedleMaxSize)
-		t.Error(err)
-		t.FailNow()
-	}
-	defer v.FreeBuffer(buf)
-	t.Log("Add(1)")
-	if err = n.Parse(1, 1, data); err != nil {
-		t.Errorf("n.Parse() error(%v)", err)
+	buf = v.Buffer(1)
+	defer v.FreeBuffer(1, buf)
+	n.Parse(1, 1, data)
+	if err = v.Add(n); err != nil {
+		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
 	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	t.Log("Dup Add(1)")
+	n.Parse(2, 2, data)
 	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	if o, s := NeedleCacheValue(v.needles[1]); o != 6 && s != 40 {
-		err = fmt.Errorf("needle.Value(1) not match")
-		t.Error(err)
-		t.FailNow()
-	}
-	t.Log("Add(2)")
-	if err = n.Parse(2, 2, data); err != nil {
-		t.Errorf("n.Parse() error(%v)", err)
-		t.FailNow()
-	}
+	n.Parse(3, 3, data)
 	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	t.Log("Add(3)")
-	if err = n.Parse(3, 3, data); err != nil {
-		t.Errorf("n.Parse() error(%v)", err)
-		t.FailNow()
-	}
-	if err = v.Add(n); err != nil {
-		t.Errorf("Add() error(%v)", err)
-		t.FailNow()
-	}
-	t.Log("Write(4)")
-	if err = n.Parse(4, 4, data); err != nil {
-		t.Errorf("n.Parse() error(%v)", err)
-		t.FailNow()
-	}
+	n.Parse(4, 4, data)
 	if err = v.Write(n); err != nil {
 		t.Errorf("Write() error(%v)", err)
 		t.FailNow()
 	}
-	t.Log("Write(5)")
-	if err = n.Parse(5, 5, data); err != nil {
-		t.Errorf("n.Parse() error(%v)", err)
-		t.FailNow()
-	}
+	n.Parse(5, 5, data)
 	if err = v.Write(n); err != nil {
 		t.Errorf("Write() error(%v)", err)
 		t.FailNow()
 	}
-	t.Log("Write(6)")
-	if err = n.Parse(6, 6, data); err != nil {
-		t.Errorf("n.Parse() error(%v)", err)
-		t.FailNow()
-	}
+	n.Parse(6, 6, data)
 	if err = v.Write(n); err != nil {
 		t.Errorf("Write() error(%v)", err)
 		t.FailNow()
 	}
-	t.Log("Flush")
 	if err = v.Flush(); err != nil {
 		t.Errorf("Flush() error(%v)", err)
 		t.FailNow()
 	}
-	t.Log("Del(3)")
 	if err = v.Del(3); err != nil {
 		t.Errorf("Del error(%v)", err)
 		t.FailNow()
 	}
-	t.Log("Get(3)")
-	if _, err = v.Get(3, 3, buf); err != ErrNeedleDeleted {
-		err = fmt.Errorf("err must be ErrNeedleDeleted")
-		t.Error(err)
+	if _, err = v.Get(3, 3, buf); err != errors.ErrNeedleDeleted {
+		t.Error("err must be ErrNeedleDeleted")
 		t.FailNow()
 	} else {
 		err = nil
@@ -147,7 +102,7 @@ func BenchmarkVolumeAdd(b *testing.B) {
 		b.Errorf("rand.Read() error(%v)", err)
 		b.FailNow()
 	}
-	if v, err = NewVolume(1, file, ifile); err != nil {
+	if v, err = NewVolume(1, file, ifile, testConf); err != nil {
 		b.Errorf("NewVolume() error(%v)", err)
 		b.FailNow()
 	}
@@ -157,15 +112,12 @@ func BenchmarkVolumeAdd(b *testing.B) {
 		var (
 			t    int64
 			err1 error
-			n    = &Needle{}
+			n    = &needle.Needle{}
 		)
-		if err = n.Parse(1, 1, data); err != nil {
-			b.FailNow()
-		}
+		n.Parse(1, 1, data)
 		for pb.Next() {
 			t = mrand.Int63()
 			n.Key = t
-			n.Cookie = t
 			if err1 = v.Add(n); err1 != nil {
 				b.Errorf("Add() error(%v)", err1)
 				b.FailNow()
@@ -194,7 +146,7 @@ func BenchmarkVolumeWrite(b *testing.B) {
 		b.Errorf("rand.Read() error(%v)", err)
 		b.FailNow()
 	}
-	if v, err = NewVolume(1, file, ifile); err != nil {
+	if v, err = NewVolume(1, file, ifile, testConf); err != nil {
 		b.Errorf("NewVolume() error(%v)", err)
 		b.FailNow()
 	}
@@ -205,18 +157,14 @@ func BenchmarkVolumeWrite(b *testing.B) {
 		var (
 			t    int64
 			err1 error
-			n    = &Needle{}
+			n    = &needle.Needle{}
 		)
-		if err1 = n.Parse(t, t, data); err1 != nil {
-			b.Errorf("n.Parse() error(%v)", err1)
-			b.FailNow()
-		}
+		n.Parse(t, 1, data)
 		for pb.Next() {
 			v.Lock()
 			for i = 0; i < 9; i++ {
 				t = mrand.Int63()
 				n.Key = t
-				n.Cookie = t
 				if err1 = v.Write(n); err1 != nil {
 					b.Errorf("Add() error(%v)", err1)
 					v.Unlock()
@@ -245,7 +193,7 @@ func BenchmarkVolumeGet(b *testing.B) {
 		file  = "./test/testb3"
 		ifile = "./test/testb3.idx"
 		data  = make([]byte, 16777183) // 16kb
-		n     = &Needle{}
+		n     = &needle.Needle{}
 	)
 	defer os.Remove(file)
 	defer os.Remove(ifile)
@@ -253,19 +201,15 @@ func BenchmarkVolumeGet(b *testing.B) {
 		b.Errorf("rand.Read() error(%v)", err)
 		b.FailNow()
 	}
-	if v, err = NewVolume(1, file, ifile); err != nil {
+	if v, err = NewVolume(1, file, ifile, testConf); err != nil {
 		b.Errorf("NewVolume() error(%v)", err)
 		b.FailNow()
 	}
 	defer v.Close()
-	if err = n.Parse(1, 1, data); err != nil {
-		b.Errorf("n.Parse() error(%v)", err)
-		b.FailNow()
-	}
+	n.Parse(1, 1, data)
 	for i = 0; i < 1000000; i++ {
 		t = int64(i)
 		n.Key = t
-		n.Cookie = t
 		if err = v.Add(n); err != nil {
 			b.Errorf("Add() error(%v)", err)
 			b.FailNow()
@@ -275,11 +219,11 @@ func BenchmarkVolumeGet(b *testing.B) {
 	b.ResetTimer()
 	b.SetParallelism(8)
 	b.RunParallel(func(pb *testing.PB) {
-		var buf = make([]byte, NeedleMaxSize)
+		var buf = make([]byte, testConf.BatchMaxNum*testConf.NeedleMaxSize)
 		var err1 error
 		for pb.Next() {
 			t1 := mrand.Int63n(1000000)
-			if _, err1 = v.Get(t1, t1, buf); err1 != nil {
+			if _, err1 = v.Get(t1, 1, buf); err1 != nil {
 				b.Errorf("Get(%d) error(%v)", t1, err1)
 				b.FailNow()
 			}

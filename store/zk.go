@@ -24,7 +24,7 @@ import (
 
 const (
 	// addrs & status
-	storeDataJson = "{\"stat\":\"%s\",\"admin\":\"%s\",\"api\":\"%s\",status:0}"
+	storeDataJson = "{\"stat\":\"%s\",\"admin\":\"%s\",\"api\":\"%s\",\"status\":0}"
 )
 
 type Zookeeper struct {

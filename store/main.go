@@ -11,7 +11,7 @@ var (
 )
 
 func init() {
-	flag.StringVar(&configFile, "c", "./store.yaml", "set config file path")
+	flag.StringVar(&configFile, "c", "./store.conf", " set store config file path")
 }
 
 func main() {
@@ -29,22 +29,21 @@ func main() {
 		log.Errorf("NewConfig(\"%s\") error(%v)", configFile, err)
 		return
 	}
-	if c.Pprof.Enable {
-		StartPprof(c.Pprof.Addr)
-	}
-	fpath = path.Join(c.Zookeeper.Root, c.ServerId)
-	log.V(1).Infof("zookeeper path: %s", fpath)
-	if z, err = NewZookeeper(c.Zookeeper.Addrs, c.Zookeeper.Timeout, fpath); err != nil {
+	fpath = path.Join(c.ZookeeperRoot, c.Rack, c.ServerId)
+	if z, err = NewZookeeper(c.ZookeeperAddrs, c.ZookeeperTimeout, fpath); err != nil {
 		return
 	}
-	if s, err = NewStore(z, c.Index); err != nil {
-		log.Errorf("store init error(%v)", err)
+	if s, err = NewStore(z, c); err != nil {
 		return
 	}
-	StartStat(s, c.Stat)
-	StartApi(s, c.Api)
-	StartAdmin(s, c.Admin)
-	if err = z.SetStore(c.Stat, c.Admin, c.Api); err != nil {
+	StartStat(s, c.StatListen)
+	StartApi(s, c.ApiListen)
+	StartAdmin(s, c.AdminListen)
+	if c.PprofEnable {
+		StartPprof(c.PprofListen)
+	}
+	// update zk store meta
+	if err = z.SetStore(c.StatListen, c.AdminListen, c.ApiListen); err != nil {
 		log.Errorf("zk.SetStore() error(%v)", err)
 		return
 	}

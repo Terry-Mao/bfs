@@ -1,4 +1,4 @@
-package main
+package errors
 
 const (
 	// common
@@ -15,8 +15,10 @@ const (
 	RetSuperBlockPadding    = 3002
 	RetSuperBlockNoSpace    = 3003
 	RetSuperBlockRepairSize = 3004
+	RetSuperBlockClosed     = 3005
 	// index
-	RetIndexSize = 4000
+	RetIndexSize   = 4000
+	RetIndexClosed = 4001
 	// needle
 	RetNeedleExist       = 5000
 	RetNoNeedle          = 5001
@@ -41,6 +43,8 @@ const (
 	RetVolumeNotExist  = 8001
 	RetVolumeDel       = 8002
 	RetVolumeInCompact = 8003
+	RetVolumeClosed    = 8004
+	RetVolumeBatch     = 8005
 )
 
 type StoreError int
@@ -56,8 +60,10 @@ var (
 	ErrSuperBlockPadding    = StoreError(RetSuperBlockPadding)
 	ErrSuperBlockNoSpace    = StoreError(RetSuperBlockNoSpace)
 	ErrSuperBlockRepairSize = StoreError(RetSuperBlockRepairSize)
+	ErrSuperBlockClosed     = StoreError(RetSuperBlockClosed)
 	// index
-	ErrIndexSize = StoreError(RetIndexSize)
+	ErrIndexSize   = StoreError(RetIndexSize)
+	ErrIndexClosed = StoreError(RetIndexClosed)
 	// needle
 	ErrNeedleExist       = StoreError(RetNeedleExist)
 	ErrNoNeedle          = StoreError(RetNoNeedle)
@@ -82,6 +88,8 @@ var (
 	ErrVolumeNotExist  = StoreError(RetVolumeNotExist)
 	ErrVolumeDel       = StoreError(RetVolumeDel)
 	ErrVolumeInCompact = StoreError(RetVolumeInCompact)
+	ErrVolumeClosed    = StoreError(RetVolumeClosed)
+	ErrVolumeBatch     = StoreError(RetVolumeBatch)
 )
 
 var (
@@ -94,8 +102,10 @@ var (
 		RetSuperBlockPadding:    "super block padding not match",
 		RetSuperBlockNoSpace:    "super block no left free space",
 		RetSuperBlockRepairSize: "super block repair size must equal original",
+		RetSuperBlockClosed:     "super block closed",
 		// index
-		RetIndexSize: "index size error",
+		RetIndexSize:   "index size error",
+		RetIndexClosed: "index closed",
 		// needle
 		RetNeedleExist:       "needle already exist",
 		RetNoNeedle:          "needle not exist",
@@ -120,5 +130,7 @@ var (
 		RetVolumeNotExist:  "volume not exist",
 		RetVolumeDel:       "volume deleted",
 		RetVolumeInCompact: "volume in compacting",
+		RetVolumeClosed:    "volume closed",
+		RetVolumeBatch:     "volume exceed batch write number",
 	}
 )

@@ -1,6 +1,7 @@
-package main
+package index
 
 import (
+	"github.com/Terry-Mao/bfs/store/errors"
 	"testing"
 )
 
@@ -28,7 +29,7 @@ func TestRing(t *testing.T) {
 	p2.Key = 12
 	r.SetAdv()
 	p3, err := r.Set()
-	if err != ErrRingFull || p3 != nil {
+	if err != errors.ErrRingFull || p3 != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -51,7 +52,7 @@ func TestRing(t *testing.T) {
 	}
 	r.GetAdv()
 	p3, err = r.Get()
-	if err != ErrRingEmpty || p3 != nil {
+	if err != errors.ErrRingEmpty || p3 != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -77,7 +78,7 @@ func TestRing(t *testing.T) {
 	p2.Key = 12
 	r.SetAdv()
 	p3, err = r.Set()
-	if err != ErrRingFull || p3 != nil {
+	if err != errors.ErrRingFull || p3 != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -100,7 +101,7 @@ func TestRing(t *testing.T) {
 	}
 	r.GetAdv()
 	p3, err = r.Get()
-	if err != ErrRingEmpty || p3 != nil {
+	if err != errors.ErrRingEmpty || p3 != nil {
 		t.Error(err)
 		t.FailNow()
 	}

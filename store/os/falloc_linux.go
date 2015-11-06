@@ -1,5 +1,5 @@
 // +build linux
-package main
+package os
 
 import (
 	"syscall"

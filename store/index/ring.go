@@ -1,4 +1,8 @@
-package main
+package index
+
+import (
+	"github.com/Terry-Mao/bfs/store/errors"
+)
 
 type Ring struct {
 	// read
@@ -28,7 +32,7 @@ func InitRing(r *Ring, num int) {
 
 func (r *Ring) Get() (index *Index, err error) {
 	if r.wn == r.rn {
-		return nil, ErrRingEmpty
+		return nil, errors.ErrRingEmpty
 	}
 	index = &r.data[r.rp]
 	return
@@ -46,7 +50,7 @@ func (r *Ring) GetAdv() {
 
 func (r *Ring) Set() (index *Index, err error) {
 	if r.Buffered() >= r.num {
-		return nil, ErrRingFull
+		return nil, errors.ErrRingFull
 	}
 	index = &r.data[r.wp]
 	return

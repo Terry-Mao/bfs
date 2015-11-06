@@ -1,11 +1,15 @@
-package main
+package index
 
 import (
 	"bufio"
 	"fmt"
+	"github.com/Terry-Mao/bfs/store/encoding/binary"
+	"github.com/Terry-Mao/bfs/store/errors"
+	myos "github.com/Terry-Mao/bfs/store/os"
 	log "github.com/golang/glog"
 	"io"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -31,32 +35,38 @@ import (
 
 const (
 	// signal command
-	signalNum  = 1
-	indexReady = 1
+	ready = 1
 	// index size
-	indexKeySize    = 8
-	indexOffsetSize = 4
-	indexSizeSize   = 4
-	indexSize       = indexKeySize + indexOffsetSize + indexSizeSize
+	keySize    = 8
+	offsetSize = 4
+	sizeSize   = 4
+	// constant 16
+	indexSize = keySize + offsetSize + sizeSize
 	// index offset
-	indexKeyOffset    = 0
-	indexOffsetOffset = indexKeyOffset + indexKeySize
-	indexSizeOffset   = indexOffsetOffset + indexOffsetSize
-
-	indexMaxSize        = 100 * 1024 * 1024 // 100mb
-	indexSignalDuration = time.Second * 30
+	keyOffset    = 0
+	offsetOffset = keyOffset + keySize
+	sizeOffset   = offsetOffset + offsetSize
+	// 100mb
+	fallocSize = 100 * 1024 * 1024
 )
 
 // Indexer used for fast recovery super block needle cache.
 type Indexer struct {
-	f          *os.File
-	bw         *bufio.Writer
-	sigNum     int
-	signal     chan int
-	ring       *Ring
-	File       string `json:"file"`
-	LastErr    error  `json:"last_err"`
-	signalTime time.Time
+	wg sync.WaitGroup
+	f  *os.File
+	// buf
+	bw  *bufio.Writer
+	buf int
+	// signal
+	sigNum  int
+	sigIdle time.Duration
+	signal  chan int
+	// index ring buffer
+	ring    *Ring
+	File    string `json:"file"`
+	LastErr error  `json:"last_err"`
+	// status
+	closed bool
 }
 
 // Index index data.
@@ -68,9 +78,9 @@ type Index struct {
 
 // parse parse buffer into indexer.
 func (i *Index) parse(buf []byte) {
-	i.Key = BigEndian.Int64(buf)
-	i.Offset = BigEndian.Uint32(buf[indexOffsetOffset:])
-	i.Size = BigEndian.Int32(buf[indexSizeOffset:])
+	i.Key = binary.BigEndian.Int64(buf)
+	i.Offset = binary.BigEndian.Uint32(buf[offsetOffset:])
+	i.Size = binary.BigEndian.Int32(buf[sizeOffset:])
 	return
 }
 
@@ -81,19 +91,19 @@ Key:            %d
 Offset:         %d
 Size:           %d
 -----------------------------
-	`, i.Key, i.Offset, i.Size)
+`, i.Key, i.Offset, i.Size)
 }
 
 // NewIndexer new a indexer for async merge index data to disk.
-func NewIndexer(file string, ring int) (i *Indexer, err error) {
-	var (
-		stat os.FileInfo
-	)
+func NewIndexer(file string, idle time.Duration, ring, sig, buf int) (i *Indexer, err error) {
+	var stat os.FileInfo
 	i = &Indexer{}
-	i.signal = make(chan int, signalNum)
+	i.closed = false
+	i.signal = make(chan int, 1)
 	i.ring = NewRing(ring)
-	i.sigNum = ring / 2
-	i.signalTime = time.Now()
+	i.sigNum = sig
+	i.sigIdle = idle
+	i.buf = buf
 	i.File = file
 	if i.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
@@ -105,46 +115,34 @@ func NewIndexer(file string, ring int) (i *Indexer, err error) {
 	}
 	if stat.Size() == 0 {
 		// falloc(FALLOC_FL_KEEP_SIZE)
-		if err = Fallocate(i.f.Fd(), 1, 0, indexMaxSize); err != nil {
-			log.Errorf("Fallocate(i.f.Fd(), 1, 0, 100MB) error(err)", err)
+		if err = myos.Fallocate(i.f.Fd(), 1, 0, fallocSize); err != nil {
+			log.Errorf("index: %s fallocate() error(err)", i.File, err)
 			return
 		}
 	}
-	i.bw = bufio.NewWriterSize(i.f, NeedleMaxSize)
+	i.bw = bufio.NewWriterSize(i.f, buf)
+	i.wg.Add(1)
 	go i.write()
 	return
 }
 
-// Open open the closed indexer, must called after NewIndexer.
-func (i *Indexer) Open() (err error) {
-	i.signal = make(chan int, signalNum)
-	if i.f, err = os.OpenFile(i.File, os.O_RDWR|os.O_CREATE, 0664); err !=
-		nil {
-		log.Errorf("os.OpenFile(\"%s\") error(%v)", i.File, err)
+// Signal signal the write job merge index data.
+func (i *Indexer) Signal() {
+	if i.closed {
 		return
 	}
-	i.bw.Reset(i.f)
-	go i.write()
-	return
+	select {
+	case i.signal <- ready:
+	default:
+	}
 }
 
 // Add append a index data to ring.
 func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
-	var (
-		index *Index
-		now   time.Time
-	)
+	var index *Index
 	if i.LastErr != nil {
 		err = i.LastErr
 		return
-	}
-	now = time.Now()
-	if i.ring.Buffered() > i.sigNum || now.Sub(i.signalTime) > indexSignalDuration {
-		select {
-		case i.signal <- indexReady:
-			i.signalTime = now
-		default:
-		}
 	}
 	if index, err = i.ring.Set(); err != nil {
 		i.LastErr = err
@@ -154,6 +152,10 @@ func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 	index.Offset = offset
 	index.Size = size
 	i.ring.SetAdv()
+	// signal
+	if i.ring.Buffered() > i.sigNum {
+		i.Signal()
+	}
 	return
 }
 
@@ -165,15 +167,15 @@ func (i *Indexer) Write(key int64, offset uint32, size int32) (err error) {
 		err = i.LastErr
 		return
 	}
-	if err = BigEndian.WriteInt64(i.bw, key); err != nil {
+	if err = binary.BigEndian.WriteInt64(i.bw, key); err != nil {
 		i.LastErr = err
 		return
 	}
-	if err = BigEndian.WriteUint32(i.bw, offset); err != nil {
+	if err = binary.BigEndian.WriteUint32(i.bw, offset); err != nil {
 		i.LastErr = err
 		return
 	}
-	if err = BigEndian.WriteInt32(i.bw, size); err != nil {
+	if err = binary.BigEndian.WriteInt32(i.bw, size); err != nil {
 		i.LastErr = err
 	}
 	return
@@ -217,9 +219,15 @@ func (i *Indexer) merge() (err error) {
 func (i *Indexer) write() {
 	var (
 		err error
+		sig int
 	)
 	for {
-		if !((<-i.signal) == indexReady) {
+		select {
+		case sig = <-i.signal:
+		case <-time.After(i.sigIdle):
+			sig = ready
+		}
+		if sig != ready {
 			break
 		}
 		if err = i.merge(); err != nil {
@@ -237,6 +245,8 @@ func (i *Indexer) write() {
 	if err = i.f.Close(); err != nil {
 		log.Errorf("index: %s Close() error(%v)", i.File, err)
 	}
+	log.Warningf("index: %s write job exit", i.File)
+	i.wg.Done()
 	return
 }
 
@@ -245,7 +255,7 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 	var (
 		data []byte
 		ix   = &Index{}
-		rd   = bufio.NewReaderSize(r, NeedleMaxSize)
+		rd   = bufio.NewReaderSize(r, i.buf)
 	)
 	log.Infof("scan index: %s", i.File)
 	if _, err = r.Seek(0, os.SEEK_SET); err != nil {
@@ -257,17 +267,13 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 			break
 		}
 		ix.parse(data)
-		if ix.Size > NeedleMaxSize || ix.Size < 1 {
-			log.Errorf("index parse size: %d error", ix.Size)
-			err = ErrIndexSize
-			break
-		}
 		if _, err = rd.Discard(indexSize); err != nil {
 			break
 		}
 		if log.V(1) {
 			log.Info(ix.String())
 		}
+		// TODO check size
 		if err = fn(ix); err != nil {
 			break
 		}
@@ -299,8 +305,31 @@ func (i *Indexer) Recovery(fn func(*Index) error) (err error) {
 	return
 }
 
+// Open open the closed indexer, must called after NewIndexer.
+func (i *Indexer) Open() (err error) {
+	if i.closed {
+		i.signal = make(chan int, 1)
+		if i.f, err = os.OpenFile(i.File, os.O_RDWR, 0664); err != nil {
+			log.Errorf("os.OpenFile(\"%s\") error(%v)", i.File, err)
+			return
+		}
+		i.bw.Reset(i.f)
+		i.closed = false
+		i.LastErr = nil
+		i.wg.Add(1)
+		go i.write()
+	}
+	return
+}
+
 // Close close the indexer file.
 func (i *Indexer) Close() {
-	close(i.signal)
+	if !i.closed {
+		close(i.signal)
+		// wait write goroutine exit
+		i.wg.Wait()
+		i.closed = true
+		i.LastErr = errors.ErrIndexClosed
+	}
 	return
 }
