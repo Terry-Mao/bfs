@@ -36,9 +36,9 @@ func main() {
 	if s, err = NewStore(z, c); err != nil {
 		return
 	}
-	StartStat(s, c.StatListen)
-	StartApi(s, c.ApiListen)
-	StartAdmin(s, c.AdminListen)
+	StartStat(c.StatListen, s)
+	StartApi(c.ApiListen, s, c)
+	StartAdmin(c.AdminListen, s)
 	if c.PprofEnable {
 		StartPprof(c.PprofListen)
 	}

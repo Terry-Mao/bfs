@@ -52,7 +52,7 @@ func TestHTTPAPI(t *testing.T) {
 
 	}
 	defer s.Close()
-	StartAdmin(s, "localhost:6064")
+	StartAdmin("localhost:6064", s)
 	time.Sleep(1 * time.Second)
 	buf.Reset()
 	buf.WriteString("n=1&bdir=./test/&idir=./test/")
@@ -92,7 +92,7 @@ func TestHTTPAPI(t *testing.T) {
 	if tr.Ret != 1 {
 		t.FailNow()
 	}
-	StartApi(s, "localhost:6062")
+	StartApi("localhost:6062", s, testConf)
 	time.Sleep(1 * time.Second)
 	buf.Reset()
 	w = multipart.NewWriter(buf)

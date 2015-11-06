@@ -12,7 +12,7 @@ const (
 	statDuration = 1 * time.Second
 )
 
-func StartStat(s *Store, addr string) {
+func StartStat(addr string, s *Store) {
 	var info = &stat.Info{
 		Ver:       Ver,
 		GitSHA1:   GitSHA1,

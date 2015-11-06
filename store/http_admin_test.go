@@ -47,7 +47,7 @@ func TestHTTPAdmin(t *testing.T) {
 
 	}
 	defer s.Close()
-	StartAdmin(s, "localhost:6063")
+	StartAdmin("localhost:6063", s)
 	time.Sleep(1 * time.Second)
 	buf.Reset()
 	buf.WriteString("n=2&bdir=./test/&idir=./test/")

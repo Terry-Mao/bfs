@@ -9,7 +9,7 @@ import (
 )
 
 // StartAdmin start admin http listen.
-func StartAdmin(s *Store, addr string) {
+func StartAdmin(addr string, s *Store) {
 	go func() {
 		var (
 			err      error

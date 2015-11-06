@@ -7,12 +7,6 @@ import (
 	"time"
 )
 
-const (
-	HttpMaxUploadFiles = 9
-	HttpMaxDelFiles    = 9
-	HttpParamSpliter   = ","
-)
-
 func HttpPostWriter(r *http.Request, wr http.ResponseWriter, start time.Time,
 	result map[string]interface{}) {
 	var (

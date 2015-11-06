@@ -179,14 +179,6 @@ func (v *Volume) ValidNeedle(n *needle.Needle) (err error) {
 	return
 }
 
-// ValidBatch check the batch write number ok or not.
-func (v *Volume) ValidBatch(n int) (err error) {
-	if n > v.conf.BatchMaxNum {
-		err = errors.ErrVolumeBatch
-	}
-	return
-}
-
 // Get get a needle by key and cookie.
 func (v *Volume) Get(key int64, cookie int32, buf []byte) (data []byte, err error) {
 	var (
