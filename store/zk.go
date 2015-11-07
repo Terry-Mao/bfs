@@ -106,16 +106,15 @@ func (z *Zookeeper) Volumes() (lines []string, err error) {
 	return
 }
 
+func (z *Zookeeper) volumePath(id int32) string {
+	return path.Join(z.fpath, strconv.Itoa(int(id)))
+}
+
 // AddVolume add a volume data in zk.
-func (z *Zookeeper) AddVolume(id int32, bfile, ifile string) (err error) {
-	var (
-		d     = fmt.Sprintf("%s,%s,%d", bfile, ifile, id)
-		dpath = path.Join(z.fpath, strconv.Itoa(int(id)))
-	)
-	if _, err = z.c.Create(dpath, []byte(d), 0, zk.WorldACL(
-		zk.PermAll)); err != nil {
-		log.Errorf("zk.Create(\"%s\") error(%v)", dpath, err)
-		return
+func (z *Zookeeper) AddVolume(v *Volume) (err error) {
+	var vpath = z.volumePath(v.Id)
+	if _, err = z.c.Create(vpath, v.Meta(), 0, zk.WorldACL(zk.PermAll)); err != nil {
+		log.Errorf("zk.Create(\"%s\") error(%v)", vpath, err)
 	}
 	return
 }
@@ -124,32 +123,30 @@ func (z *Zookeeper) AddVolume(id int32, bfile, ifile string) (err error) {
 func (z *Zookeeper) DelVolume(id int32) (err error) {
 	var (
 		stat  *zk.Stat
-		dpath = path.Join(z.fpath, strconv.Itoa(int(id)))
+		vpath = z.volumePath(id)
 	)
-	if _, stat, err = z.c.Get(dpath); err != nil {
-		log.Errorf("zk.Get(\"%s\") error(%v)", dpath, err)
+	if _, stat, err = z.c.Get(vpath); err != nil {
+		log.Errorf("zk.Get(\"%s\") error(%v)", vpath, err)
 		return
 	}
-	if err = z.c.Delete(dpath, stat.Version); err != nil {
-		log.Errorf("zk.Delete(\"%s\") error(%v)", dpath, err)
-		return
+	if err = z.c.Delete(vpath, stat.Version); err != nil {
+		log.Errorf("zk.Delete(\"%s\") error(%v)", vpath, err)
 	}
 	return
 }
 
 // SetVolume set the data into fpath.
-func (z *Zookeeper) SetVolume(id int32, bfile, ifile string) (err error) {
+func (z *Zookeeper) SetVolume(v *Volume) (err error) {
 	var (
 		stat  *zk.Stat
-		dpath = path.Join(z.fpath, strconv.Itoa(int(id)))
+		vpath = z.volumePath(v.Id)
 	)
-	if _, stat, err = z.c.Get(dpath); err != nil {
-		log.Errorf("zk.Get(\"%s\") error(%v)", dpath, err)
+	if _, stat, err = z.c.Get(vpath); err != nil {
+		log.Errorf("zk.Get(\"%s\") error(%v)", vpath, err)
 		return
 	}
-	if _, err = z.c.Set(dpath, []byte(fmt.Sprintf("%s,%s,%d", bfile, ifile, id)), stat.Version); err != nil {
-		log.Errorf("zk.Set(\"%s\") error(%v)", dpath, err)
-		return
+	if _, err = z.c.Set(vpath, v.Meta(), stat.Version); err != nil {
+		log.Errorf("zk.Set(\"%s\") error(%v)", vpath, err)
 	}
 	return
 }
@@ -163,7 +160,6 @@ func (z *Zookeeper) SetStore(stat, admin, api string) (err error) {
 	}
 	if _, err = z.c.Set(z.fpath, []byte(fmt.Sprintf(storeDataJson, stat, admin, api)), s.Version); err != nil {
 		log.Errorf("zk.Set(\"%s\") error(%v)", z.fpath, err)
-		return
 	}
 	return
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/Terry-Mao/bfs/store/block"
 	"github.com/Terry-Mao/bfs/store/errors"
 	"github.com/Terry-Mao/bfs/store/index"
@@ -49,8 +50,6 @@ type Volume struct {
 	compactKeys   []int64
 	// status
 	closed bool
-	// used in store, control the volume update
-	Command int `json: "-"`
 }
 
 // NewVolume new a volume and init it.
@@ -143,6 +142,11 @@ func (v *Volume) Needle() (n *needle.Needle) {
 	return new(needle.Needle)
 }
 
+// Meta get zookeeper meta data.
+func (v *Volume) Meta() []byte {
+	return []byte(fmt.Sprintf("%s,%s,%d", v.Block.File, v.Indexer.File, v.Id))
+}
+
 // FreeNeedle free the needle to pool.
 func (v *Volume) FreeNeedle(n *needle.Needle) {
 	v.np.Put(n)
@@ -181,9 +185,19 @@ func (v *Volume) Get(key int64, cookie int32, buf []byte) (data []byte, err erro
 		offset uint32
 		n      *needle.Needle
 	)
+	// WARN pread syscall is atomic, so use rlock
 	v.lock.RLock()
 	if !v.closed {
-		nc, ok = v.needles[key]
+		if nc, ok = v.needles[key]; ok {
+			offset, size = needle.Cache(nc)
+			if offset != needle.CacheDelOffset {
+				err = v.Block.Get(offset, buf[:size])
+			} else {
+				err = errors.ErrNeedleDeleted
+			}
+		} else {
+			err = errors.ErrNeedleNotExist
+		}
 	} else {
 		err = errors.ErrVolumeClosed
 	}
@@ -191,22 +205,8 @@ func (v *Volume) Get(key int64, cookie int32, buf []byte) (data []byte, err erro
 	if err != nil {
 		return
 	}
-	if !ok {
-		err = errors.ErrNoNeedle
-		return
-	}
-	// check len(buf) ?
-	if offset, size = needle.Cache(nc); offset == needle.CacheDelOffset {
-		err = errors.ErrNeedleDeleted
-		return
-	}
 	if log.V(1) {
-		log.Infof("get needle key: %d, cookie: %d, offset: %d, size: %d", key,
-			cookie, offset, size)
-	}
-	// WARN pread syscall is atomic, so don't need lock
-	if err = v.Block.Get(offset, buf[:size]); err != nil {
-		return
+		log.Infof("get needle key: %d, cookie: %d, offset: %d, size: %d", key, cookie, offset, size)
 	}
 	n = v.Needle()
 	if err = n.ParseHeader(buf[:needle.HeaderSize]); err != nil {
@@ -383,7 +383,7 @@ func (v *Volume) Del(key int64) (err error) {
 					v.compactKeys = append(v.compactKeys, key)
 				}
 			} else {
-				err = errors.ErrNoNeedle
+				err = errors.ErrNeedleNotExist
 			}
 		}
 	} else {
@@ -394,7 +394,7 @@ func (v *Volume) Del(key int64) (err error) {
 		if ok {
 			err = v.asyncDel(offset)
 		} else {
-			err = errors.ErrNoNeedle
+			err = errors.ErrNeedleNotExist
 		}
 	}
 	return

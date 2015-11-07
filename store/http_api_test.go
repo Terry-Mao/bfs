@@ -65,7 +65,6 @@ func TestHTTPAPI(t *testing.T) {
 		t.Errorf("ioutil.ReadAll() error(%v)", err)
 		t.FailNow()
 	}
-	t.Logf("%s", body)
 	if err = json.Unmarshal(body, tr); err != nil {
 		t.Errorf("json.Unmarshal() error(%v)", err)
 		t.FailNow()
@@ -84,7 +83,6 @@ func TestHTTPAPI(t *testing.T) {
 		t.Errorf("ioutil.ReadAll() error(%v)", err)
 		t.FailNow()
 	}
-	t.Logf("%s", body)
 	if err = json.Unmarshal(body, tr); err != nil {
 		t.Errorf("json.Unmarshal() error(%v)", err)
 		t.FailNow()
@@ -207,7 +205,6 @@ func TestHTTPAPI(t *testing.T) {
 		t.Errorf("ioutil.ReadAll() error(%v)", err)
 		t.FailNow()
 	}
-	t.Logf("%s", body)
 	if err = json.Unmarshal(body, tr); err != nil {
 		t.Errorf("json.Unmarshal() error(%v)", err)
 		t.FailNow()
@@ -226,7 +223,6 @@ func TestHTTPAPI(t *testing.T) {
 		t.Errorf("ioutil.ReadAll() error(%v)", err)
 		t.FailNow()
 	}
-	t.Logf("%s", body)
 	if err = json.Unmarshal(body, tr); err != nil {
 		t.Errorf("json.Unmarshal() error(%v)", err)
 		t.FailNow()

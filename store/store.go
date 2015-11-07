@@ -32,13 +32,8 @@ import (
 //        -> block index -> needle -> photo info without raw data
 
 const (
-	volumeIndexComma   = ","
-	volumeIndexSpliter = "\n"
-	// store map flag
-	storeAdd              = 1
-	storeUpdate           = 2
-	storeDel              = 3
-	storeCompact          = 4
+	volumeIndexComma      = ","
+	volumeIndexSpliter    = "\n"
 	storeFreeVolumePrefix = "block_"
 )
 
@@ -52,13 +47,13 @@ func (p Int32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 // Store save volumes.
 type Store struct {
 	f           *os.File
-	ch          chan *Volume
 	VolumeId    int32
-	Volumes     map[int32]*Volume
+	Volumes     map[int32]*Volume // TODO split volumes lock
 	FreeVolumes []*Volume
 	zk          *Zookeeper
 	conf        *Config
 	lock        sync.Mutex
+	vlock       sync.RWMutex
 }
 
 // NewStore
@@ -68,8 +63,6 @@ func NewStore(zk *Zookeeper, c *Config) (s *Store, err error) {
 	s.conf = c
 	s.VolumeId = 0
 	s.Volumes = make(map[int32]*Volume, c.StoreVolumeCache)
-	s.ch = make(chan *Volume, 1)
-	go s.command()
 	if s.f, err = os.OpenFile(c.StoreIndex, os.O_RDWR|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", c.StoreIndex, err)
 		return
@@ -126,8 +119,7 @@ func (s *Store) init(c *Config) (err error) {
 			if _, ok = vMap1[vids[i]]; !ok {
 				// if not exists in zk, must readd to zk
 				log.Infof("volume_id: %d not exist in zk", vids[i])
-				if err = s.zk.AddVolume(vids[i], bfiles[i], ifiles[i]); err !=
-					nil {
+				if err = s.zk.AddVolume(volume); err != nil {
 					return
 				}
 			}
@@ -237,71 +229,6 @@ func (s *Store) saveIndex() (err error) {
 	return
 }
 
-// command do volume command.
-func (s *Store) command() {
-	var (
-		err       error
-		volumeId  int32
-		v, vt, vc *Volume
-		volumes   map[int32]*Volume
-	)
-	for {
-		v = <-s.ch
-		if v == nil {
-			break
-		}
-		// copy-on-write
-		volumes = make(map[int32]*Volume, len(s.Volumes))
-		for volumeId, vt = range s.Volumes {
-			volumes[volumeId] = vt
-		}
-		vc = volumes[v.Id]
-		if v.Command == storeAdd {
-			if err = s.zk.AddVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
-				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
-			}
-			volumes[v.Id] = v
-		} else if v.Command == storeUpdate {
-			if err = s.zk.SetVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
-				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
-			}
-			volumes[v.Id] = v
-		} else if v.Command == storeDel {
-			if err = s.zk.DelVolume(v.Id); err != nil {
-				log.Errorf("zk.DelVolume(%d) error(%v)", v.Id, err)
-			}
-			delete(volumes, v.Id)
-		} else if v.Command == storeCompact {
-			if err = vc.StopCompact(v); err != nil {
-				continue
-			}
-			// TODO remove file
-			if err = s.zk.SetVolume(v.Id, v.Block.File, v.Indexer.File); err != nil {
-				log.Errorf("zk.AddVolume(%d) error(%v)", v.Id, err)
-			}
-			volumes[v.Id] = v
-		} else {
-			panic("unknow store flag")
-		}
-		// close volume
-		if vc != nil {
-			log.Infof("update store volumes, orig block: %s,%s,%d close",
-				vc.Block.File, vc.Indexer.File, vc.Id)
-			vc.Close()
-		}
-		// atomic update ptr
-		s.Volumes = volumes
-		s.lock.Lock()
-		if v.Id > s.VolumeId {
-			s.VolumeId = v.Id
-		}
-		if err = s.saveIndex(); err != nil {
-			log.Errorf("store save index: %s error(%v)", s.conf.StoreIndex, err)
-		}
-		s.lock.Unlock()
-	}
-}
-
 // AddFreeVolume add free volumes.
 func (s *Store) AddFreeVolume(n int, bdir, idir string) (sn int, err error) {
 	var (
@@ -328,105 +255,133 @@ func (s *Store) AddFreeVolume(n int, bdir, idir string) (sn int, err error) {
 
 // freeVolume get a free volume.
 func (s *Store) freeVolume() (v *Volume, err error) {
-	s.lock.Lock()
 	if len(s.FreeVolumes) == 0 {
 		err = errors.ErrStoreNoFreeVolume
 	} else {
 		v = s.FreeVolumes[0]
 		s.FreeVolumes = s.FreeVolumes[1:]
+		err = v.Open()
 	}
-	s.lock.Unlock()
 	return
 }
 
 // AddVolume add a new volume.
 func (s *Store) AddVolume(id int32) (v *Volume, err error) {
-	// TODO
-	// lock
-	// check exist
-	// add closed volume
-	// unlock
-	// open
-	if v = s.Volumes[id]; v != nil {
+	s.vlock.Lock()
+	if v = s.Volumes[id]; v == nil {
+		if v, err = s.freeVolume(); err == nil {
+			v.Id = id
+			if err = s.zk.AddVolume(v); err == nil {
+				s.Volumes[id] = v
+			}
+		}
+	} else {
 		err = errors.ErrVolumeExist
-		return
 	}
-	if v, err = s.freeVolume(); err != nil {
-		return
+	s.vlock.Unlock()
+	if err != nil {
+		s.lock.Lock()
+		if id > s.VolumeId {
+			s.VolumeId = id
+		}
+		err = s.saveIndex()
+		s.lock.Unlock()
 	}
-	v.Id = id
-	if err = v.Open(); err != nil {
-		return
-	}
-	v.Command = storeAdd
-	s.ch <- v
 	return
 }
 
 // DelVolume del the volume by volume id.
-func (s *Store) DelVolume(id int32) {
-	// TODO
-	// lock
-	// del
-	// close
-	// unlock
-	var v = s.Volumes[id]
-	v.Command = storeDel
-	s.ch <- v
+func (s *Store) DelVolume(id int32) (err error) {
+	var v *Volume
+	s.vlock.Lock()
+	if v = s.Volumes[id]; v != nil {
+		if !v.Compact {
+			if err = s.zk.DelVolume(id); err == nil {
+				delete(s.Volumes, id)
+				v.Close()
+			}
+		} else {
+			err = errors.ErrVolumeInCompact
+		}
+	} else {
+		err = errors.ErrVolumeNotExist
+	}
+	s.vlock.Unlock()
+	if err != nil {
+		s.lock.Lock()
+		err = s.saveIndex()
+		s.lock.Unlock()
+	}
 	return
 }
 
 // BulkVolume copy a super block from another store server replace this server.
 func (s *Store) BulkVolume(id int32, bfile, ifile string) (err error) {
-	// TODO
-	// newvolume
-	// lock
-	// update map
-	// if exist close
-	// unlock
-	var v *Volume
-	if v, err = NewVolume(id, bfile, ifile, s.conf); err != nil {
+	var v, nv *Volume
+	if nv, err = NewVolume(id, bfile, ifile, s.conf); err != nil {
 		return
 	}
-	v.Command = storeUpdate
-	s.ch <- v
+	s.vlock.Lock()
+	if v = s.Volumes[id]; v == nil {
+		if err = s.zk.AddVolume(nv); err == nil {
+			s.Volumes[id] = nv
+		}
+	} else {
+		err = errors.ErrVolumeExist
+	}
+	s.vlock.Unlock()
+	if err != nil {
+		s.lock.Lock()
+		err = s.saveIndex()
+		s.lock.Unlock()
+	}
 	return
 }
 
 // CompactVolume compact a super block to another file.
 func (s *Store) CompactVolume(id int32) (err error) {
-	// TODO
-	// lock
-	// open a closed volume
-	// unlock
-	// rlock
-	// check exist
-	// start compact
-	// stop compact
-	// update map
-	// closed old
-	// unlock
-	var (
-		nv *Volume
-		v  = s.Volumes[id]
-	)
-	if v == nil {
-		err = errors.ErrVolumeNotExist
+	var v, nv *Volume
+	s.vlock.RLock()
+	if v = s.Volumes[id]; v != nil {
+		if v.Compact {
+			err = errors.ErrVolumeExist
+		}
+	} else {
+		err = errors.ErrVolumeExist
+	}
+	s.vlock.RUnlock()
+	if err != nil {
 		return
 	}
-	if nv, err = s.freeVolume(); err != nil {
+	s.lock.Lock()
+	nv, err = s.freeVolume()
+	s.lock.Unlock()
+	if err != nil {
 		return
 	}
+	// no lock here, Compact is no side-effect
 	nv.Id = id
-	if err = nv.Open(); err != nil {
-		return
-	}
 	if err = v.StartCompact(nv); err != nil {
 		v.StopCompact(nil)
 		return
 	}
-	nv.Command = storeCompact
-	s.ch <- nv
+	s.vlock.Lock()
+	if v = s.Volumes[id]; v != nil {
+		if err = v.StopCompact(nv); err == nil {
+			if err = s.zk.SetVolume(nv); err == nil {
+				s.Volumes[id] = nv
+				v.Close()
+			}
+		}
+	} else {
+		err = errors.ErrVolumeExist
+	}
+	s.vlock.Unlock()
+	if err != nil {
+		s.lock.Lock()
+		err = s.saveIndex()
+		s.lock.Unlock()
+	}
 	return
 }
 
@@ -435,10 +390,10 @@ func (s *Store) CompactVolume(id int32) (err error) {
 // requests then safty close.
 func (s *Store) Close() {
 	var v *Volume
+	s.saveIndex()
 	if s.f != nil {
 		s.f.Close()
 	}
-	close(s.ch)
 	for _, v = range s.Volumes {
 		v.Close()
 	}

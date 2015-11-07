@@ -8,6 +8,7 @@ import (
 
 func TestZookeeper(t *testing.T) {
 	var (
+		v     *Volume
 		zk    *Zookeeper
 		err   error
 		lines []string
@@ -21,11 +22,17 @@ func TestZookeeper(t *testing.T) {
 	}
 	zk.DelVolume(1)
 	zk.DelVolume(2)
-	if err = zk.AddVolume(1, bfile, ifile); err != nil {
+	if v, err = NewVolume(1, bfile, ifile, testConf); err != nil {
+		t.Errorf("NewVolume() error(%v)", err)
+		t.FailNow()
+	}
+	v.Close()
+	if err = zk.AddVolume(v); err != nil {
 		t.Errorf("zk.AddVolume() error(%v)", err)
 		t.FailNow()
 	}
-	if err = zk.AddVolume(2, bfile, ifile); err != nil {
+	v.Id = 2
+	if err = zk.AddVolume(v); err != nil {
 		t.Errorf("zk.AddVolume() error(%v)", err)
 		t.FailNow()
 	}

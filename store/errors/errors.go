@@ -21,7 +21,7 @@ const (
 	RetIndexClosed = 4001
 	// needle
 	RetNeedleExist       = 5000
-	RetNoNeedle          = 5001
+	RetNeedleNotExist    = 5001
 	RetNeedleChecksum    = 5002
 	RetNeedleFlag        = 5003
 	RetNeedleSize        = 5004
@@ -66,7 +66,7 @@ var (
 	ErrIndexClosed = StoreError(RetIndexClosed)
 	// needle
 	ErrNeedleExist       = StoreError(RetNeedleExist)
-	ErrNoNeedle          = StoreError(RetNoNeedle)
+	ErrNeedleNotExist    = StoreError(RetNeedleNotExist)
 	ErrNeedleChecksum    = StoreError(RetNeedleChecksum)
 	ErrNeedleFlag        = StoreError(RetNeedleFlag)
 	ErrNeedleSize        = StoreError(RetNeedleSize)
@@ -108,7 +108,7 @@ var (
 		RetIndexClosed: "index closed",
 		// needle
 		RetNeedleExist:       "needle already exist",
-		RetNoNeedle:          "needle not exist",
+		RetNeedleNotExist:    "needle not exist",
 		RetNeedleChecksum:    "needle data checksum not match",
 		RetNeedleFlag:        "needle flag not match",
 		RetNeedleSize:        "needle size error",

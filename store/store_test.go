@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/Terry-Mao/bfs/store/needle"
 	"os"
 	"testing"
@@ -40,81 +39,68 @@ func TestStore(t *testing.T) {
 	defer os.Remove(i3file)
 	if z, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack/test/"); err != nil {
 		t.Errorf("NewZookeeper() error(%v)", err)
-		goto failed
+		t.FailNow()
 	}
 	z.DelVolume(1)
 	if s, err = NewStore(z, testConf); err != nil {
 		t.Errorf("NewStore() error(%v)", err)
-		goto failed
-
+		t.FailNow()
 	}
 	defer s.Close()
 	if _, err = s.AddFreeVolume(2, "./test", "./test"); err != nil {
 		t.Errorf("s.AddFreeVolume() error(%v)", err)
-		goto failed
+		t.FailNow()
 	}
 	if v, err = s.AddVolume(1); err != nil {
 		t.Errorf("AddVolume() error(%v)", err)
-		goto failed
+		t.FailNow()
 	}
-	time.Sleep(1 * time.Second)
 	if v = s.Volumes[1]; v == nil {
-		err = fmt.Errorf("Volume(1) not exist")
-		t.Error(err)
-		goto failed
+		t.Error("Volume(1) not exist")
+		t.FailNow()
 	}
 	n.Parse(1, 1, data)
 	if err = v.Add(n); err != nil {
 		t.Errorf("v.Add(1) error(%v)", err)
-		goto failed
+		t.FailNow()
 	}
 	buf = v.Buffer(1)
 	defer v.FreeBuffer(1, buf)
 	if _, err = v.Get(1, 1, buf); err != nil {
 		t.Errorf("v.Get(1) error(%v)", err)
-		goto failed
+		t.FailNow()
 	}
-	if err = s.BulkVolume(1, b2file, i2file); err != nil {
+	if err = s.BulkVolume(2, b2file, i2file); err != nil {
 		t.Errorf("Bulk(1) error(%v)", err)
-		goto failed
+		t.FailNow()
 	}
-	time.Sleep(3 * time.Second)
-	if v = s.Volumes[1]; v == nil {
-		err = fmt.Errorf("Volume(1) not exist")
-		t.Error(err)
-		goto failed
+	if v = s.Volumes[2]; v == nil {
+		t.Error("Volume(2) not exist")
+		t.FailNow()
 	}
 	if err = v.Add(n); err != nil {
-		t.Errorf("v.Add(1) error(%v)", err)
-		goto failed
+		t.Errorf("v.Add() error(%v)", err)
+		t.FailNow()
 	}
 	if _, err = v.Get(1, 1, buf); err != nil {
 		t.Errorf("v.Get(1) error(%v)", err)
-		goto failed
+		t.FailNow()
 	}
 	if err = s.CompactVolume(1); err != nil {
 		t.Errorf("Compress(1) error(%v)", err)
-		goto failed
+		t.FailNow()
 	}
-	time.Sleep(2 * time.Second)
 	if v = s.Volumes[1]; v == nil {
-		err = fmt.Errorf("Volume(1) not exist")
-		t.Error(err)
-		goto failed
+		t.Error("Volume(1) not exist")
+		t.FailNow()
 	}
 	if _, err = v.Get(1, 1, buf); err != nil {
 		t.Errorf("v.Get(1) error(%v)", err)
-		goto failed
+		t.FailNow()
 	}
 	s.DelVolume(1)
-	time.Sleep(1 * time.Second)
 	if v = s.Volumes[1]; v != nil {
-		err = fmt.Errorf("Volume(1) exist")
 		t.Error(err)
-		goto failed
-	}
-failed:
-	if err != nil {
 		t.FailNow()
 	}
 }
