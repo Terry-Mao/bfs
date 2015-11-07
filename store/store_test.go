@@ -42,6 +42,8 @@ func TestStore(t *testing.T) {
 		t.FailNow()
 	}
 	z.DelVolume(1)
+	z.DelVolume(2)
+	z.DelVolume(3)
 	if s, err = NewStore(z, testConf); err != nil {
 		t.Errorf("NewStore() error(%v)", err)
 		t.FailNow()
