@@ -216,7 +216,7 @@ func TestHTTPAPI(t *testing.T) {
 		t.FailNow()
 	}
 	buf.Reset()
-	buf.WriteString("vid=1&keys=21&keys=22")
+	buf.WriteString("vid=1&keys=22&keys=23")
 	if resp, err = http.Post("http://localhost:6062/dels", "application/x-www-form-urlencoded", buf); err != nil {
 		t.Errorf("http.Post() error(%v)", err)
 		t.FailNow()

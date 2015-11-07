@@ -71,7 +71,7 @@ func NewVolume(id int32, bfile, ifile string, c *Config) (v *Volume, err error) 
 		return
 	}
 	if v.Indexer, err = index.NewIndexer(ifile, c.IndexSigTime,
-		c.IndexRingBuffer, c.IndexSigCnt, c.IndexBufferio); err != nil {
+		c.IndexSigCnt, c.IndexRingBuffer, c.IndexBufferio); err != nil {
 		v.Block.Close()
 		return
 	}
@@ -169,14 +169,6 @@ func (v *Volume) FreeBuffer(n int, d []byte) {
 // IsClosed reports whether the volume is closed.
 func (v *Volume) IsClosed() bool {
 	return v.closed
-}
-
-// ValidNeedle check the needle valid or not.
-func (v *Volume) ValidNeedle(n *needle.Needle) (err error) {
-	if n.TotalSize > int32(v.conf.NeedleMaxSize) {
-		err = errors.ErrNeedleTooLarge
-	}
-	return
 }
 
 // Get get a needle by key and cookie.
@@ -292,10 +284,11 @@ func (v *Volume) Add(n *needle.Needle) (err error) {
 	}
 	if ok {
 		ooffset, _ = needle.Cache(nc)
-		log.Warningf("same key: %d, old offset: %d, new offset: %d", n.Key,
-			ooffset, offset)
-		if err = v.asyncDel(ooffset); err != nil {
-			return
+		log.Warningf("same key: %d, old offset: %d, new offset: %d", n.Key, ooffset, offset)
+		if ooffset != needle.CacheDelOffset {
+			if err = v.asyncDel(ooffset); err != nil {
+				return
+			}
 		}
 	}
 	atomic.AddUint64(&v.Stats.TotalAddProcessed, 1)
@@ -335,8 +328,7 @@ func (v *Volume) Write(n *needle.Needle) (err error) {
 	}
 	if ok {
 		ooffset, _ = needle.Cache(nc)
-		log.Warningf("same key: %d, old offset: %d, new offset: %d", n.Key,
-			ooffset, offset)
+		log.Warningf("same key: %d, old offset: %d, new offset: %d", n.Key, ooffset, offset)
 		err = v.asyncDel(ooffset)
 	}
 	atomic.AddUint64(&v.Stats.TotalWriteProcessed, 1)
@@ -358,7 +350,9 @@ func (v *Volume) Flush() (err error) {
 
 // asyncDel signal the godel goroutine aync merge all offsets and del.
 func (v *Volume) asyncDel(offset uint32) (err error) {
-	// async update super block flag
+	if offset == needle.CacheDelOffset {
+		return
+	}
 	select {
 	case v.ch <- offset:
 	default:
@@ -382,11 +376,14 @@ func (v *Volume) Del(key int64) (err error) {
 	if !v.closed {
 		nc, ok = v.needles[key]
 		if ok {
-			offset, size = needle.Cache(nc)
-			v.needles[key] = needle.NewCache(needle.CacheDelOffset, size)
-			// when in compact, must save all del operations.
-			if v.Compact {
-				v.compactKeys = append(v.compactKeys, key)
+			if offset, size = needle.Cache(nc); offset != needle.CacheDelOffset {
+				v.needles[key] = needle.NewCache(needle.CacheDelOffset, size)
+				// when in compact, must save all del operations.
+				if v.Compact {
+					v.compactKeys = append(v.compactKeys, key)
+				}
+			} else {
+				err = errors.ErrNoNeedle
 			}
 		}
 	} else {
@@ -408,19 +405,23 @@ func (v *Volume) del() {
 	var (
 		err     error
 		now     int64
+		exit    bool
 		offset  uint32
 		offsets []uint32
 	)
+	log.Infof("volume: %d del job start", v.Id)
 	for {
 		select {
 		case offset = <-v.ch:
-			if offset != volumeFinish {
+			if exit = (offset == volumeFinish); !exit {
 				if offsets = append(offsets, offset); len(offsets) < v.conf.VolumeSigCnt {
 					continue
 				}
 			}
+			break
 		case <-time.After(v.conf.VolumeSigTime):
-			offset = volumeReady
+			exit = false
+			break
 		}
 		if len(offsets) > 0 {
 			// sort let the disk seqence write
@@ -437,7 +438,8 @@ func (v *Volume) del() {
 			offsets = offsets[:0]
 		}
 		// signal exit
-		if offset == volumeFinish {
+		if exit {
+			log.Warningf("signal volume: %d del job exit", v.Id)
 			break
 		}
 	}
@@ -532,7 +534,6 @@ failed:
 func (v *Volume) Open() (err error) {
 	v.lock.Lock()
 	if v.closed {
-		v.ch = make(chan uint32, v.conf.VolumeDelChan)
 		if err = v.Block.Open(); err == nil {
 			if err = v.Indexer.Open(); err == nil {
 				if err = v.init(); err == nil {
@@ -559,7 +560,7 @@ func (v *Volume) Open() (err error) {
 func (v *Volume) Close() {
 	v.lock.Lock()
 	if !v.closed {
-		close(v.ch)
+		v.ch <- volumeFinish
 		v.wg.Wait()
 		v.Block.Close()
 		v.Indexer.Close()

@@ -35,7 +35,8 @@ import (
 
 const (
 	// signal command
-	ready = 1
+	finish = 0
+	ready  = 1
 	// index size
 	keySize    = 8
 	offsetSize = 4
@@ -53,13 +54,13 @@ const (
 // Indexer used for fast recovery super block needle cache.
 type Indexer struct {
 	wg sync.WaitGroup
-	f  *os.File
-	// buf
-	bw  *bufio.Writer
-	buf int
+
+	f       *os.File
+	bw      *bufio.Writer
+	bufSize int
 	// signal
-	sigNum  int
-	sigIdle time.Duration
+	sigCnt  int
+	sigTime time.Duration
 	signal  chan int
 	// index ring buffer
 	ring    *Ring
@@ -95,16 +96,16 @@ Size:           %d
 }
 
 // NewIndexer new a indexer for async merge index data to disk.
-func NewIndexer(file string, idle time.Duration, ring, sig, buf int) (i *Indexer, err error) {
+func NewIndexer(file string, sigTime time.Duration, sigCnt, ring, buf int) (i *Indexer, err error) {
 	var stat os.FileInfo
 	i = &Indexer{}
-	i.closed = false
-	i.signal = make(chan int, 1)
 	i.ring = NewRing(ring)
-	i.sigNum = sig
-	i.sigIdle = idle
-	i.buf = buf
+	i.signal = make(chan int, 1)
+	i.sigCnt = sigCnt
+	i.sigTime = sigTime
+	i.bufSize = buf
 	i.File = file
+	i.closed = false
 	if i.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		return
@@ -153,7 +154,7 @@ func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 	index.Size = size
 	i.ring.SetAdv()
 	// signal
-	if i.ring.Buffered() > i.sigNum {
+	if i.ring.Buffered() > i.sigCnt {
 		i.Signal()
 	}
 	return
@@ -221,10 +222,11 @@ func (i *Indexer) write() {
 		err error
 		sig int
 	)
+	log.Infof("index: %s write job start", i.File)
 	for {
 		select {
 		case sig = <-i.signal:
-		case <-time.After(i.sigIdle):
+		case <-time.After(i.sigTime):
 			sig = ready
 		}
 		if sig != ready {
@@ -255,7 +257,7 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 	var (
 		data []byte
 		ix   = &Index{}
-		rd   = bufio.NewReaderSize(r, i.buf)
+		rd   = bufio.NewReaderSize(r, i.bufSize)
 	)
 	log.Infof("scan index: %s", i.File)
 	if _, err = r.Seek(0, os.SEEK_SET); err != nil {
@@ -273,7 +275,6 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 		if log.V(1) {
 			log.Info(ix.String())
 		}
-		// TODO check size
 		if err = fn(ix); err != nil {
 			break
 		}
@@ -291,10 +292,9 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 // at the right parse data offset.
 func (i *Indexer) Recovery(fn func(*Index) error) (err error) {
 	var offset int64
-	if i.Scan(i.f, func(ix *Index) (err1 error) {
+	if i.Scan(i.f, func(ix *Index) error {
 		offset += int64(indexSize)
-		err1 = fn(ix)
-		return
+		return fn(ix)
 	}); err != nil {
 		return
 	}
@@ -308,7 +308,6 @@ func (i *Indexer) Recovery(fn func(*Index) error) (err error) {
 // Open open the closed indexer, must called after NewIndexer.
 func (i *Indexer) Open() (err error) {
 	if i.closed {
-		i.signal = make(chan int, 1)
 		if i.f, err = os.OpenFile(i.File, os.O_RDWR, 0664); err != nil {
 			log.Errorf("os.OpenFile(\"%s\") error(%v)", i.File, err)
 			return
@@ -325,7 +324,7 @@ func (i *Indexer) Open() (err error) {
 // Close close the indexer file.
 func (i *Indexer) Close() {
 	if !i.closed {
-		close(i.signal)
+		i.signal <- finish
 		// wait write goroutine exit
 		i.wg.Wait()
 		i.closed = true

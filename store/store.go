@@ -341,6 +341,12 @@ func (s *Store) freeVolume() (v *Volume, err error) {
 
 // AddVolume add a new volume.
 func (s *Store) AddVolume(id int32) (v *Volume, err error) {
+	// TODO
+	// lock
+	// check exist
+	// add closed volume
+	// unlock
+	// open
 	if v = s.Volumes[id]; v != nil {
 		err = errors.ErrVolumeExist
 		return
@@ -359,6 +365,11 @@ func (s *Store) AddVolume(id int32) (v *Volume, err error) {
 
 // DelVolume del the volume by volume id.
 func (s *Store) DelVolume(id int32) {
+	// TODO
+	// lock
+	// del
+	// close
+	// unlock
 	var v = s.Volumes[id]
 	v.Command = storeDel
 	s.ch <- v
@@ -367,6 +378,12 @@ func (s *Store) DelVolume(id int32) {
 
 // BulkVolume copy a super block from another store server replace this server.
 func (s *Store) BulkVolume(id int32, bfile, ifile string) (err error) {
+	// TODO
+	// newvolume
+	// lock
+	// update map
+	// if exist close
+	// unlock
 	var v *Volume
 	if v, err = NewVolume(id, bfile, ifile, s.conf); err != nil {
 		return
@@ -378,6 +395,17 @@ func (s *Store) BulkVolume(id int32, bfile, ifile string) (err error) {
 
 // CompactVolume compact a super block to another file.
 func (s *Store) CompactVolume(id int32) (err error) {
+	// TODO
+	// lock
+	// open a closed volume
+	// unlock
+	// rlock
+	// check exist
+	// start compact
+	// stop compact
+	// update map
+	// closed old
+	// unlock
 	var (
 		nv *Volume
 		v  = s.Volumes[id]

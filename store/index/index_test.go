@@ -18,7 +18,7 @@ func TestIndex(t *testing.T) {
 	)
 	os.Remove(file)
 	defer os.Remove(file)
-	if i, err = NewIndexer(file, 10*time.Second, 10, 5, 4*1024*1024); err != nil {
+	if i, err = NewIndexer(file, 10*time.Second, 5, 10, 4*1024*1024); err != nil {
 		t.Errorf("NewIndexer() error(%v)", err)
 		t.FailNow()
 	}
