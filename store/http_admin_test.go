@@ -41,6 +41,7 @@ func TestHTTPAdmin(t *testing.T) {
 		t.FailNow()
 	}
 	z.DelVolume(1)
+	z.DelVolume(2)
 	if s, err = NewStore(z, testConf); err != nil {
 		t.Errorf("NewStore() error(%v)", err)
 		t.FailNow()
@@ -65,6 +66,7 @@ func TestHTTPAdmin(t *testing.T) {
 		t.FailNow()
 	}
 	if tr.Ret != 1 {
+		t.Errorf("add_free_volume: %d", tr.Ret)
 		t.FailNow()
 	}
 	buf.Reset()
@@ -83,6 +85,7 @@ func TestHTTPAdmin(t *testing.T) {
 		t.FailNow()
 	}
 	if tr.Ret != 1 {
+		t.Errorf("add_volume: %d", tr.Ret)
 		t.FailNow()
 	}
 	buf.Reset()
@@ -101,10 +104,11 @@ func TestHTTPAdmin(t *testing.T) {
 		t.FailNow()
 	}
 	if tr.Ret != 1 {
+		t.Errorf("compact_volume: %d", tr.Ret)
 		t.FailNow()
 	}
 	buf.Reset()
-	buf.WriteString("vid=1&bfile=./test/block_admin_1&ifile=./test/block_admin_1.idx")
+	buf.WriteString("vid=2&bfile=./test/block_admin_1&ifile=./test/block_admin_1.idx")
 	if resp, err = http.Post("http://localhost:6063/bulk_volume", "application/x-www-form-urlencoded", buf); err != nil {
 		t.Errorf("http.Post() error(%v)", err)
 		t.FailNow()
@@ -119,6 +123,7 @@ func TestHTTPAdmin(t *testing.T) {
 		t.FailNow()
 	}
 	if tr.Ret != 1 {
+		t.Errorf("bulk_volume: %d", tr.Ret)
 		t.FailNow()
 	}
 	time.Sleep(2 * time.Second)

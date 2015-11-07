@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/Terry-Mao/bfs/store/errors"
+	"github.com/Terry-Mao/bfs/store/needle"
 	log "github.com/golang/glog"
 	"io/ioutil"
 	"os"
@@ -48,21 +49,30 @@ func (p Int32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 type Store struct {
 	f           *os.File
 	VolumeId    int32
+	bp          []*sync.Pool      // buffer pool
+	np          *sync.Pool        // needle pool
 	Volumes     map[int32]*Volume // TODO split volumes lock
 	FreeVolumes []*Volume
 	zk          *Zookeeper
 	conf        *Config
-	lock        sync.Mutex
-	vlock       sync.RWMutex
+	lock        sync.Mutex   // protect VolumeId & saveIndex
+	vlock       sync.RWMutex // protect Volumes map
 }
 
 // NewStore
 func NewStore(zk *Zookeeper, c *Config) (s *Store, err error) {
+	var i int
 	s = &Store{}
 	s.zk = zk
 	s.conf = c
 	s.VolumeId = 0
 	s.Volumes = make(map[int32]*Volume, c.StoreVolumeCache)
+	s.bp = make([]*sync.Pool, c.BatchMaxNum)
+	s.bp[0] = nil
+	for i = 1; i < c.BatchMaxNum; i++ {
+		s.bp[i] = &sync.Pool{}
+	}
+	s.np = &sync.Pool{}
 	if s.f, err = os.OpenFile(c.StoreIndex, os.O_RDWR|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", c.StoreIndex, err)
 		return
@@ -229,6 +239,47 @@ func (s *Store) saveIndex() (err error) {
 	return
 }
 
+// RLockVolume read lock
+func (s *Store) RLockVolume() {
+	s.vlock.RLock()
+}
+
+// RUnlockVolume read unlock
+func (s *Store) RUnlockVolume() {
+	s.vlock.RUnlock()
+}
+
+// Needle get a needle from sync.Pool.
+func (s *Store) Needle() (n *needle.Needle) {
+	var i interface{}
+	if i = s.np.Get(); i != nil {
+		n = i.(*needle.Needle)
+		return
+	}
+	return new(needle.Needle)
+}
+
+// FreeNeedle free the needle to pool.
+func (s *Store) FreeNeedle(n *needle.Needle) {
+	s.np.Put(n)
+}
+
+// Buffer get a buffer from sync.Pool.
+func (s *Store) Buffer(n int) (d []byte) {
+	var di interface{}
+	if di = s.bp[n].Get(); di != nil {
+		d = di.([]byte)
+		return
+	}
+	d = make([]byte, n*s.conf.NeedleMaxSize)
+	return
+}
+
+// FreeBuffer free the buffer to pool.
+func (s *Store) FreeBuffer(n int, d []byte) {
+	s.bp[n].Put(d)
+}
+
 // AddFreeVolume add free volumes.
 func (s *Store) AddFreeVolume(n int, bdir, idir string) (sn int, err error) {
 	var (
@@ -271,21 +322,23 @@ func (s *Store) AddVolume(id int32) (v *Volume, err error) {
 	if v = s.Volumes[id]; v == nil {
 		if v, err = s.freeVolume(); err == nil {
 			v.Id = id
-			if err = s.zk.AddVolume(v); err == nil {
-				s.Volumes[id] = v
-			}
+			s.Volumes[id] = v
 		}
 	} else {
 		err = errors.ErrVolumeExist
 	}
 	s.vlock.Unlock()
 	if err != nil {
-		s.lock.Lock()
-		if id > s.VolumeId {
-			s.VolumeId = id
-		}
-		err = s.saveIndex()
-		s.lock.Unlock()
+		return
+	}
+	s.lock.Lock()
+	if id > s.VolumeId {
+		s.VolumeId = id
+	}
+	err = s.saveIndex()
+	s.lock.Unlock()
+	if err == nil {
+		err = s.zk.AddVolume(v)
 	}
 	return
 }
@@ -296,10 +349,8 @@ func (s *Store) DelVolume(id int32) (err error) {
 	s.vlock.Lock()
 	if v = s.Volumes[id]; v != nil {
 		if !v.Compact {
-			if err = s.zk.DelVolume(id); err == nil {
-				delete(s.Volumes, id)
-				v.Close()
-			}
+			delete(s.Volumes, id)
+			v.Close()
 		} else {
 			err = errors.ErrVolumeInCompact
 		}
@@ -308,9 +359,14 @@ func (s *Store) DelVolume(id int32) (err error) {
 	}
 	s.vlock.Unlock()
 	if err != nil {
-		s.lock.Lock()
-		err = s.saveIndex()
-		s.lock.Unlock()
+		return
+	}
+	v.Destroy()
+	s.lock.Lock()
+	err = s.saveIndex()
+	s.lock.Unlock()
+	if err == nil {
+		err = s.zk.DelVolume(id)
 	}
 	return
 }
@@ -323,17 +379,19 @@ func (s *Store) BulkVolume(id int32, bfile, ifile string) (err error) {
 	}
 	s.vlock.Lock()
 	if v = s.Volumes[id]; v == nil {
-		if err = s.zk.AddVolume(nv); err == nil {
-			s.Volumes[id] = nv
-		}
+		s.Volumes[id] = nv
 	} else {
 		err = errors.ErrVolumeExist
 	}
 	s.vlock.Unlock()
 	if err != nil {
-		s.lock.Lock()
-		err = s.saveIndex()
-		s.lock.Unlock()
+		return
+	}
+	s.lock.Lock()
+	err = s.saveIndex()
+	s.lock.Unlock()
+	if err == nil {
+		err = s.zk.AddVolume(nv)
 	}
 	return
 }
@@ -368,19 +426,22 @@ func (s *Store) CompactVolume(id int32) (err error) {
 	s.vlock.Lock()
 	if v = s.Volumes[id]; v != nil {
 		if err = v.StopCompact(nv); err == nil {
-			if err = s.zk.SetVolume(nv); err == nil {
-				s.Volumes[id] = nv
-				v.Close()
-			}
+			v.Close()
+			s.Volumes[id] = nv
 		}
 	} else {
 		err = errors.ErrVolumeExist
 	}
 	s.vlock.Unlock()
 	if err != nil {
-		s.lock.Lock()
-		err = s.saveIndex()
-		s.lock.Unlock()
+		return
+	}
+	v.Destroy()
+	s.lock.Lock()
+	err = s.saveIndex()
+	s.lock.Unlock()
+	if err == nil {
+		err = s.zk.SetVolume(nv)
 	}
 	return
 }
@@ -396,6 +457,7 @@ func (s *Store) Close() {
 	}
 	for _, v = range s.Volumes {
 		v.Close()
+		v.Destroy()
 	}
 	s.zk.Close()
 	return

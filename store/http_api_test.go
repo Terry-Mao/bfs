@@ -70,6 +70,7 @@ func TestHTTPAPI(t *testing.T) {
 		t.FailNow()
 	}
 	if tr.Ret != 1 {
+		t.Errorf("add_free_volume: %d", tr.Ret)
 		t.FailNow()
 	}
 	buf.Reset()
@@ -191,7 +192,7 @@ func TestHTTPAPI(t *testing.T) {
 		t.FailNow()
 	}
 	if tr.Ret != 1 {
-		t.Errorf("ret: %d", tr.Ret)
+		t.Errorf("uploads: %d", tr.Ret)
 		t.FailNow()
 	}
 	buf.Reset()

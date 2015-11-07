@@ -8,6 +8,7 @@ import (
 	"github.com/Terry-Mao/bfs/store/needle"
 	"github.com/Terry-Mao/bfs/store/stat"
 	log "github.com/golang/glog"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -40,8 +41,6 @@ type Volume struct {
 	// data
 	conf    *Config
 	needles map[int64]int64
-	bp      []*sync.Pool // buffer pool
-	np      *sync.Pool   // needle pool
 	ch      chan uint32
 	// compact
 	Compact       bool   `json:"compact"`
@@ -54,18 +53,11 @@ type Volume struct {
 
 // NewVolume new a volume and init it.
 func NewVolume(id int32, bfile, ifile string, c *Config) (v *Volume, err error) {
-	var i int
 	v = &Volume{}
 	v.Id = id
 	v.conf = c
 	v.closed = false
 	v.Stats = &stat.Stats{}
-	v.bp = make([]*sync.Pool, c.BatchMaxNum)
-	v.bp[0] = nil
-	for i = 1; i < c.BatchMaxNum; i++ {
-		v.bp[i] = &sync.Pool{}
-	}
-	v.np = &sync.Pool{}
 	if v.Block, err = block.NewSuperBlock(bfile, c.NeedleMaxSize*c.BatchMaxNum); err != nil {
 		return
 	}
@@ -132,42 +124,9 @@ func (v *Volume) Unlock() {
 	v.lock.Unlock()
 }
 
-// Needle get a needle from sync.Pool.
-func (v *Volume) Needle() (n *needle.Needle) {
-	var i interface{}
-	if i = v.np.Get(); i != nil {
-		n = i.(*needle.Needle)
-		return
-	}
-	return new(needle.Needle)
-}
-
 // Meta get zookeeper meta data.
 func (v *Volume) Meta() []byte {
 	return []byte(fmt.Sprintf("%s,%s,%d", v.Block.File, v.Indexer.File, v.Id))
-}
-
-// FreeNeedle free the needle to pool.
-func (v *Volume) FreeNeedle(n *needle.Needle) {
-	v.np.Put(n)
-}
-
-// Buffer get a buffer from sync.Pool.
-func (v *Volume) Buffer(n int) (d []byte) {
-	var (
-		di interface{}
-	)
-	if di = v.bp[n].Get(); di != nil {
-		d = di.([]byte)
-		return
-	}
-	d = make([]byte, n*v.conf.NeedleMaxSize)
-	return
-}
-
-// FreeBuffer free the buffer to pool.
-func (v *Volume) FreeBuffer(n int, d []byte) {
-	v.bp[n].Put(d)
 }
 
 // IsClosed reports whether the volume is closed.
@@ -176,14 +135,13 @@ func (v *Volume) IsClosed() bool {
 }
 
 // Get get a needle by key and cookie.
-func (v *Volume) Get(key int64, cookie int32, buf []byte) (data []byte, err error) {
+func (v *Volume) Get(key int64, cookie int32, buf []byte, n *needle.Needle) (err error) {
 	var (
 		now    = time.Now().UnixNano()
 		ok     bool
 		nc     int64
 		size   int32
 		offset uint32
-		n      *needle.Needle
 	)
 	// WARN pread syscall is atomic, so use rlock
 	v.lock.RLock()
@@ -208,16 +166,15 @@ func (v *Volume) Get(key int64, cookie int32, buf []byte) (data []byte, err erro
 	if log.V(1) {
 		log.Infof("get needle key: %d, cookie: %d, offset: %d, size: %d", key, cookie, offset, size)
 	}
-	n = v.Needle()
 	if err = n.ParseHeader(buf[:needle.HeaderSize]); err != nil {
-		goto free
+		return
 	}
 	if n.TotalSize != size {
 		err = errors.ErrNeedleSize
-		goto free
+		return
 	}
 	if err = n.ParseData(buf[needle.HeaderSize:size]); err != nil {
-		goto free
+		return
 	}
 	if log.V(2) {
 		log.Infof("%v\n", buf[:size])
@@ -227,11 +184,11 @@ func (v *Volume) Get(key int64, cookie int32, buf []byte) (data []byte, err erro
 	}
 	if n.Key != key {
 		err = errors.ErrNeedleKey
-		goto free
+		return
 	}
 	if n.Cookie != cookie {
 		err = errors.ErrNeedleCookie
-		goto free
+		return
 	}
 	// needles map may be out-dated, recheck
 	if n.Flag == needle.FlagDel {
@@ -239,14 +196,11 @@ func (v *Volume) Get(key int64, cookie int32, buf []byte) (data []byte, err erro
 		v.needles[key] = needle.NewCache(needle.CacheDelOffset, size)
 		v.lock.Unlock()
 		err = errors.ErrNeedleDeleted
-		goto free
+		return
 	}
-	data = n.Data
 	atomic.AddUint64(&v.Stats.TotalGetProcessed, 1)
 	atomic.AddUint64(&v.Stats.TotalReadBytes, uint64(size))
 	atomic.AddUint64(&v.Stats.TotalGetDelay, uint64(time.Now().UnixNano()-now))
-free:
-	v.FreeNeedle(n)
 	return
 }
 
@@ -565,6 +519,22 @@ func (v *Volume) Close() {
 		v.Block.Close()
 		v.Indexer.Close()
 		v.closed = true
+	}
+	v.lock.Unlock()
+	return
+}
+
+// Destroy remove block and index file, must called after Close().
+func (v *Volume) Destroy() {
+	var err error
+	v.lock.Lock()
+	if v.closed {
+		if err = os.Remove(v.Block.File); err != nil {
+			log.Errorf("os.Remove(\"%s\") error(%v)", v.Block.File, err)
+		}
+		if err = os.Remove(v.Indexer.File); err != nil {
+			log.Errorf("os.Remove(\"%s\") error(%v)", v.Indexer.File, err)
+		}
 	}
 	v.lock.Unlock()
 	return

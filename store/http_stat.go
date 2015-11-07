@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/Terry-Mao/bfs/store/errors"
 	"github.com/Terry-Mao/bfs/store/stat"
 	"net/http"
@@ -20,20 +21,21 @@ func StartStat(addr string, s *Store) {
 		Stats:     &stat.Stats{},
 	}
 	go startStat(s, info)
-	http.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/info", func(wr http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			http.Error(wr, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		var (
 			v       *Volume
+			err     error
 			vid     int32
 			ok      bool
+			data    []byte
 			res     = map[string]interface{}{"ret": errors.RetOK}
 			vids    = make([]int32, 0, len(s.Volumes))
 			volumes = make([]*Volume, 0, len(s.Volumes))
 		)
-		defer HttpGetWriter(r, w, time.Now(), res)
 		for vid, v = range s.Volumes {
 			vids = append(vids, vid)
 		}
@@ -46,6 +48,9 @@ func StartStat(addr string, s *Store) {
 		res["server"] = info
 		res["volumes"] = volumes
 		res["free_volumes"] = s.FreeVolumes
+		if data, err = json.Marshal(res); err != nil {
+			wr.Write(data)
+		}
 		return
 	})
 	go func() {

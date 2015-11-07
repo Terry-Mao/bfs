@@ -3,9 +3,8 @@ package errors
 const (
 	// common
 	RetOK            = 1
-	RetNoVolume      = 2
-	RetUploadMaxFile = 3
-	RetDelMaxFile    = 4
+	RetUploadMaxFile = 2
+	RetDelMaxFile    = 3
 	RetParamErr      = 65534
 	RetInternalErr   = 65535
 	// api
@@ -54,6 +53,9 @@ func (e StoreError) Error() string {
 }
 
 var (
+	// common
+	ErrParam         = StoreError(RetParamErr)
+	ErrUploadMaxFile = StoreError(RetUploadMaxFile)
 	// block
 	ErrSuperBlockMagic      = StoreError(RetSuperBlockMagic)
 	ErrSuperBlockVer        = StoreError(RetSuperBlockVer)
@@ -95,7 +97,9 @@ var (
 var (
 	storeErrorMsg = map[int]string{
 		// common
-		RetOK: "ok",
+		RetOK:            "ok",
+		RetParamErr:      "param error",
+		RetUploadMaxFile: "exceed upload max file num",
 		// block
 		RetSuperBlockMagic:      "super block magic not match",
 		RetSuperBlockVer:        "super block ver not match",

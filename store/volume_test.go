@@ -14,7 +14,7 @@ func TestVolume(t *testing.T) {
 		v     *Volume
 		err   error
 		data  = []byte("test")
-		buf   []byte
+		buf   = make([]byte, 1024)
 		bfile = "./test/test1"
 		ifile = "./test/test1.idx"
 		n     = &needle.Needle{}
@@ -34,8 +34,6 @@ func TestVolume(t *testing.T) {
 		t.FailNow()
 	}
 	defer v.Close()
-	buf = v.Buffer(1)
-	defer v.FreeBuffer(1, buf)
 	n.Parse(1, 1, data)
 	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
@@ -78,7 +76,7 @@ func TestVolume(t *testing.T) {
 		t.Errorf("Del error(%v)", err)
 		t.FailNow()
 	}
-	if _, err = v.Get(3, 3, buf); err != errors.ErrNeedleDeleted {
+	if err = v.Get(3, 3, buf, n); err != errors.ErrNeedleDeleted {
 		t.Error("err must be ErrNeedleDeleted")
 		t.FailNow()
 	} else {
@@ -219,11 +217,14 @@ func BenchmarkVolumeGet(b *testing.B) {
 	b.ResetTimer()
 	b.SetParallelism(8)
 	b.RunParallel(func(pb *testing.PB) {
-		var buf = make([]byte, testConf.BatchMaxNum*testConf.NeedleMaxSize)
-		var err1 error
+		var (
+			err1 error
+			n    = &needle.Needle{}
+			buf  = make([]byte, testConf.BatchMaxNum*testConf.NeedleMaxSize)
+		)
 		for pb.Next() {
 			t1 := mrand.Int63n(1000000)
-			if _, err1 = v.Get(t1, 1, buf); err1 != nil {
+			if err1 = v.Get(t1, 1, buf, n); err1 != nil {
 				b.Errorf("Get(%d) error(%v)", t1, err1)
 				b.FailNow()
 			}

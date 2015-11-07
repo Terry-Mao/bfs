@@ -66,9 +66,9 @@ func TestStore(t *testing.T) {
 		t.Errorf("v.Add(1) error(%v)", err)
 		t.FailNow()
 	}
-	buf = v.Buffer(1)
-	defer v.FreeBuffer(1, buf)
-	if _, err = v.Get(1, 1, buf); err != nil {
+	buf = s.Buffer(1)
+	defer s.FreeBuffer(1, buf)
+	if err = v.Get(1, 1, buf, n); err != nil {
 		t.Errorf("v.Get(1) error(%v)", err)
 		t.FailNow()
 	}
@@ -84,7 +84,7 @@ func TestStore(t *testing.T) {
 		t.Errorf("v.Add() error(%v)", err)
 		t.FailNow()
 	}
-	if _, err = v.Get(1, 1, buf); err != nil {
+	if err = v.Get(1, 1, buf, n); err != nil {
 		t.Errorf("v.Get(1) error(%v)", err)
 		t.FailNow()
 	}
@@ -96,7 +96,7 @@ func TestStore(t *testing.T) {
 		t.Error("Volume(1) not exist")
 		t.FailNow()
 	}
-	if _, err = v.Get(1, 1, buf); err != nil {
+	if err = v.Get(1, 1, buf, n); err != nil {
 		t.Errorf("v.Get(1) error(%v)", err)
 		t.FailNow()
 	}

@@ -42,42 +42,58 @@ type httpGetHandler struct {
 
 func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
+		now              = time.Now()
 		v                *Volume
+		n                *needle.Needle
 		err              error
-		buf, data        []byte
+		buf              []byte
 		vid, key, cookie int64
+		ret              = http.StatusOK
 		params           = r.URL.Query()
 	)
 	if r.Method != "GET" {
-		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
+		ret = http.StatusMethodNotAllowed
+		http.Error(wr, "method not allowed", ret)
 		return
 	}
+	defer HttpGetWriter(r, wr, now, &err, &ret)
 	if vid, err = strconv.ParseInt(params.Get("vid"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("vid"), err)
-		http.Error(wr, "bad request", http.StatusBadRequest)
+		ret = http.StatusBadRequest
 		return
 	}
 	if key, err = strconv.ParseInt(params.Get("key"), 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("key"), err)
-		http.Error(wr, "bad request", http.StatusBadRequest)
+		ret = http.StatusBadRequest
 		return
 	}
 	if cookie, err = strconv.ParseInt(params.Get("cookie"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("cookie"), err)
-		http.Error(wr, "bad request", http.StatusBadRequest)
+		ret = http.StatusBadRequest
 		return
 	}
-	if v = h.s.Volumes[int32(vid)]; v == nil {
-		http.Error(wr, "not found", http.StatusNotFound)
-		return
-	}
-	buf = v.Buffer(1)
-	if data, err = v.Get(key, int32(cookie), buf); err == nil {
-		wr.Write(data)
+	buf = h.s.Buffer(1)
+	n = h.s.Needle()
+	h.s.RLockVolume()
+	if v = h.s.Volumes[int32(vid)]; v != nil {
+		if err = v.Get(key, int32(cookie), buf, n); err != nil {
+			ret = http.StatusInternalServerError
+		}
 	} else {
-		http.Error(wr, err.Error(), http.StatusInternalServerError)
+		ret = http.StatusNotFound
+		err = errors.ErrVolumeNotExist
 	}
-	v.FreeBuffer(1, buf)
+	h.s.RUnlockVolume()
+	if err != nil {
+		if _, err = wr.Write(n.Data); err != nil {
+			log.Errorf("wr.Write() error(%v)", err)
+		}
+		if log.V(1) {
+			log.Infof("get a needle: %v", n)
+		}
+	}
+	h.s.FreeBuffer(1, buf)
+	h.s.FreeNeedle(n)
 	return
 }
 
@@ -132,13 +148,8 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if cookie, err = strconv.ParseInt(r.FormValue("cookie"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("cookie"),
-			err)
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("cookie"), err)
 		res["ret"] = errors.RetParamErr
-		return
-	}
-	if v = h.s.Volumes[int32(vid)]; v == nil {
-		res["ret"] = errors.RetNoVolume
 		return
 	}
 	if file, _, err = r.FormFile("file"); err != nil {
@@ -158,16 +169,24 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetNeedleTooLarge
 		return
 	}
-	n = v.Needle()
-	buf = v.Buffer(1)
+	n = h.s.Needle()
+	buf = h.s.Buffer(1)
 	rn, err = file.Read(buf)
 	file.Close()
-	if err == nil {
-		n.Parse(key, int32(cookie), buf[:rn])
-		err = v.Add(n)
+	if err != nil {
+		res["ret"] = errors.RetInternalErr
+		return
 	}
-	v.FreeBuffer(1, buf)
-	v.FreeNeedle(n)
+	n.Parse(key, int32(cookie), buf[:rn])
+	h.s.RLockVolume()
+	if v = h.s.Volumes[int32(vid)]; v != nil {
+		err = v.Add(n)
+	} else {
+		err = errors.ErrVolumeNotExist
+	}
+	h.s.RUnlockVolume()
+	h.s.FreeBuffer(1, buf)
+	h.s.FreeNeedle(n)
 	if err != nil {
 		if storeErr, ok = err.(errors.StoreError); ok {
 			res["ret"] = int(storeErr)
@@ -189,17 +208,14 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		i, rn, tn, nn int
 		ok            bool
 		buf           []byte
-		str           string
 		err           error
 		vid           int64
 		key           int64
 		cookie        int64
 		size          int64
 		offsets       []int
-		keys          []int64
-		cookies       []int32
-		keyStrs       []string
-		cookieStrs    []string
+		keys          []string
+		cookies       []string
 		sr            sizer
 		fr            *os.File
 		fi            os.FileInfo
@@ -230,27 +246,11 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetParamErr
 		return
 	}
-	keyStrs = r.MultipartForm.Value["keys"]
-	cookieStrs = r.MultipartForm.Value["cookies"]
-	if len(keyStrs) != len(cookieStrs) {
-		log.Errorf("param length not match, keys: %d, cookies: %d", len(keyStrs), len(cookieStrs))
+	keys = r.MultipartForm.Value["keys"]
+	cookies = r.MultipartForm.Value["cookies"]
+	if len(keys) != len(cookies) {
+		log.Errorf("param length not match, keys: %d, cookies: %d", len(keys), len(cookies))
 		res["ret"] = errors.RetParamErr
-		return
-	}
-	for i, str = range keyStrs {
-		if key, err = strconv.ParseInt(str, 10, 64); err != nil {
-			res["ret"] = errors.RetParamErr
-			return
-		}
-		if cookie, err = strconv.ParseInt(str, 10, 32); err != nil {
-			res["ret"] = errors.RetParamErr
-			return
-		}
-		keys = append(keys, key)
-		cookies = append(cookies, int32(cookie))
-	}
-	if v = h.s.Volumes[int32(vid)]; v == nil {
-		res["ret"] = errors.RetNoVolume
 		return
 	}
 	fhs = r.MultipartForm.File["file"]
@@ -261,8 +261,8 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	offsets = make([]int, nn*2)
-	buf = v.Buffer(nn)
-	n = v.Needle()
+	buf = h.s.Buffer(nn)
+	n = h.s.Needle()
 	for i, fh = range fhs {
 		file, err = fh.Open()
 		file.Close()
@@ -275,14 +275,13 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			size = sr.Size()
 		} else if fr, ok = file.(*os.File); ok {
 			if fi, err = fr.Stat(); err != nil {
-				res["ret"] = errors.RetInternalErr
-				return
+				break
 			}
 			size = fi.Size()
 		}
 		if size > int64(h.c.NeedleMaxSize) {
-			res["ret"] = errors.RetNeedleTooLarge
-			return
+			err = errors.ErrNeedleTooLarge
+			break
 		}
 		if rn, err = file.Read(buf); err != nil {
 			log.Errorf("file.Read() error(%v)", err)
@@ -293,18 +292,36 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		offsets[i+1] = tn
 	}
 	if err == nil {
-		v.Lock()
-		for i = 0; i < nn; i++ {
-			n.Parse(keys[i], cookies[i], buf[offsets[i]:offsets[i+1]])
-			if err = v.Write(n); err != nil {
-				break
+		h.s.RLockVolume()
+		if v = h.s.Volumes[int32(vid)]; v != nil {
+			v.Lock()
+			for i = 0; i < nn; i++ {
+				if key, err = strconv.ParseInt(keys[i], 10, 64); err != nil {
+					log.Errorf("strconv.ParseInt(\"%s\") error(%v)", keys[i], err)
+					err = errors.ErrParam
+					break
+				}
+				if cookie, err = strconv.ParseInt(cookies[i], 10, 32); err != nil {
+					log.Errorf("strconv.ParseInt(\"%s\") error(%v)", cookies[i], err)
+					err = errors.ErrParam
+					break
+				}
+				n.Parse(key, int32(cookie), buf[offsets[i]:offsets[i+1]])
+				if err = v.Write(n); err != nil {
+					break
+				}
 			}
+			if err == nil {
+				err = v.Flush()
+			}
+			v.Unlock()
+		} else {
+			err = errors.ErrVolumeNotExist
 		}
-		if err == nil {
-			err = v.Flush()
-		}
-		v.Unlock()
+		h.s.RUnlockVolume()
 	}
+	h.s.FreeBuffer(nn, buf)
+	h.s.FreeNeedle(n)
 	if err != nil {
 		if storeErr, ok = err.(errors.StoreError); ok {
 			res["ret"] = int(storeErr)
@@ -312,8 +329,6 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			res["ret"] = errors.RetInternalErr
 		}
 	}
-	v.FreeNeedle(n)
-	v.FreeBuffer(nn, buf)
 	return
 }
 
@@ -323,10 +338,10 @@ type httpDelHandler struct {
 
 func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
+		v        *Volume
 		ok       bool
 		err      error
 		storeErr errors.StoreError
-		v        *Volume
 		key, vid int64
 		res      = map[string]interface{}{"ret": errors.RetOK}
 	)
@@ -345,11 +360,14 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetParamErr
 		return
 	}
-	if v = h.s.Volumes[int32(vid)]; v == nil {
-		res["ret"] = errors.RetNoVolume
-		return
+	h.s.RLockVolume()
+	if v = h.s.Volumes[int32(vid)]; v != nil {
+		err = v.Del(key)
+	} else {
+		err = errors.ErrVolumeNotExist
 	}
-	if err = v.Del(key); err != nil {
+	h.s.RUnlockVolume()
+	if err != nil {
 		if storeErr, ok = err.(errors.StoreError); ok {
 			res["ret"] = int(storeErr)
 		} else {
@@ -367,8 +385,8 @@ type httpDelsHandler struct {
 func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		v        *Volume
-		err      error
 		ok       bool
+		err      error
 		storeErr errors.StoreError
 		str      string
 		key, vid int64
@@ -385,26 +403,29 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetParamErr
 		return
 	}
-	if v = h.s.Volumes[int32(vid)]; v == nil {
-		res["ret"] = errors.RetNoVolume
-		return
-	}
 	if keyStrs = r.PostForm["keys"]; len(keyStrs) > h.c.BatchMaxNum {
 		res["ret"] = errors.RetDelMaxFile
 		return
 	}
-	for _, str = range keyStrs {
-		if key, err = strconv.ParseInt(str, 10, 64); err != nil {
-			log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
-			res["ret"] = errors.RetParamErr
-			return
-		}
-		if err = v.Del(key); err != nil {
-			if storeErr, ok = err.(errors.StoreError); ok {
-				res["ret"] = int(storeErr)
+	h.s.RLockVolume()
+	if v = h.s.Volumes[int32(vid)]; v != nil {
+		for _, str = range keyStrs {
+			if key, err = strconv.ParseInt(str, 10, 64); err == nil {
+				err = v.Del(key)
 			} else {
-				res["ret"] = errors.RetInternalErr
+				log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
+				err = errors.ErrParam
 			}
+		}
+	} else {
+		err = errors.ErrVolumeNotExist
+	}
+	h.s.RUnlockVolume()
+	if err != nil {
+		if storeErr, ok = err.(errors.StoreError); ok {
+			res["ret"] = int(storeErr)
+		} else {
+			res["ret"] = errors.RetInternalErr
 		}
 	}
 	return
