@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/Terry-Mao/bfs/store/errors"
 	"github.com/Terry-Mao/bfs/store/stat"
+	log "github.com/golang/glog"
 	"net/http"
 	"time"
 )

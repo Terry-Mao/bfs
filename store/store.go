@@ -259,8 +259,6 @@ func (s *Store) saveFreeVolumeIndex() (err error) {
 func (s *Store) saveVolumeIndex() (err error) {
 	var (
 		tn, n int
-		ok    bool
-		id    int32
 		v     *Volume
 	)
 	if _, err = s.vf.Seek(0, os.SEEK_SET); err != nil {
