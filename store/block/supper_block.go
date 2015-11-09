@@ -73,22 +73,19 @@ func NewSuperBlock(file string, buf int) (b *SuperBlock, err error) {
 	b.buf = make([]byte, buf)
 	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
-		return
+		b.Close()
+		return nil, err
 	}
 	if b.r, err = os.OpenFile(file, os.O_RDONLY, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
-		goto failed
+		b.Close()
+		return nil, err
 	}
 	b.bw = bufio.NewWriterSize(b.w, buf)
 	if err = b.init(); err != nil {
 		log.Errorf("block: %s init() error(%v)", file, err)
-		goto failed
-	}
-	return
-failed:
-	b.w.Close()
-	if b.r != nil {
-		b.r.Close()
+		b.Close()
+		return nil, err
 	}
 	return
 }
@@ -147,11 +144,10 @@ func (b *SuperBlock) parseMeta() (err error) {
 	b.Magic = b.buf[magicOffset : magicOffset+magicSize]
 	b.Ver = b.buf[verOffset : verOffset+verSize][0]
 	if !bytes.Equal(b.Magic, magic) {
-		err = errors.ErrSuperBlockMagic
-		return
+		return errors.ErrSuperBlockMagic
 	}
 	if b.Ver == Ver1 {
-		err = errors.ErrSuperBlockVer
+		return errors.ErrSuperBlockVer
 	}
 	return
 }
@@ -168,8 +164,7 @@ func (b *SuperBlock) available(incrOffset uint32) (err error) {
 // Add append a photo to the block.
 func (b *SuperBlock) Add(n *needle.Needle) (err error) {
 	if b.LastErr != nil {
-		err = b.LastErr
-		return
+		return b.LastErr
 	}
 	var incrOffset = needle.NeedleOffset(int64(n.TotalSize))
 	if err = b.available(incrOffset); err != nil {
@@ -189,8 +184,7 @@ func (b *SuperBlock) Add(n *needle.Needle) (err error) {
 // Write start add needles to the block, must called after start a transaction.
 func (b *SuperBlock) Write(n *needle.Needle) (err error) {
 	if b.LastErr != nil {
-		err = b.LastErr
-		return
+		return b.LastErr
 	}
 	var incrOffset = needle.NeedleOffset(int64(n.TotalSize))
 	if err = b.available(incrOffset); err != nil {
@@ -207,8 +201,7 @@ func (b *SuperBlock) Write(n *needle.Needle) (err error) {
 // Flush flush writer buffer.
 func (b *SuperBlock) Flush() (err error) {
 	if b.LastErr != nil {
-		err = b.LastErr
-		return
+		return b.LastErr
 	}
 	// write may be less than request, we call flush in a loop
 	if err = b.bw.Flush(); err != nil {
@@ -225,8 +218,7 @@ func (b *SuperBlock) Flush() (err error) {
 // Repair repair the specified offset needle without update current offset.
 func (b *SuperBlock) Repair(offset uint32, buf []byte) (err error) {
 	if b.LastErr != nil {
-		err = b.LastErr
-		return
+		return b.LastErr
 	}
 	_, err = b.w.WriteAt(buf, needle.BlockOffset(offset))
 	b.LastErr = err
@@ -236,8 +228,7 @@ func (b *SuperBlock) Repair(offset uint32, buf []byte) (err error) {
 // Get get a needle from super block.
 func (b *SuperBlock) Get(offset uint32, buf []byte) (err error) {
 	if b.LastErr != nil {
-		err = b.LastErr
-		return
+		return b.LastErr
 	}
 	_, err = b.r.ReadAt(buf, needle.BlockOffset(offset))
 	b.LastErr = err
@@ -247,8 +238,7 @@ func (b *SuperBlock) Get(offset uint32, buf []byte) (err error) {
 // Del logical del a needls, only update the flag to it.
 func (b *SuperBlock) Del(offset uint32) (err error) {
 	if b.LastErr != nil {
-		err = b.LastErr
-		return
+		return b.LastErr
 	}
 	// WriteAt won't update the file offset.
 	_, err = b.w.WriteAt(needle.FlagDelBytes, needle.BlockOffset(offset)+needle.FlagOffset)
@@ -259,15 +249,15 @@ func (b *SuperBlock) Del(offset uint32) (err error) {
 // Scan scan a block file.
 func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uint32, uint32) error) (err error) {
 	var (
-		soffset, eoffset uint32
-		data             []byte
-		n                = &needle.Needle{}
-		rd               = bufio.NewReaderSize(r, b.bufSize)
+		data   []byte
+		so, eo uint32
+		n      = &needle.Needle{}
+		rd     = bufio.NewReaderSize(r, b.bufSize)
 	)
 	if offset == 0 {
 		offset = needle.NeedleOffset(headerOffset)
 	}
-	soffset, eoffset = offset, offset
+	so, eo = offset, offset
 	log.Infof("scan block: %s from offset: %d", b.File, offset)
 	if _, err = r.Seek(needle.BlockOffset(offset), os.SEEK_SET); err != nil {
 		log.Errorf("block: %s Seek() error(%v)", b.File)
@@ -295,18 +285,17 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 		if log.V(1) {
 			log.Info(n.String())
 		}
-		eoffset += needle.NeedleOffset(int64(n.TotalSize))
-		// TODO check needle size
-		if err = fn(n, soffset, eoffset); err != nil {
+		eo += needle.NeedleOffset(int64(n.TotalSize))
+		if err = fn(n, so, eo); err != nil {
 			break
 		}
-		soffset = eoffset
+		so = eo
 	}
-	if err != io.EOF {
-		log.Infof("scan block: %s to offset: %d error(%v) [failed]", b.File, eoffset, err)
-	} else {
+	if err == io.EOF {
+		log.Infof("scan block: %s to offset: %d [ok]", b.File, eo)
 		err = nil
-		log.Infof("scan block: %s to offset: %d [ok]", b.File, eoffset)
+	} else {
+		log.Infof("scan block: %s to offset: %d error(%v) [failed]", b.File, eo, err)
 	}
 	return
 }
@@ -314,7 +303,7 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 // Recovery recovery needles map from super block.
 func (b *SuperBlock) Recovery(offset uint32, fn func(*needle.Needle, uint32, uint32) error) (err error) {
 	if err = b.Scan(b.r, offset, func(n *needle.Needle, so, eo uint32) (err1 error) {
-		if err1 = fn(n, so, eo); err != nil {
+		if err1 = fn(n, so, eo); err1 == nil {
 			b.Offset = eo
 		}
 		return
@@ -331,17 +320,15 @@ func (b *SuperBlock) Recovery(offset uint32, fn func(*needle.Needle, uint32, uin
 // Compact compact the orig block, copy to disk dst block.
 func (b *SuperBlock) Compact(offset uint32, fn func(*needle.Needle, uint32, uint32) error) (err error) {
 	if b.LastErr != nil {
-		err = b.LastErr
-		return
+		return b.LastErr
 	}
 	var r *os.File
 	if r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
 		return
 	}
-	if err = b.Scan(r, offset, func(n *needle.Needle, so, eo uint32) (err1 error) {
-		err1 = fn(n, so, eo)
-		return
+	if err = b.Scan(r, offset, func(n *needle.Needle, so, eo uint32) error {
+		return fn(n, so, eo)
 	}); err != nil {
 		r.Close()
 		return
@@ -354,36 +341,33 @@ func (b *SuperBlock) Compact(offset uint32, fn func(*needle.Needle, uint32, uint
 
 // Open open the closed superblock, must called after NewSuperBlock.
 func (b *SuperBlock) Open() (err error) {
-	if b.closed {
-		if b.w, err = os.OpenFile(b.File, os.O_WRONLY, 0664); err != nil {
-			log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
-			return
-		}
-		b.bw.Reset(b.w)
-		if b.r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
-			log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
-			goto failed
-		}
-		if err = b.init(); err != nil {
-			log.Errorf("block: %s init error(%v)", b.File, err)
-			goto failed
-		}
-		b.closed = false
-		b.LastErr = nil
+	if !b.closed {
+		return
 	}
-	return
-failed:
-	b.w.Close()
-	if b.r != nil {
-		b.r.Close()
+	if b.w, err = os.OpenFile(b.File, os.O_WRONLY, 0664); err != nil {
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
+		return
 	}
+	b.bw.Reset(b.w)
+	if b.r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
+		b.Close()
+		return
+	}
+	if err = b.init(); err != nil {
+		log.Errorf("block: %s init error(%v)", b.File, err)
+		b.Close()
+		return
+	}
+	b.closed = false
+	b.LastErr = nil
 	return
 }
 
 // Close close the superblock.
 func (b *SuperBlock) Close() {
 	var err error
-	if !b.closed {
+	if b.w != nil {
 		if err = b.Flush(); err != nil {
 			log.Errorf("block: %s flush error(%v)", b.File, err)
 		}
@@ -393,11 +377,24 @@ func (b *SuperBlock) Close() {
 		if err = b.w.Close(); err != nil {
 			log.Errorf("block: %s close error(%v)", b.File, err)
 		}
+		b.w = nil
+	}
+	if b.r != nil {
 		if err = b.r.Close(); err != nil {
 			log.Errorf("block: %s close error(%v)", b.File, err)
 		}
-		b.closed = true
-		b.LastErr = errors.ErrSuperBlockClosed
+		b.r = nil
 	}
+	b.closed = true
+	b.LastErr = errors.ErrSuperBlockClosed
+	return
+}
+
+// Destroy destroy the block.
+func (b *SuperBlock) Destroy() {
+	if !b.closed {
+		b.Close()
+	}
+	os.Remove(b.File)
 	return
 }

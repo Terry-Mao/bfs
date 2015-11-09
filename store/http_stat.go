@@ -5,7 +5,6 @@ import (
 	"github.com/Terry-Mao/bfs/store/errors"
 	"github.com/Terry-Mao/bfs/store/stat"
 	"net/http"
-	"sort"
 	"time"
 )
 
@@ -27,29 +26,34 @@ func StartStat(addr string, s *Store) {
 			return
 		}
 		var (
-			v       *Volume
-			err     error
-			vid     int32
-			ok      bool
-			data    []byte
-			res     = map[string]interface{}{"ret": errors.RetOK}
-			vids    = make([]int32, 0, len(s.Volumes))
-			volumes = make([]*Volume, 0, len(s.Volumes))
+			v           *Volume
+			err         error
+			data        []byte
+			volumes     []*Volume
+			freeVolumes []*Volume
+			res         = map[string]interface{}{"ret": errors.RetOK}
 		)
-		for vid, v = range s.Volumes {
-			vids = append(vids, vid)
+		s.RLockVolume()
+		volumes = make([]*Volume, 0, len(s.Volumes))
+		for _, v = range s.Volumes {
+			volumes = append(volumes, v)
 		}
-		sort.Sort(Int32Slice(vids))
-		for _, vid = range vids {
-			if v, ok = s.Volumes[vid]; ok {
-				volumes = append(volumes, v)
-			}
+		s.RUnlockVolume()
+		s.RLockFreeVolume()
+		freeVolumes = make([]*Volume, 0, len(s.FreeVolumes))
+		for _, v = range s.FreeVolumes {
+			freeVolumes = append(freeVolumes, v)
 		}
+		s.RUnlockFreeVolume()
 		res["server"] = info
 		res["volumes"] = volumes
-		res["free_volumes"] = s.FreeVolumes
-		if data, err = json.Marshal(res); err != nil {
-			wr.Write(data)
+		res["free_volumes"] = freeVolumes
+		if data, err = json.Marshal(res); err == nil {
+			if _, err = wr.Write(data); err != nil {
+				log.Errorf("wr.Write() error(%v)", err)
+			}
+		} else {
+			log.Errorf("json.Marshal() error(%v)", err)
 		}
 		return
 	})
@@ -71,10 +75,12 @@ func startStat(s *Store, info *stat.Info) {
 		stat1 = info.Stats
 		info.Stats = stat
 		stat1.Reset()
+		s.RLockVolume()
 		for _, v = range s.Volumes {
 			v.Stats.Calc()
 			stat1.Merge(v.Stats)
 		}
+		s.RUnlockVolume()
 		stat1.Calc()
 		info.Stats = stat1
 		time.Sleep(statDuration)

@@ -8,7 +8,6 @@ import (
 	"github.com/Terry-Mao/bfs/store/needle"
 	"github.com/Terry-Mao/bfs/store/stat"
 	log "github.com/golang/glog"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -59,24 +58,22 @@ func NewVolume(id int32, bfile, ifile string, c *Config) (v *Volume, err error) 
 	v.conf = c
 	v.closed = false
 	v.Stats = &stat.Stats{}
-	if v.Block, err = block.NewSuperBlock(bfile, c.NeedleMaxSize*c.BatchMaxNum); err != nil {
-		return
-	}
-	if v.Indexer, err = index.NewIndexer(ifile, c.IndexSigTime,
-		c.IndexSigCnt, c.IndexRingBuffer, c.IndexBufferio); err != nil {
-		v.Block.Close()
-		return
-	}
 	v.needles = make(map[int64]int64, c.VolumeNeedleCache)
 	v.ch = make(chan uint32, c.VolumeDelChan)
 	v.compactKeys = []int64{}
-	if err = v.init(); err != nil {
-		v.Indexer.Close()
-		v.Block.Close()
-	} else {
-		v.wg.Add(1)
-		go v.del()
+	if v.Block, err = block.NewSuperBlock(bfile, c.NeedleMaxSize*c.BatchMaxNum); err != nil {
+		return nil, err
 	}
+	if v.Indexer, err = index.NewIndexer(ifile, c.IndexSigTime, c.IndexSigCnt, c.IndexRingBuffer, c.IndexBufferio); err != nil {
+		v.Close()
+		return nil, err
+	}
+	if err = v.init(); err != nil {
+		v.Close()
+		return nil, err
+	}
+	v.wg.Add(1)
+	go v.del()
 	return
 }
 
@@ -474,51 +471,56 @@ free:
 // Open open the closed volume, must called after NewVolume.
 func (v *Volume) Open() (err error) {
 	v.lock.Lock()
-	if v.closed {
-		if err = v.Block.Open(); err == nil {
-			if err = v.Indexer.Open(); err == nil {
-				if err = v.init(); err == nil {
-					v.closed = false
-					v.wg.Add(1)
-					go v.del()
-				}
-			}
-		}
+	defer v.lock.Unlock()
+	if !v.closed {
+		return
 	}
-	v.lock.Unlock()
-	if err != nil {
-		v.Block.Close()
-		v.Indexer.Close()
+	if err = v.Block.Open(); err != nil {
+		v.Close()
+		return
 	}
+	if err = v.Indexer.Open(); err != nil {
+		v.Close()
+		return
+	}
+	if err = v.init(); err != nil {
+		v.Close()
+		return
+	}
+	v.closed = false
+	v.wg.Add(1)
+	go v.del()
 	return
 }
 
 // Close close the volume.
 func (v *Volume) Close() {
 	v.lock.Lock()
-	if !v.closed {
+	defer v.lock.Unlock()
+	if v.ch != nil {
 		v.ch <- volumeFinish
 		v.wg.Wait()
-		v.Block.Close()
-		v.Indexer.Close()
-		v.closed = true
 	}
-	v.lock.Unlock()
-	return
+	if v.Block != nil {
+		v.Block.Close()
+	}
+	if v.Indexer != nil {
+		v.Indexer.Close()
+	}
+	v.closed = true
 }
 
 // Destroy remove block and index file, must called after Close().
 func (v *Volume) Destroy() {
-	var err error
 	v.lock.Lock()
-	if v.closed {
-		if err = os.Remove(v.Block.File); err != nil {
-			log.Errorf("os.Remove(\"%s\") error(%v)", v.Block.File, err)
-		}
-		if err = os.Remove(v.Indexer.File); err != nil {
-			log.Errorf("os.Remove(\"%s\") error(%v)", v.Indexer.File, err)
-		}
+	defer v.lock.Unlock()
+	if !v.closed {
+		v.Close()
 	}
-	v.lock.Unlock()
-	return
+	if v.Block != nil {
+		v.Block.Destroy()
+	}
+	if v.Indexer != nil {
+		v.Indexer.Destroy()
+	}
 }

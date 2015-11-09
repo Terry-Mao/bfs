@@ -100,7 +100,6 @@ func NewIndexer(file string, sigTime time.Duration, sigCnt, ring, buf int) (i *I
 	var stat os.FileInfo
 	i = &Indexer{}
 	i.ring = NewRing(ring)
-	i.signal = make(chan int, 1)
 	i.sigCnt = sigCnt
 	i.sigTime = sigTime
 	i.bufSize = buf
@@ -108,21 +107,22 @@ func NewIndexer(file string, sigTime time.Duration, sigCnt, ring, buf int) (i *I
 	i.closed = false
 	if i.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
-		return
+		return nil, err
 	}
 	if stat, err = i.f.Stat(); err != nil {
 		log.Errorf("index: %s Stat() error(%v)", i.File, err)
-		return
+		return nil, err
 	}
 	if stat.Size() == 0 {
-		// falloc(FALLOC_FL_KEEP_SIZE)
 		if err = myos.Fallocate(i.f.Fd(), 1, 0, fallocSize); err != nil {
 			log.Errorf("index: %s fallocate() error(err)", i.File, err)
-			return
+			i.Close()
+			return nil, err
 		}
 	}
 	i.bw = bufio.NewWriterSize(i.f, buf)
 	i.wg.Add(1)
+	i.signal = make(chan int, 1)
 	go i.write()
 	return
 }
@@ -142,8 +142,7 @@ func (i *Indexer) Signal() {
 func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 	var index *Index
 	if i.LastErr != nil {
-		err = i.LastErr
-		return
+		return i.LastErr
 	}
 	if index, err = i.ring.Set(); err != nil {
 		i.LastErr = err
@@ -153,7 +152,6 @@ func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 	index.Offset = offset
 	index.Size = size
 	i.ring.SetAdv()
-	// signal
 	if i.ring.Buffered() > i.sigCnt {
 		i.Signal()
 	}
@@ -165,8 +163,7 @@ func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 // ONLY used in super block recovery!!!!!!!!!!!
 func (i *Indexer) Write(key int64, offset uint32, size int32) (err error) {
 	if i.LastErr != nil {
-		err = i.LastErr
-		return
+		return i.LastErr
 	}
 	if err = binary.BigEndian.WriteInt64(i.bw, key); err != nil {
 		i.LastErr = err
@@ -185,8 +182,7 @@ func (i *Indexer) Write(key int64, offset uint32, size int32) (err error) {
 // Flush flush writer buffer.
 func (i *Indexer) Flush() (err error) {
 	if i.LastErr != nil {
-		err = i.LastErr
-		return
+		return i.LastErr
 	}
 	if err = i.bw.Flush(); err != nil {
 		i.LastErr = err
@@ -240,15 +236,8 @@ func (i *Indexer) write() {
 		}
 	}
 	i.merge()
-	i.Flush()
-	if err = i.f.Sync(); err != nil {
-		log.Errorf("index: %s Sync() error(%v)", i.File, err)
-	}
-	if err = i.f.Close(); err != nil {
-		log.Errorf("index: %s Close() error(%v)", i.File, err)
-	}
-	log.Warningf("index: %s write job exit", i.File)
 	i.wg.Done()
+	log.Warningf("index: %s write job exit", i.File)
 	return
 }
 
@@ -279,11 +268,11 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 			break
 		}
 	}
-	if err != io.EOF {
-		log.Infof("scan index: %s error(%v) [failed]", i.File, err)
-	} else {
+	if err == io.EOF {
 		err = nil
 		log.Infof("scan index: %s [ok]", i.File)
+	} else {
+		log.Infof("scan index: %s error(%v) [failed]", i.File, err)
 	}
 	return
 }
@@ -307,28 +296,48 @@ func (i *Indexer) Recovery(fn func(*Index) error) (err error) {
 
 // Open open the closed indexer, must called after NewIndexer.
 func (i *Indexer) Open() (err error) {
-	if i.closed {
-		if i.f, err = os.OpenFile(i.File, os.O_RDWR, 0664); err != nil {
-			log.Errorf("os.OpenFile(\"%s\") error(%v)", i.File, err)
-			return
-		}
-		i.bw.Reset(i.f)
-		i.closed = false
-		i.LastErr = nil
-		i.wg.Add(1)
-		go i.write()
+	if !i.closed {
+		return
 	}
+	if i.f, err = os.OpenFile(i.File, os.O_RDWR, 0664); err != nil {
+		log.Errorf("os.OpenFile(\"%s\") error(%v)", i.File, err)
+		return
+	}
+	i.bw.Reset(i.f)
+	i.closed = false
+	i.LastErr = nil
+	i.wg.Add(1)
+	go i.write()
 	return
 }
 
 // Close close the indexer file.
 func (i *Indexer) Close() {
-	if !i.closed {
+	var err error
+	if i.signal != nil {
 		i.signal <- finish
-		// wait write goroutine exit
 		i.wg.Wait()
-		i.closed = true
-		i.LastErr = errors.ErrIndexClosed
 	}
+	if i.f != nil {
+		if err = i.Flush(); err != nil {
+			log.Errorf("index: %s Flush() error(%v)", i.File, err)
+		}
+		if err = i.f.Sync(); err != nil {
+			log.Errorf("index: %s Sync() error(%v)", i.File, err)
+		}
+		if err = i.f.Close(); err != nil {
+			log.Errorf("index: %s Close() error(%v)", i.File, err)
+		}
+	}
+	i.closed = true
+	i.LastErr = errors.ErrIndexClosed
 	return
+}
+
+// Destroy destroy the indexer.
+func (i *Indexer) Destroy() {
+	if !i.closed {
+		i.Close()
+	}
+	os.Remove(i.File)
 }

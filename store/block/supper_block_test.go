@@ -18,19 +18,13 @@ func TestSuperBlock(t *testing.T) {
 		needles            = make(map[int64]int64)
 		data               = []byte("test")
 		file               = "../test/test.block"
-		bfile              = "../test/test.block.compress"
-		bifile             = "../test/test.block.compress.idx"
 		ifile              = "../test/test.idx"
 		//indexer *Indexer
 	)
 	os.Remove(file)
 	os.Remove(ifile)
-	os.Remove(bfile)
-	os.Remove(bifile)
 	defer os.Remove(file)
 	defer os.Remove(ifile)
-	defer os.Remove(bfile)
-	defer os.Remove(bifile)
 	// test new block file
 	if b, err = NewSuperBlock(file, 4*1024*1024); err != nil {
 		t.Errorf("NewSuperBlock(\"%s\") error(%v)", file, err)
