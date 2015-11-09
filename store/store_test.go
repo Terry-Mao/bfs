@@ -9,41 +9,56 @@ import (
 
 func TestStore(t *testing.T) {
 	var (
-		s      *Store
-		z      *Zookeeper
-		v      *Volume
-		err    error
-		buf    []byte
-		data   = []byte("test")
-		n      = &needle.Needle{}
-		bfile  = "./test/block_1"
-		ifile  = "./test/block_1.idx"
-		b2file = "./test/block_2"
-		i2file = "./test/block_2.idx"
-		b3file = "./test/block_3"
-		i3file = "./test/block_3.idx"
+		s       *Store
+		z       *Zookeeper
+		v       *Volume
+		err     error
+		buf     []byte
+		data    = []byte("test")
+		n       = &needle.Needle{}
+		bfile   = "./test/_free_block_1"
+		ifile   = "./test/_free_block_1.idx"
+		vbfile  = "./test/1_0"
+		vifile  = "./test/1_0.idx"
+		b2file  = "./test/_free_block_2"
+		i2file  = "./test/_free_block_2.idx"
+		vb2file = "./test/2_0"
+		vi2file = "./test/2_0.idx"
 	)
-	os.Remove(testConf.StoreIndex)
+	os.Remove(testConf.VolumeIndex)
+	os.Remove(testConf.FreeVolumeIndex)
 	os.Remove(bfile)
 	os.Remove(ifile)
 	os.Remove(b2file)
 	os.Remove(i2file)
-	os.Remove(b3file)
-	os.Remove(i3file)
-	defer os.Remove(testConf.StoreIndex)
+	os.Remove(vbfile)
+	os.Remove(vifile)
+	os.Remove(vb2file)
+	os.Remove(vi2file)
+	os.Remove("./test/1_1")
+	os.Remove("./test/1_1.idx")
+	os.Remove("./test/1_2")
+	os.Remove("./test/1_2.idx")
+	defer os.Remove(testConf.VolumeIndex)
+	defer os.Remove(testConf.FreeVolumeIndex)
 	defer os.Remove(bfile)
 	defer os.Remove(ifile)
 	defer os.Remove(b2file)
 	defer os.Remove(i2file)
-	defer os.Remove(b3file)
-	defer os.Remove(i3file)
+	defer os.Remove(vbfile)
+	defer os.Remove(vifile)
+	defer os.Remove(vb2file)
+	defer os.Remove(vi2file)
+	defer os.Remove("./test/1_1")
+	defer os.Remove("./test/1_1.idx")
+	defer os.Remove("./test/1_2")
+	defer os.Remove("./test/1_2.idx")
 	if z, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack/test/"); err != nil {
 		t.Errorf("NewZookeeper() error(%v)", err)
 		t.FailNow()
 	}
 	z.DelVolume(1)
 	z.DelVolume(2)
-	z.DelVolume(3)
 	if s, err = NewStore(z, testConf); err != nil {
 		t.Errorf("NewStore() error(%v)", err)
 		t.FailNow()

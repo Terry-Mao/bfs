@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 )
@@ -13,9 +14,13 @@ func TestZookeeper(t *testing.T) {
 		err   error
 		lines []string
 		fpath = "/rack/rack-a/store-a/"
-		bfile = "/tmp/hijohn_1"
-		ifile = "/tmp/hijohn_1.idx"
+		bfile = "./test/hijohn_1"
+		ifile = "./test/hijohn_1.idx"
 	)
+	os.Remove(bfile)
+	os.Remove(ifile)
+	defer os.Remove(bfile)
+	defer os.Remove(ifile)
 	if zk, err = NewZookeeper([]string{"localhost:2181"}, time.Second, fpath); err != nil {
 		t.Errorf("Newzookeeper() error(%v)", err)
 		t.FailNow()

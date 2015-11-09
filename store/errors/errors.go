@@ -37,6 +37,7 @@ const (
 	// store
 	RetStoreVolumeIndex  = 7000
 	RetStoreNoFreeVolume = 7001
+	RetStoreFileExist    = 7002
 	// volume
 	RetVolumeExist     = 8000
 	RetVolumeNotExist  = 8001
@@ -85,6 +86,7 @@ var (
 	// store
 	ErrStoreVolumeIndex  = StoreError(RetStoreVolumeIndex)
 	ErrStoreNoFreeVolume = StoreError(RetStoreNoFreeVolume)
+	ErrStoreFileExist    = StoreError(RetStoreFileExist)
 	// volume
 	ErrVolumeExist     = StoreError(RetVolumeExist)
 	ErrVolumeNotExist  = StoreError(RetVolumeNotExist)
@@ -128,7 +130,8 @@ var (
 		RetRingFull:  "index ring buffer full",
 		// store
 		RetStoreVolumeIndex:  "store volume index",
-		RetStoreNoFreeVolume: "",
+		RetStoreNoFreeVolume: "store no free volume",
+		RetStoreFileExist:    "store rename file exist",
 		// volume
 		RetVolumeExist:     "volume exist",
 		RetVolumeNotExist:  "volume not exist",

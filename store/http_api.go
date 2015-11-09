@@ -84,9 +84,10 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		err = errors.ErrVolumeNotExist
 	}
 	h.s.RUnlockVolume()
-	if err != nil {
+	if err == nil {
 		if _, err = wr.Write(n.Data); err != nil {
 			log.Errorf("wr.Write() error(%v)", err)
+			ret = http.StatusInternalServerError
 		}
 		if log.V(1) {
 			log.Infof("get a needle: %v", n)
@@ -112,6 +113,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		cookie   int64
 		size     int64
 		err      error
+		str      string
 		buf      []byte
 		v        *Volume
 		n        *needle.Needle
@@ -136,19 +138,21 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetNeedleTooLarge
 		return
 	}
-	if vid, err = strconv.ParseInt(r.FormValue("vid"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("vid"), err)
+	str = r.FormValue("vid")
+	if vid, err = strconv.ParseInt(str, 10, 32); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
 		res["ret"] = errors.RetParamErr
 		return
 	}
-	if key, err = strconv.ParseInt(r.FormValue("key"), 10, 64); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"),
-			err)
+	str = r.FormValue("key")
+	if key, err = strconv.ParseInt(str, 10, 64); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
 		res["ret"] = errors.RetParamErr
 		return
 	}
-	if cookie, err = strconv.ParseInt(r.FormValue("cookie"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("cookie"), err)
+	str = r.FormValue("cookie")
+	if cookie, err = strconv.ParseInt(str, 10, 32); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
 		res["ret"] = errors.RetParamErr
 		return
 	}
@@ -213,6 +217,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		key           int64
 		cookie        int64
 		size          int64
+		str           string
 		offsets       []int
 		keys          []string
 		cookies       []string
@@ -241,8 +246,9 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetNeedleTooLarge
 		return
 	}
-	if vid, err = strconv.ParseInt(r.FormValue("vid"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("vid"), err)
+	str = r.FormValue("vid")
+	if vid, err = strconv.ParseInt(str, 10, 32); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
 		res["ret"] = errors.RetParamErr
 		return
 	}
@@ -283,7 +289,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			err = errors.ErrNeedleTooLarge
 			break
 		}
-		if rn, err = file.Read(buf); err != nil {
+		if rn, err = file.Read(buf[tn:]); err != nil {
 			log.Errorf("file.Read() error(%v)", err)
 			break
 		}
@@ -341,8 +347,9 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		v        *Volume
 		ok       bool
 		err      error
-		storeErr errors.StoreError
 		key, vid int64
+		str      string
+		storeErr errors.StoreError
 		res      = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
@@ -350,13 +357,15 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpPostWriter(r, wr, time.Now(), res)
-	if key, err = strconv.ParseInt(r.PostFormValue("key"), 10, 64); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.PostFormValue("key"), err)
+	str = r.PostFormValue("key")
+	if key, err = strconv.ParseInt(str, 10, 64); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
 		res["ret"] = errors.RetParamErr
 		return
 	}
-	if vid, err = strconv.ParseInt(r.PostFormValue("vid"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.PostFormValue("vid"), err)
+	str = r.PostFormValue("vid")
+	if vid, err = strconv.ParseInt(str, 10, 32); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
 		res["ret"] = errors.RetParamErr
 		return
 	}
@@ -387,10 +396,10 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		v        *Volume
 		ok       bool
 		err      error
-		storeErr errors.StoreError
 		str      string
 		key, vid int64
 		keyStrs  []string
+		storeErr errors.StoreError
 		res      = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
@@ -398,8 +407,9 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpPostWriter(r, wr, time.Now(), res)
-	if vid, err = strconv.ParseInt(r.PostFormValue("vid"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.PostFormValue("vid"), err)
+	str = r.PostFormValue("vid")
+	if vid, err = strconv.ParseInt(str, 10, 32); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
 		res["ret"] = errors.RetParamErr
 		return
 	}

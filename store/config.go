@@ -7,7 +7,8 @@ import (
 
 const (
 	configStoreVolumeCache = 32
-	configStoreIndex       = "./store.idx"
+	configVolumeIndex      = "./volume.idx"
+	configFreeVolumeIndex  = "./free_volume.idx"
 	configNeedleMaxSize    = 1 * 1024 * 1024 // 1mb
 	configBatchMaxNum      = 30
 	configVolumeDelChan    = 1024 * 10
@@ -33,7 +34,8 @@ type Config struct {
 	StoreVolumeCache int    `goconf:"store:volume_cache_size"`
 	ServerId         string `goconf:"store:server_id"`
 	Rack             string `goconf:"store:rack"`
-	StoreIndex       string `goconf:"store:index"`
+	VolumeIndex      string `goconf:"store:volume_index"`
+	FreeVolumeIndex  string `goconf:"store:free_volume_index"`
 	NeedleMaxSize    int    `goconf:"store:needle_max_size:memory"`
 	BatchMaxNum      int    `goconf:"store:batch_max_num"`
 	// volume
@@ -86,8 +88,11 @@ func (c *Config) setDefault() {
 	if len(c.Rack) == 0 {
 		panic("config rack must set")
 	}
-	if len(c.StoreIndex) == 0 {
-		c.StoreIndex = configStoreIndex
+	if len(c.VolumeIndex) == 0 {
+		c.VolumeIndex = configVolumeIndex
+	}
+	if len(c.FreeVolumeIndex) == 0 {
+		c.FreeVolumeIndex = configFreeVolumeIndex
 	}
 	if c.NeedleMaxSize < 1 || c.NeedleMaxSize > configNeedleMaxSize {
 		c.NeedleMaxSize = configNeedleMaxSize

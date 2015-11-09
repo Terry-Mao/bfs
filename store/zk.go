@@ -16,7 +16,7 @@ import (
 //									 |
 //                   /rack-a -------- --------- /rack-b -- rack node path
 //                     |
-//         /store-a -------- /store-b -- store node path (data: {"stat":"localhost:6061","admin":"localhost:6063","api":"localhost:6062",status:0})
+//         /store-a -------- /store-b -- store node path (data: {"stat":"localhost:6061","admin":"localhost:6063","api":"localhost:6062","status":0})
 //            |                 |
 // /volume-1 -                   - /volume-4 volume node path (data: /tmp/block_1,/tmp/block_1.idx,1)
 // /volume-2 -                   - /volume-5

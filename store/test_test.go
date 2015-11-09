@@ -7,7 +7,8 @@ var (
 func init() {
 	StartPprof("localhost:6060")
 	testConf = &Config{}
-	testConf.StoreIndex = "./test/store.index"
+	testConf.VolumeIndex = "./test/volume.idx"
+	testConf.FreeVolumeIndex = "./test/free_volume.idx"
 	testConf.ServerId = "1"
 	testConf.Rack = "test"
 	testConf.setDefault()

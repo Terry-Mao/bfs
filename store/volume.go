@@ -10,6 +10,8 @@ import (
 	log "github.com/golang/glog"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,9 +19,8 @@ import (
 
 const (
 	// signal command
-	volumeFinish  = 0
-	volumeReady   = 1
-	VolumeEmptyId = -1
+	volumeFinish = 0
+	volumeReady  = 1
 )
 
 // Uint32Slice deleted offset sort.
@@ -124,9 +125,30 @@ func (v *Volume) Unlock() {
 	v.lock.Unlock()
 }
 
-// Meta get zookeeper meta data.
+// Meta get index meta data.
 func (v *Volume) Meta() []byte {
 	return []byte(fmt.Sprintf("%s,%s,%d", v.Block.File, v.Indexer.File, v.Id))
+}
+
+// ParseMeta parse index meta data.
+func (v *Volume) ParseMeta(line string) (bfile, ifile string, id int32, err error) {
+	var (
+		vid  int64
+		seps []string
+	)
+	if seps = strings.Split(line, ","); len(seps) != 3 {
+		log.Errorf("volume index: \"%s\" format error", line)
+		err = errors.ErrStoreVolumeIndex
+		return
+	}
+	bfile = seps[0]
+	ifile = seps[1]
+	if vid, err = strconv.ParseInt(seps[2], 10, 32); err != nil {
+		log.Errorf("volume index: \"%s\" format error", line)
+	} else {
+		id = int32(vid)
+	}
+	return
 }
 
 // IsClosed reports whether the volume is closed.
@@ -145,19 +167,15 @@ func (v *Volume) Get(key int64, cookie int32, buf []byte, n *needle.Needle) (err
 	)
 	// WARN pread syscall is atomic, so use rlock
 	v.lock.RLock()
-	if !v.closed {
-		if nc, ok = v.needles[key]; ok {
-			offset, size = needle.Cache(nc)
-			if offset != needle.CacheDelOffset {
-				err = v.Block.Get(offset, buf[:size])
-			} else {
-				err = errors.ErrNeedleDeleted
-			}
+	if nc, ok = v.needles[key]; ok {
+		offset, size = needle.Cache(nc)
+		if offset != needle.CacheDelOffset {
+			err = v.Block.Get(offset, buf[:size])
 		} else {
-			err = errors.ErrNeedleNotExist
+			err = errors.ErrNeedleDeleted
 		}
 	} else {
-		err = errors.ErrVolumeClosed
+		err = errors.ErrNeedleNotExist
 	}
 	v.lock.RUnlock()
 	if err != nil {
@@ -176,9 +194,6 @@ func (v *Volume) Get(key int64, cookie int32, buf []byte, n *needle.Needle) (err
 	if err = n.ParseData(buf[needle.HeaderSize:size]); err != nil {
 		return
 	}
-	if log.V(2) {
-		log.Infof("%v\n", buf[:size])
-	}
 	if log.V(1) {
 		log.Infof("%v\n", n)
 	}
@@ -196,11 +211,11 @@ func (v *Volume) Get(key int64, cookie int32, buf []byte, n *needle.Needle) (err
 		v.needles[key] = needle.NewCache(needle.CacheDelOffset, size)
 		v.lock.Unlock()
 		err = errors.ErrNeedleDeleted
-		return
+	} else {
+		atomic.AddUint64(&v.Stats.TotalGetProcessed, 1)
+		atomic.AddUint64(&v.Stats.TotalReadBytes, uint64(size))
+		atomic.AddUint64(&v.Stats.TotalGetDelay, uint64(time.Now().UnixNano()-now))
 	}
-	atomic.AddUint64(&v.Stats.TotalGetProcessed, 1)
-	atomic.AddUint64(&v.Stats.TotalReadBytes, uint64(size))
-	atomic.AddUint64(&v.Stats.TotalGetDelay, uint64(time.Now().UnixNano()-now))
 	return
 }
 
@@ -213,21 +228,13 @@ func (v *Volume) Add(n *needle.Needle) (err error) {
 		nc              int64
 		offset, ooffset uint32
 	)
-	if n.TotalSize > int32(v.conf.NeedleMaxSize) {
-		err = errors.ErrNeedleTooLarge
-		return
-	}
 	v.lock.Lock()
-	if !v.closed {
-		offset = v.Block.Offset
-		if err = v.Block.Add(n); err == nil {
-			if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err == nil {
-				nc, ok = v.needles[n.Key]
-				v.needles[n.Key] = needle.NewCache(offset, n.TotalSize)
-			}
+	offset = v.Block.Offset
+	if err = v.Block.Add(n); err == nil {
+		if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err == nil {
+			nc, ok = v.needles[n.Key]
+			v.needles[n.Key] = needle.NewCache(offset, n.TotalSize)
 		}
-	} else {
-		err = errors.ErrVolumeClosed
 	}
 	v.lock.Unlock()
 	if err != nil {
@@ -239,10 +246,8 @@ func (v *Volume) Add(n *needle.Needle) (err error) {
 	if ok {
 		ooffset, _ = needle.Cache(nc)
 		log.Warningf("same key: %d, old offset: %d, new offset: %d", n.Key, ooffset, offset)
-		if ooffset != needle.CacheDelOffset {
-			if err = v.asyncDel(ooffset); err != nil {
-				return
-			}
+		if err = v.asyncDel(ooffset); err != nil {
+			return
 		}
 	}
 	atomic.AddUint64(&v.Stats.TotalAddProcessed, 1)
@@ -253,7 +258,6 @@ func (v *Volume) Add(n *needle.Needle) (err error) {
 
 // Write add a new needle, if key exists append to super block, then update
 // needle cache offset to new offset, Write is used for multi add needles.
-// Get Needle
 // Lock
 // for {
 //   Write
@@ -262,10 +266,10 @@ func (v *Volume) Add(n *needle.Needle) (err error) {
 // Free Needle
 func (v *Volume) Write(n *needle.Needle) (err error) {
 	var (
+		now             = time.Now().UnixNano()
 		ok              bool
 		nc              int64
 		offset, ooffset uint32
-		now             = time.Now().UnixNano()
 	)
 	offset = v.Block.Offset
 	if err = v.Block.Write(n); err == nil {
@@ -312,7 +316,6 @@ func (v *Volume) asyncDel(offset uint32) (err error) {
 	default:
 		log.Errorf("volume: %d send signal failed", v.Id)
 		err = errors.ErrVolumeDel
-		return
 	}
 	return
 }
@@ -327,29 +330,23 @@ func (v *Volume) Del(key int64) (err error) {
 		offset uint32
 	)
 	v.lock.Lock()
-	if !v.closed {
-		nc, ok = v.needles[key]
-		if ok {
-			if offset, size = needle.Cache(nc); offset != needle.CacheDelOffset {
-				v.needles[key] = needle.NewCache(needle.CacheDelOffset, size)
-				// when in compact, must save all del operations.
-				if v.Compact {
-					v.compactKeys = append(v.compactKeys, key)
-				}
-			} else {
-				err = errors.ErrNeedleNotExist
+	nc, ok = v.needles[key]
+	if ok {
+		if offset, size = needle.Cache(nc); offset != needle.CacheDelOffset {
+			v.needles[key] = needle.NewCache(needle.CacheDelOffset, size)
+			// when in compact, must save all del operations.
+			if v.Compact {
+				v.compactKeys = append(v.compactKeys, key)
 			}
+		} else {
+			err = errors.ErrNeedleDeleted
 		}
 	} else {
-		err = errors.ErrVolumeClosed
+		err = errors.ErrNeedleNotExist
 	}
 	v.lock.Unlock()
 	if err == nil {
-		if ok {
-			err = v.asyncDel(offset)
-		} else {
-			err = errors.ErrNeedleNotExist
-		}
+		err = v.asyncDel(offset)
 	}
 	return
 }
@@ -372,10 +369,8 @@ func (v *Volume) del() {
 					continue
 				}
 			}
-			break
 		case <-time.After(v.conf.VolumeSigTime):
 			exit = false
-			break
 		}
 		if len(offsets) > 0 {
 			// sort let the disk seqence write
@@ -397,8 +392,8 @@ func (v *Volume) del() {
 			break
 		}
 	}
-	log.Warningf("volume: %d del job exit", v.Id)
 	v.wg.Done()
+	log.Warningf("volume: %d del job exit", v.Id)
 	return
 }
 
@@ -424,14 +419,10 @@ func (v *Volume) compact(nv *Volume) (err error) {
 // needle, so this can reduce disk space cost.
 func (v *Volume) StartCompact(nv *Volume) (err error) {
 	v.lock.Lock()
-	if !v.closed {
-		if v.Compact {
-			err = errors.ErrVolumeInCompact
-		} else {
-			v.Compact = true
-		}
+	if v.Compact {
+		err = errors.ErrVolumeInCompact
 	} else {
-		err = errors.ErrVolumeClosed
+		v.Compact = true
 	}
 	v.lock.Unlock()
 	if err != nil {
@@ -457,25 +448,21 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 		key int64
 	)
 	v.lock.Lock()
-	if v.closed {
-		err = errors.ErrVolumeClosed
-		goto failed
-	}
 	if nv != nil {
 		if err = v.compact(nv); err != nil {
-			goto failed
+			goto free
 		}
 		if err = nv.Flush(); err != nil {
-			goto failed
+			goto free
 		}
 		for _, key = range v.compactKeys {
 			if err = nv.Del(key); err != nil {
-				goto failed
+				goto free
 			}
 		}
 		atomic.AddUint64(&v.Stats.TotalCompactDelay, uint64(time.Now().UnixNano()-now))
 	}
-failed:
+free:
 	v.Compact = false
 	v.CompactOffset = 0
 	v.CompactTime = 0
@@ -500,12 +487,8 @@ func (v *Volume) Open() (err error) {
 	}
 	v.lock.Unlock()
 	if err != nil {
-		if v.Block != nil {
-			v.Block.Close()
-		}
-		if v.Indexer != nil {
-			v.Indexer.Close()
-		}
+		v.Block.Close()
+		v.Indexer.Close()
 	}
 	return
 }

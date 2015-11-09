@@ -26,8 +26,12 @@ func HttpPostWriter(r *http.Request, wr http.ResponseWriter, start time.Time, re
 }
 
 func HttpGetWriter(r *http.Request, wr http.ResponseWriter, start time.Time, err *error, ret *int) {
+	var errStr string
 	if *ret != http.StatusOK {
-		http.Error(wr, (*err).Error(), *ret)
+		if *err != nil {
+			errStr = (*err).Error()
+		}
+		http.Error(wr, errStr, *ret)
 	}
 	log.Infof("%s path:%s(params:%s,time:%f,ret:%v)", r.Method,
 		r.URL.Path, r.URL.String(), time.Now().Sub(start).Seconds(), *ret)

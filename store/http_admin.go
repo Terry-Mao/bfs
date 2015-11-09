@@ -54,6 +54,7 @@ func (h httpBulkVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request
 		res["ret"] = errors.RetParamErr
 		return
 	}
+	log.Infof("bulk volume: %d start", vid)
 	if err = h.s.BulkVolume(int32(vid), bfile, ifile); err != nil {
 		if storeErr, ok = err.(errors.StoreError); ok {
 			res["ret"] = int(storeErr)
@@ -61,6 +62,7 @@ func (h httpBulkVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request
 			res["ret"] = errors.RetInternalErr
 		}
 	}
+	log.Infof("bulk volume: %d stop", vid)
 	return
 }
 
@@ -88,9 +90,11 @@ func (h httpCompactVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 	}
 	// long time processing, not block, we can from info stat api get status.
 	go func() {
+		log.Infof("compact volume: %d start", vid)
 		if err = h.s.CompactVolume(int32(vid)); err != nil {
 			log.Errorf("s.CompactVolume() error(%v)", err)
 		}
+		log.Infof("compact volume: %d stop", vid)
 	}()
 	res["ret"] = errors.RetOK
 	return
@@ -120,6 +124,7 @@ func (h httpAddVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request)
 		res["ret"] = errors.RetParamErr
 		return
 	}
+	log.Infof("add volume: %d", vid)
 	if _, err = h.s.AddVolume(int32(vid)); err != nil {
 		if storeErr, ok = err.(errors.StoreError); ok {
 			res["ret"] = int(storeErr)
@@ -157,6 +162,7 @@ func (h httpAddFreeVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 		res["ret"] = errors.RetParamErr
 		return
 	}
+	log.Infof("add free volume: %d", n)
 	if sn, err = h.s.AddFreeVolume(int(n), bdir, idir); err != nil {
 		if storeErr, ok = err.(errors.StoreError); ok {
 			res["ret"] = int(storeErr)

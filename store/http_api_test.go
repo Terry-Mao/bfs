@@ -35,12 +35,20 @@ func TestHTTPAPI(t *testing.T) {
 		bfile  = "./test/block_api_1"
 		ifile  = "./test/block_api_1.idx"
 	)
-	os.Remove(testConf.StoreIndex)
+	os.Remove(testConf.VolumeIndex)
+	os.Remove(testConf.FreeVolumeIndex)
 	os.Remove(bfile)
 	os.Remove(ifile)
-	defer os.Remove(testConf.StoreIndex)
+	os.Remove("./test/_free_block_1")
+	os.Remove("./test/1")
+	os.Remove("./test/1_0")
+	defer os.Remove(testConf.VolumeIndex)
+	defer os.Remove(testConf.FreeVolumeIndex)
 	defer os.Remove(bfile)
 	defer os.Remove(ifile)
+	defer os.Remove("./test/_free_block_1")
+	defer os.Remove("./test/1")
+	defer os.Remove("./test/1_0")
 	if z, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack/test-api/"); err != nil {
 		t.Errorf("NewZookeeper() error(%v)", err)
 		t.FailNow()
