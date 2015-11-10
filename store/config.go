@@ -6,22 +6,31 @@ import (
 )
 
 const (
+	// store
 	configStoreVolumeCache = 32
 	configVolumeIndex      = "./volume.idx"
 	configFreeVolumeIndex  = "./free_volume.idx"
 	configNeedleMaxSize    = 1 * 1024 * 1024 // 1mb
 	configBatchMaxNum      = 30
-	configVolumeDelChan    = 1024 * 10
-	configVolumeSigCnt     = 1024 * 10
-	configVolumeSigTime    = time.Second * 60 // 1min
-	configSuperBlockSync   = 1024
-	configIndexRingBuffer  = 1024 * 10
-	configIndexSigCnt      = 1024
-	configIndexSigTime     = time.Second * 10 // 10s
-	configPprofListen      = "localhost:6060"
-	configStatListen       = "localhost:6061"
-	configApiListen        = "localhost:6062"
-	configAdminListen      = "localhost:6063"
+	// volume
+	configVolumeDelChan = 1024 * 10
+	configVolumeSigCnt  = 1024 * 10
+	configVolumeSigTime = time.Second * 60 // 1min
+	// block
+	configSuperBlockSync = 1024
+	// index
+	configIndexRingBuffer = 1024 * 10
+	configIndexSigCnt     = 1024
+	configIndexSigTime    = time.Second * 10 // 10s
+	// pprof
+	configPprofListen = "localhost:6060"
+	// stat
+	configStatListen = "localhost:6061"
+	// api
+	configApiListen = "localhost:6062"
+	// admin
+	configAdminListen = "localhost:6063"
+	// zookeeper
 	configZookeeperTimeout = time.Second * 1 // 1s
 	configZookeeperRoot    = "/rack"
 )
@@ -45,7 +54,8 @@ type Config struct {
 	VolumeNeedleCache int           `goconf:"volume:needle_cache_size"`
 	VolumeSigTime     time.Duration `goconf:"volume:delete_signal_time:time"`
 	// block
-	SuperBlockSync int `goconf:"block:sync"`
+	SuperBlockSync          int  `goconf:"block:sync"`
+	SuperBlockSyncfilerange bool `goconf:"block:sync_file_range"`
 	// index
 	IndexRingBuffer int           `goconf:"index:ring_buffer_size"`
 	IndexBufferio   int           `goconf:"index:buffer_io_size:memory"`

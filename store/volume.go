@@ -61,7 +61,7 @@ func NewVolume(id int32, bfile, ifile string, c *Config) (v *Volume, err error) 
 	v.needles = make(map[int64]int64, c.VolumeNeedleCache)
 	v.ch = make(chan uint32, c.VolumeDelChan)
 	v.compactKeys = []int64{}
-	if v.Block, err = block.NewSuperBlock(bfile, c.NeedleMaxSize*c.BatchMaxNum, c.SuperBlockSync); err != nil {
+	if v.Block, err = block.NewSuperBlock(bfile, c.NeedleMaxSize*c.BatchMaxNum, c.SuperBlockSync, c.SuperBlockSyncfilerange); err != nil {
 		return nil, err
 	}
 	if v.Indexer, err = index.NewIndexer(ifile, c.IndexSigTime, c.IndexSigCnt, c.IndexRingBuffer, c.IndexBufferio); err != nil {

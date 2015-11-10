@@ -64,10 +64,11 @@ type SuperBlock struct {
 	closed         bool
 	write          int
 	lastSyncOffset uint32
+	syncfilerange  bool
 }
 
 // NewSuperBlock creae a new super block.
-func NewSuperBlock(file string, buf, sync int) (b *SuperBlock, err error) {
+func NewSuperBlock(file string, buf, sync int, syncfilerange bool) (b *SuperBlock, err error) {
 	b = &SuperBlock{}
 	b.closed = false
 	b.File = file
@@ -75,6 +76,7 @@ func NewSuperBlock(file string, buf, sync int) (b *SuperBlock, err error) {
 	b.Offset = needle.NeedleOffset(headerSize)
 	b.buf = make([]byte, buf)
 	b.sync = sync
+	b.syncfilerange = syncfilerange
 	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		b.Close()
@@ -206,7 +208,11 @@ func (b *SuperBlock) Write(n *needle.Needle) (err error) {
 
 // Flush flush writer buffer.
 func (b *SuperBlock) Flush() (err error) {
-	var fd uintptr
+	var (
+		fd     uintptr
+		offset int64
+		size   int64
+	)
 	if b.LastErr != nil {
 		return b.LastErr
 	}
@@ -222,14 +228,23 @@ func (b *SuperBlock) Flush() (err error) {
 	if b.write%b.sync != 0 {
 		return
 	}
-	// TODO sync_file_range?
 	fd = b.w.Fd()
-	if err = myos.Fdatasync(fd); err != nil {
-		b.LastErr = err
-		log.Errorf("block: %s Fdatasync() error(%v)", b.File, err)
-		return
+	offset = needle.BlockOffset(b.lastSyncOffset)
+	size = needle.BlockOffset(b.Offset - b.lastSyncOffset)
+	if b.syncfilerange {
+		if err = myos.Syncfilerange(fd, offset, size, myos.SYNC_FILE_RANGE_WRITE); err != nil {
+			b.LastErr = err
+			log.Errorf("block: %s Syncfilerange() error(%v)", b.File, err)
+			return
+		}
+	} else {
+		if err = myos.Fdatasync(fd); err != nil {
+			b.LastErr = err
+			log.Errorf("block: %s Fdatasync() error(%v)", b.File, err)
+			return
+		}
 	}
-	if err = myos.Fadvise(fd, needle.BlockOffset(b.lastSyncOffset), needle.BlockOffset(b.Offset-b.lastSyncOffset), myos.POSIX_FADV_DONTNEED); err == nil {
+	if err = myos.Fadvise(fd, offset, size, myos.POSIX_FADV_DONTNEED); err == nil {
 		b.lastSyncOffset = b.Offset
 	} else {
 		b.LastErr = err
