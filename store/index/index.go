@@ -114,7 +114,7 @@ func NewIndexer(file string, sigTime time.Duration, sigCnt, ring, buf int) (i *I
 		return nil, err
 	}
 	if stat.Size() == 0 {
-		if err = myos.Fallocate(i.f.Fd(), 1, 0, fallocSize); err != nil {
+		if err = myos.Fallocate(i.f.Fd(), myos.FALLOC_FL_KEEP_SIZE, 0, fallocSize); err != nil {
 			log.Errorf("index: %s fallocate() error(err)", i.File, err)
 			i.Close()
 			return nil, err

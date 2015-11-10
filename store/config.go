@@ -14,6 +14,7 @@ const (
 	configVolumeDelChan    = 1024 * 10
 	configVolumeSigCnt     = 1024 * 10
 	configVolumeSigTime    = time.Second * 60 // 1min
+	configSuperBlockSync   = 1024
 	configIndexRingBuffer  = 1024 * 10
 	configIndexSigCnt      = 1024
 	configIndexSigTime     = time.Second * 10 // 10s
@@ -43,6 +44,8 @@ type Config struct {
 	VolumeSigCnt      int           `goconf:"volume:delete_signal_count"`
 	VolumeNeedleCache int           `goconf:"volume:needle_cache_size"`
 	VolumeSigTime     time.Duration `goconf:"volume:delete_signal_time:time"`
+	// block
+	SuperBlockSync int `goconf:"block:sync"`
 	// index
 	IndexRingBuffer int           `goconf:"index:ring_buffer_size"`
 	IndexBufferio   int           `goconf:"index:buffer_io_size:memory"`
@@ -108,6 +111,9 @@ func (c *Config) setDefault() {
 	}
 	if c.VolumeSigTime < 1 {
 		c.VolumeSigTime = configVolumeSigTime
+	}
+	if c.SuperBlockSync < 1 {
+		c.SuperBlockSync = configSuperBlockSync
 	}
 	if c.IndexRingBuffer < configIndexRingBuffer {
 		c.IndexRingBuffer = configIndexRingBuffer

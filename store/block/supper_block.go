@@ -56,21 +56,24 @@ type SuperBlock struct {
 	LastErr error  `json:"last_err"`
 	buf     []byte
 	bufSize int
+	sync    int
 	// meta
 	Magic []byte `json:"-"`
 	Ver   byte   `json:"ver"`
 	// status
 	closed bool
+	write  int
 }
 
 // NewSuperBlock creae a new super block.
-func NewSuperBlock(file string, buf int) (b *SuperBlock, err error) {
+func NewSuperBlock(file string, buf, sync int) (b *SuperBlock, err error) {
 	b = &SuperBlock{}
 	b.closed = false
 	b.File = file
 	b.bufSize = buf
 	b.Offset = needle.NeedleOffset(headerSize)
 	b.buf = make([]byte, buf)
+	b.sync = sync
 	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		b.Close()
@@ -99,7 +102,7 @@ func (b *SuperBlock) init() (err error) {
 	}
 	if stat.Size() == 0 {
 		// falloc(FALLOC_FL_KEEP_SIZE)
-		if err = myos.Fallocate(b.w.Fd(), 1, 0, maxSize); err != nil {
+		if err = myos.Fallocate(b.w.Fd(), myos.FALLOC_FL_KEEP_SIZE, 0, maxSize); err != nil {
 			log.Errorf("block: %s Fallocate() error(%s)", b.File, err)
 			return
 		}
@@ -174,6 +177,7 @@ func (b *SuperBlock) Add(n *needle.Needle) (err error) {
 		b.LastErr = err
 		return
 	}
+	b.write++
 	if err = b.Flush(); err != nil {
 		return
 	}
@@ -194,12 +198,14 @@ func (b *SuperBlock) Write(n *needle.Needle) (err error) {
 		b.LastErr = err
 		return
 	}
+	b.write++
 	b.Offset += incrOffset
 	return
 }
 
 // Flush flush writer buffer.
 func (b *SuperBlock) Flush() (err error) {
+	var fd uintptr
 	if b.LastErr != nil {
 		return b.LastErr
 	}
@@ -209,9 +215,23 @@ func (b *SuperBlock) Flush() (err error) {
 		log.Errorf("block: %s Flush() error(%v)", b.File, err)
 		return
 	}
-	// TODO append N times call flush then clean the os page cache
+	// append N times call flush then clean the os page cache
 	// page cache no used here...
 	// after upload a photo, we cache in user-level.
+	if b.write%b.sync != 0 {
+		return
+	}
+	if err = b.w.Sync(); err != nil {
+		b.LastErr = err
+		log.Errorf("block: %s Fdatasync() error(%v)", b.File, err)
+		return
+	}
+	fd = b.w.Fd()
+	if err = myos.Fadvise(fd, 0, needle.BlockOffset(b.Offset), myos.POSIX_FADV_DONTNEED); err != nil {
+		b.LastErr = err
+		log.Errorf("block: %s Fadvise() error(%v)", b.File, err)
+		return
+	}
 	return
 }
 
