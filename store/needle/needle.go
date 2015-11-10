@@ -249,8 +249,7 @@ func (n *Needle) Fill(buf []byte) {
 	var bn int
 	// --- header ---
 	// magic
-	copy(buf[:magicSize], n.HeaderMagic)
-	bn += magicSize
+	bn += copy(buf[:magicSize], n.HeaderMagic)
 	// cookie
 	binary.BigEndian.PutInt32(buf[bn:], n.Cookie)
 	bn += cookieSize
@@ -264,12 +263,10 @@ func (n *Needle) Fill(buf []byte) {
 	binary.BigEndian.PutInt32(buf[bn:], n.Size)
 	bn += sizeSize
 	// data
-	copy(buf[bn:], n.Data)
-	bn += len(n.Data)
+	bn += copy(buf[bn:], n.Data)
 	// --- footer ---
 	// magic
-	copy(buf[bn:], n.FooterMagic)
-	bn += magicSize
+	bn += copy(buf[bn:], n.FooterMagic)
 	// checksum
 	binary.BigEndian.PutUint32(buf[bn:], n.Checksum)
 	bn += checksumSize

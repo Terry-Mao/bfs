@@ -223,13 +223,13 @@ func (b *SuperBlock) Flush() (err error) {
 		return
 	}
 	// TODO sync_file_range?
-	if err = b.w.Sync(); err != nil {
+	fd = b.w.Fd()
+	if err = myos.Fdatasync(fd); err != nil {
 		b.LastErr = err
 		log.Errorf("block: %s Fdatasync() error(%v)", b.File, err)
 		return
 	}
-	fd = b.w.Fd()
-	if err = myos.Fadvise(fd, needle.BlockOffset(b.lastSyncOffset), needle.BlockOffset(b.Offset), myos.POSIX_FADV_DONTNEED); err == nil {
+	if err = myos.Fadvise(fd, needle.BlockOffset(b.lastSyncOffset), needle.BlockOffset(b.Offset-b.lastSyncOffset), myos.POSIX_FADV_DONTNEED); err == nil {
 		b.lastSyncOffset = b.Offset
 	} else {
 		b.LastErr = err
