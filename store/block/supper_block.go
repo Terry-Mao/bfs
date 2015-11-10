@@ -61,8 +61,9 @@ type SuperBlock struct {
 	Magic []byte `json:"-"`
 	Ver   byte   `json:"ver"`
 	// status
-	closed bool
-	write  int
+	closed         bool
+	write          int
+	lastSyncOffset uint32
 }
 
 // NewSuperBlock creae a new super block.
@@ -228,10 +229,11 @@ func (b *SuperBlock) Flush() (err error) {
 		return
 	}
 	fd = b.w.Fd()
-	if err = myos.Fadvise(fd, 0, needle.BlockOffset(b.Offset), myos.POSIX_FADV_DONTNEED); err != nil {
+	if err = myos.Fadvise(fd, needle.BlockOffset(b.lastSyncOffset), needle.BlockOffset(b.Offset), myos.POSIX_FADV_DONTNEED); err == nil {
+		b.lastSyncOffset = b.Offset
+	} else {
 		b.LastErr = err
 		log.Errorf("block: %s Fadvise() error(%v)", b.File, err)
-		return
 	}
 	return
 }
