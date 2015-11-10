@@ -11,6 +11,7 @@ func init() {
 	testConf.FreeVolumeIndex = "./test/free_volume.idx"
 	testConf.ServerId = "1"
 	testConf.Rack = "test"
+	testConf.SuperBlockSyncfilerange = true
 	testConf.setDefault()
 }
 

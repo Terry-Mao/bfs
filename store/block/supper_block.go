@@ -56,7 +56,7 @@ type SuperBlock struct {
 	LastErr error  `json:"last_err"`
 	buf     []byte
 	bufSize int
-	sync    int
+	syncCnt int
 	// meta
 	Magic []byte `json:"-"`
 	Ver   byte   `json:"ver"`
@@ -75,7 +75,7 @@ func NewSuperBlock(file string, buf, sync int, syncfilerange bool) (b *SuperBloc
 	b.bufSize = buf
 	b.Offset = needle.NeedleOffset(headerSize)
 	b.buf = make([]byte, buf)
-	b.sync = sync
+	b.syncCnt = sync
 	b.syncfilerange = syncfilerange
 	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
@@ -181,10 +181,9 @@ func (b *SuperBlock) Add(n *needle.Needle) (err error) {
 		return
 	}
 	b.write++
-	if err = b.Flush(); err != nil {
-		return
+	if err = b.Flush(); err == nil {
+		b.Offset += incrOffset
 	}
-	b.Offset += incrOffset
 	return
 }
 
@@ -206,28 +205,20 @@ func (b *SuperBlock) Write(n *needle.Needle) (err error) {
 	return
 }
 
-// Flush flush writer buffer.
-func (b *SuperBlock) Flush() (err error) {
+// sync sync the in-memory data flush to disk.
+func (b *SuperBlock) sync() (err error) {
 	var (
 		fd     uintptr
 		offset int64
 		size   int64
 	)
-	if b.LastErr != nil {
-		return b.LastErr
-	}
-	// write may be less than request, we call flush in a loop
-	if err = b.bw.Flush(); err != nil {
-		b.LastErr = err
-		log.Errorf("block: %s Flush() error(%v)", b.File, err)
-		return
-	}
 	// append N times call flush then clean the os page cache
 	// page cache no used here...
 	// after upload a photo, we cache in user-level.
-	if b.write%b.sync != 0 {
+	if b.write < b.syncCnt {
 		return
 	}
+	b.write = 0
 	fd = b.w.Fd()
 	offset = needle.BlockOffset(b.lastSyncOffset)
 	size = needle.BlockOffset(b.Offset - b.lastSyncOffset)
@@ -247,8 +238,23 @@ func (b *SuperBlock) Flush() (err error) {
 	if err = myos.Fadvise(fd, offset, size, myos.POSIX_FADV_DONTNEED); err == nil {
 		b.lastSyncOffset = b.Offset
 	} else {
-		b.LastErr = err
 		log.Errorf("block: %s Fadvise() error(%v)", b.File, err)
+		b.LastErr = err
+	}
+	return
+}
+
+// Flush flush writer buffer.
+func (b *SuperBlock) Flush() (err error) {
+	if b.LastErr != nil {
+		return b.LastErr
+	}
+	// write may be less than request, we call flush in a loop
+	if err = b.bw.Flush(); err == nil {
+		err = b.sync()
+	} else {
+		log.Errorf("block: %s Flush() error(%v)", b.File, err)
+		b.LastErr = err
 	}
 	return
 }
