@@ -16,6 +16,10 @@ const (
 	POSIX_FADV_DONTNEED = int(C.POSIX_FADV_DONTNEED)
 )
 
-func Fadvise(fd uintptr, off int64, len int64, advise int) error {
-	return syscall.Errno(C.posix_fadvise(C.int(fd), C.__off_t(off), C.__off_t(len), C.int(advise)))
+func Fadvise(fd uintptr, off int64, len int64, advise int) (err error) {
+	var errno uintptr
+	if errno = syscall.Errno(C.posix_fadvise(C.int(fd), C.__off_t(off), C.__off_t(len), C.int(advise))); errno != 0 {
+		err = errno
+	}
+	return
 }

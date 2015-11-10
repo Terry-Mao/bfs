@@ -221,6 +221,7 @@ func (b *SuperBlock) Flush() (err error) {
 	if b.write%b.sync != 0 {
 		return
 	}
+	// TODO sync_file_range?
 	if err = b.w.Sync(); err != nil {
 		b.LastErr = err
 		log.Errorf("block: %s Fdatasync() error(%v)", b.File, err)

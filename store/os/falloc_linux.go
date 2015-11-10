@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	FALLOC_FL_KEEP_SIZE = int(C.FALLOC_FL_KEEP_SIZE)
+	FALLOC_FL_KEEP_SIZE = uint32(C.FALLOC_FL_KEEP_SIZE)
 )
 
 func Fallocate(fd uintptr, mode uint32, off int64, len int64) error {
