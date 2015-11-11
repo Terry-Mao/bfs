@@ -67,15 +67,15 @@ def addVolumeStore(volume_id, store_id):
 
 
 def getAllVolume():
-	global MAX_GROUP_ID
+	global MAX_VOLUME_ID
 	try:
-		if zk_client.exists('/group') is None:
+		if zk_client.exists('/volume') is None:
 			return True
 		children = zk_client.get_children('/volume')
 		for child in children:
 			volume_id = child
-			if int(volume_id) > MAX_GROUP_ID:
-				MAX_GROUP_ID = int(volume_id)
+			if int(volume_id) > MAX_VOLUME_ID:
+				MAX_VOLUME_ID = int(volume_id)
 			path1 = join('/volume', volume_id)
 			children1 = zk_client.get_children(path1)
 			for child1 in children1:
