@@ -213,28 +213,28 @@ type httpUploadsHandler struct {
 
 func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		i, rn, tn, nn int
-		ok            bool
-		buf           []byte
-		err           error
-		vid           int64
-		key           int64
-		cookie        int64
-		size          int64
-		str           string
-		keys          []string
-		cookies       []string
-		sr            sizer
-		fr            *os.File
-		fi            os.FileInfo
-		v             *Volume
-		n             *needle.Needle
-		ns            []needle.Needle
-		storeErr      errors.StoreError
-		file          multipart.File
-		fh            *multipart.FileHeader
-		fhs           []*multipart.FileHeader
-		res           = map[string]interface{}{"ret": errors.RetOK}
+		i, rn, tn, nn, nb int
+		ok                bool
+		buf               []byte
+		err               error
+		vid               int64
+		key               int64
+		cookie            int64
+		size              int64
+		str               string
+		keys              []string
+		cookies           []string
+		sr                sizer
+		fr                *os.File
+		fi                os.FileInfo
+		v                 *Volume
+		n                 *needle.Needle
+		ns                []needle.Needle
+		storeErr          errors.StoreError
+		file              multipart.File
+		fh                *multipart.FileHeader
+		fhs               []*multipart.FileHeader
+		res               = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
@@ -270,7 +270,8 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetParamErr
 		return
 	}
-	buf = h.s.Buffer(nn)
+	nb = int(size-1)/(h.c.NeedleMaxSize) + 1
+	buf = h.s.Buffer(nb)
 	ns = h.s.Needle(nn)
 	for i, fh = range fhs {
 		if key, err = strconv.ParseInt(keys[i], 10, 64); err != nil {
@@ -329,7 +330,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		}
 		h.s.RUnlockVolume()
 	}
-	h.s.FreeBuffer(nn, buf)
+	h.s.FreeBuffer(nb, buf)
 	h.s.FreeNeedle(nn, ns)
 	if err != nil {
 		if storeErr, ok = err.(errors.StoreError); ok {
