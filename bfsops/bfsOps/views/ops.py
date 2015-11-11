@@ -41,7 +41,7 @@ def bfsopsInitPost():
 					else:
 						logger.warn('storeAddFreeVolume() called, success, but not enough space  store_ip: %s,  base_dir: %s',
 						 store_ip, store_dir)
-						store_info[FREE_VOLUME_KEY+ip_store[store_ip]] += result['succeed']
+						STORE_INFO[FREE_VOLUME_KEY+IP_STORE[store_ip]] += result['succeed']
 				else:
 					logger.error('storeAddFreeVolume() called, failed    store_ip: %s,  base_dir: %s', store_ip, store_dir)
 					return jsonify(status="failed", errorMsg="")
@@ -54,10 +54,10 @@ def bfsopsInitPost():
 def bfsopsInitGet():
 	try:
 		initialization_stores = []
-		for key in store_rack.keys():
-			if key not in store_group:
-				if store_info.has_key(FREE_VOLUME_KEY + key):
-					initialization_stores.append(store_ip[key])
+		for key in STORE_RACK.keys():
+			if key not in STORE_GROUP:
+				if STORE_INFO.has_key(FREE_VOLUME_KEY + key):
+					initialization_stores.append(STORE_IP[key])
 		resp = {}
 		resp_item = {}
 		resp['status'] = "ok"
@@ -97,7 +97,7 @@ def bfsopsGroupsPost():
 				logger.error("bfsopsGroupsPost() called, failed, param error:  ips_length: %d copys: %d, rack: %d", len(ips), copys, rack)
 				abort(400)
 			for store_ip in ips:
-				if ip_store[store_ip] in store_group:
+				if IP_STORE[store_ip] in STORE_GROUP:
 					logger.error('grouping_store() called, failed   store_ip: %s has been grouped', store_ip)
 					abort(400)
 		except BaseException, e:
@@ -105,28 +105,28 @@ def bfsopsGroupsPost():
 			abort(400)
 
         #机器分组
-		group_stores = grouping_store(ips, copys, rack)
-		if group_stores is None:
+		GROUP_STORE = grouping_store(ips, copys, rack)
+		if GROUP_STORE is None:
 			logger.error("grouping_store() called, failed  errorMsg: ")
 			abort(400)
 
-		global max_group_id
-		for group_item in group_stores:
-			group_id = max_group_id + 1
-			group_store[group_id] = []
+		global MAX_GROUP_ID
+		for group_item in GROUP_STORE:
+			group_id = MAX_GROUP_ID + 1
+			GROUP_STORE[group_id] = []
 			for store_ip in group_item:
-				if not zk_client.addGroupStore(group_id, ip_store(store_ip)):
+				if not zk_client.addGroupStore(group_id, IP_STORE(store_ip)):
 					logger.error("addGroupStore() called, failed  store_ip: %s, group_id: %d", store_ip, group_id)
 					need_break = True
 					break
 
-				store_group[ip_store(store_ip)] = group_id
-				group_store[group_id].append(ip_store[store_ip])
+				STORE_GROUP[IP_STORE(store_ip)] = group_id
+				GROUP_STORE[group_id].append(IP_STORE[store_ip])
 
 			if need_break:
 				resp['status'] = "failed"
 				break
-			max_group_id += 1
+			MAX_GROUP_ID += 1
 			logger.info("addGroupStore() called, success  group_id: %d",group_id)
 
 			grouping_result['groupid'] = group_id
@@ -150,10 +150,10 @@ def bfsopsGroupsGet():
 		group_item = {}
 		status = 0
 
-		for group_id in group_store:
-			stores = group_store[group_id]
+		for group_id in GROUP_STORE:
+			stores = GROUP_STORE[group_id]
 			for store_id in stores:
-				if store_info[FREE_VOLUME_KEY+store_id] == 0:
+				if STORE_INFO[FREE_VOLUME_KEY+store_id] == 0:
 					status = 1
 			group_item['groupid'] = group_id
 			group_item['ips'] = ','.join(stores)
@@ -182,31 +182,31 @@ def bfsopsVolumesPost():
 	resp['errorMsg'] = ""
 	
 	need_break = False
-	global max_volume_id
+	global MAX_GROUP_ID
 	for group_id in groups:
-		stores = group_store[group_id]
+		stores = GROUP_STORE[group_id]
 		min_free_volume_id = 0
 		for store_id in stores:
-			if min_free_volume_id == 0 or min_free_volume_id > store_info[FREE_VOLUME_KEY+store_id]:
-				min_free_volume_id = store_info[FREE_VOLUME_KEY+store_id]
+			if min_free_volume_id == 0 or min_free_volume_id > STORE_INFO[FREE_VOLUME_KEY+store_id]:
+				min_free_volume_id = STORE_INFO[FREE_VOLUME_KEY+store_id]
 		for i in range(min_free_volume_id):
-			volume_id = max_volume_id+1
-			store_volume[store_id] = []
+			volume_id = MAX_GROUP_ID+1
+			STORE_VOLUME[store_id] = []
 			for store_id in stores:
-				if not store_client.storeAddVolume(store_ip[store_id], volume_id):
-					logger.error("storeAddVolume() called, failed, store_ip: %s, volume_id: %d", store_ip[store_id], volume_id)
+				if not store_client.storeAddVolume(STORE_IP[store_id], volume_id):
+					logger.error("storeAddVolume() called, failed, store_ip: %s, volume_id: %d", STORE_IP[store_id], volume_id)
 					need_break = True
 					break
 				if not zk_client.addVolumeStore(volume_id, store_id):
-					logger.error("addVolumeStore() called, failed, store_ip: %s, volume_id: %d", store_ip[store_id], volume_id)
+					logger.error("addVolumeStore() called, failed, store_ip: %s, volume_id: %d", STORE_IP[store_id], volume_id)
 					need_break = True
 					break
-				store_volume[store_id].append(volume_id)
-				store_info[VOLUME_KEY+store_id] += 1
+				STORE_VOLUME[store_id].append(volume_id)
+				STORE_INFO[VOLUME_KEY+store_id] += 1
 
 			if need_break:
 				break
-			max_volume_id += 1
+			MAX_GROUP_ID += 1
 			logger.info("storeAddVolume() called, success, volume_id: %d", volume_id)
 
 		if need_break:

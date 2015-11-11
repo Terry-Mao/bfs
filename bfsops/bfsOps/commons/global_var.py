@@ -2,19 +2,19 @@
 # -*- coding: utf-8 -*-
 
 
-rack_store = {}   #init from zk /rack
-group_store = {}
-max_group_id = 0
+RACK_STORE = {}   #init from zk /rack
+GROUP_STORE = {}
+MAX_GROUP_ID = 0
 
-store_ip = {} # store server_id to ip
-ip_store = {}
+STORE_IP = {} # store server_id to ip
+IP_STORE = {}
 
-store_info = {}    #init from store /info
+STORE_INFO = {}    #init from store /info
 VOLUME_KEY = "volume"
 FREE_VOLUME_KEY = "free_volume"
 
-store_rack = {}
-store_volume = {}
-store_group = {}
+STORE_RACK = {}
+STORE_VOLUME = {}
+STORE_GROUP = {}
 
-max_volume_id = 0
+MAX_GROUP_ID = 0
