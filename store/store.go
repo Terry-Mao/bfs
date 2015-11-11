@@ -71,12 +71,12 @@ func NewStore(zk *Zookeeper, c *Config) (s *Store, err error) {
 	for i = 1; i < c.BatchMaxNum; i++ {
 		s.np[i] = &sync.Pool{}
 	}
-	if s.vf, err = os.OpenFile(c.VolumeIndex, os.O_RDWR|os.O_CREATE, 0664); err != nil {
+	if s.vf, err = os.OpenFile(c.VolumeIndex, os.O_RDWR|os.O_CREATE|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", c.VolumeIndex, err)
 		s.Close()
 		return nil, err
 	}
-	if s.fvf, err = os.OpenFile(c.FreeVolumeIndex, os.O_RDWR|os.O_CREATE, 0664); err != nil {
+	if s.fvf, err = os.OpenFile(c.FreeVolumeIndex, os.O_RDWR|os.O_CREATE|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", c.FreeVolumeIndex, err)
 		s.Close()
 		return nil, err

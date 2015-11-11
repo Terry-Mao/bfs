@@ -9,6 +9,7 @@ import (
 	log "github.com/golang/glog"
 	"io"
 	"os"
+	"syscall"
 )
 
 // Super block has a header.
@@ -41,9 +42,10 @@ const (
 )
 
 var (
-	magic   = []byte{0xab, 0xcd, 0xef, 0x00}
-	ver     = []byte{Ver1}
-	padding = bytes.Repeat([]byte{paddingByte}, paddingSize)
+	magic    = []byte{0xab, 0xcd, 0xef, 0x00}
+	ver      = []byte{Ver1}
+	padding  = bytes.Repeat([]byte{paddingByte}, paddingSize)
+	pagesize = syscall.Getpagesize()
 )
 
 // An Volume contains one superblock and many needles.
@@ -51,43 +53,40 @@ type SuperBlock struct {
 	r       *os.File
 	w       *os.File
 	bw      *bufio.Writer
-	File    string `json:"file"`
-	Offset  uint32 `json:"offset"`
-	LastErr error  `json:"last_err"`
 	buf     []byte
-	bufSize int
-	syncCnt int
-	// meta
-	Magic []byte `json:"-"`
-	Ver   byte   `json:"ver"`
+	File    string  `json:"file"`
+	Offset  uint32  `json:"offset"`
+	LastErr error   `json:"last_err"`
+	Ver     byte    `json:"ver"`
+	Options Options `json:"options"`
+	magic   []byte  `json:"-"`
 	// status
-	closed         bool
-	write          int
-	lastSyncOffset uint32
-	syncfilerange  bool
+	closed     bool
+	write      int
+	syncOffset uint32
 }
 
 // NewSuperBlock creae a new super block.
-func NewSuperBlock(file string, buf, sync int, syncfilerange bool) (b *SuperBlock, err error) {
+func NewSuperBlock(file string, options Options) (b *SuperBlock, err error) {
 	b = &SuperBlock{}
-	b.closed = false
 	b.File = file
-	b.bufSize = buf
+	b.Options = options
 	b.Offset = needle.NeedleOffset(headerSize)
-	b.buf = make([]byte, buf)
-	b.syncCnt = sync
-	b.syncfilerange = syncfilerange
-	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0664); err != nil {
+	b.closed = false
+	b.write = 0
+	b.syncOffset = 0
+	b.buf = make([]byte, options.BufferSize)
+	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		b.Close()
 		return nil, err
 	}
-	if b.r, err = os.OpenFile(file, os.O_RDONLY, 0664); err != nil {
+	if b.r, err = os.OpenFile(file, os.O_RDONLY|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		b.Close()
 		return nil, err
 	}
-	b.bw = bufio.NewWriterSize(b.w, buf)
+	b.bw = bufio.NewWriterSize(b.w, options.BufferSize)
 	if err = b.init(); err != nil {
 		log.Errorf("block: %s init() error(%v)", file, err)
 		b.Close()
@@ -147,9 +146,9 @@ func (b *SuperBlock) parseMeta() (err error) {
 	if _, err = b.r.Read(b.buf[:headerSize]); err != nil {
 		return
 	}
-	b.Magic = b.buf[magicOffset : magicOffset+magicSize]
+	b.magic = b.buf[magicOffset : magicOffset+magicSize]
 	b.Ver = b.buf[verOffset : verOffset+verSize][0]
-	if !bytes.Equal(b.Magic, magic) {
+	if !bytes.Equal(b.magic, magic) {
 		return errors.ErrSuperBlockMagic
 	}
 	if b.Ver == Ver1 {
@@ -213,15 +212,15 @@ func (b *SuperBlock) sync() (err error) {
 	)
 	// append N times call flush then clean the os page cache
 	// page cache no used here...
-	// after upload a photo, we cache in user-level.
-	if b.write < b.syncCnt {
+	// after upload a photo, we cache in our own cache server.
+	offset = needle.BlockOffset(b.syncOffset)
+	size = needle.BlockOffset(b.Offset - b.syncOffset)
+	if b.write < b.Options.SyncAtWrite {
 		return
 	}
 	b.write = 0
 	fd = b.w.Fd()
-	offset = needle.BlockOffset(b.lastSyncOffset)
-	size = needle.BlockOffset(b.Offset - b.lastSyncOffset)
-	if b.syncfilerange {
+	if b.Options.Syncfilerange {
 		if err = myos.Syncfilerange(fd, offset, size, myos.SYNC_FILE_RANGE_WRITE); err != nil {
 			b.LastErr = err
 			log.Errorf("block: %s Syncfilerange() error(%v)", b.File, err)
@@ -235,7 +234,7 @@ func (b *SuperBlock) sync() (err error) {
 		}
 	}
 	if err = myos.Fadvise(fd, offset, size, myos.POSIX_FADV_DONTNEED); err == nil {
-		b.lastSyncOffset = b.Offset
+		b.syncOffset = b.Offset
 	} else {
 		log.Errorf("block: %s Fadvise() error(%v)", b.File, err)
 		b.LastErr = err
@@ -294,15 +293,28 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 	var (
 		data   []byte
 		so, eo uint32
+		bso    int64
+		fi     os.FileInfo
+		fd     = r.Fd()
 		n      = &needle.Needle{}
-		rd     = bufio.NewReaderSize(r, b.bufSize)
+		rd     = bufio.NewReaderSize(r, b.Options.BufferSize)
 	)
 	if offset == 0 {
 		offset = needle.NeedleOffset(headerOffset)
 	}
 	so, eo = offset, offset
+	bso = needle.BlockOffset(so)
+	// advise sequential read
+	if fi, err = r.Stat(); err != nil {
+		log.Errorf("block: %s Stat() error(%v)", b.File)
+		return
+	}
+	if err = myos.Fadvise(fd, bso, fi.Size(), myos.POSIX_FADV_SEQUENTIAL); err != nil {
+		log.Errorf("block: %s Fadvise() error(%v)", b.File)
+		return
+	}
 	log.Infof("scan block: %s from offset: %d", b.File, offset)
-	if _, err = r.Seek(needle.BlockOffset(offset), os.SEEK_SET); err != nil {
+	if _, err = r.Seek(bso, os.SEEK_SET); err != nil {
 		log.Errorf("block: %s Seek() error(%v)", b.File)
 		return
 	}
@@ -335,6 +347,11 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 		so = eo
 	}
 	if err == io.EOF {
+		// advise no need page cache
+		if err = myos.Fadvise(fd, bso, needle.BlockOffset(eo-so), myos.POSIX_FADV_DONTNEED); err != nil {
+			log.Errorf("block: %s Fadvise() error(%v)", b.File)
+			return
+		}
 		log.Infof("scan block: %s to offset: %d [ok]", b.File, eo)
 		err = nil
 	} else {
@@ -353,6 +370,14 @@ func (b *SuperBlock) Recovery(offset uint32, fn func(*needle.Needle, uint32, uin
 	}); err != nil {
 		return
 	}
+	// advise random read
+	// POSIX_FADV_RANDOM disables file readahead entirely.
+	// These changes affect the entire file, not just the specified region
+	// (but other open file handles to the same file are unaffected).
+	if err = myos.Fadvise(b.r.Fd(), 0, 0, myos.POSIX_FADV_RANDOM); err != nil {
+		log.Errorf("block: %s Fadvise() error(%v)", b.File)
+		return
+	}
 	// reset b.w offset, discard left space which can't parse to a needle
 	if _, err = b.w.Seek(needle.BlockOffset(b.Offset), os.SEEK_SET); err != nil {
 		log.Errorf("block: %s Seek() error(%v)", b.File, err)
@@ -366,7 +391,7 @@ func (b *SuperBlock) Compact(offset uint32, fn func(*needle.Needle, uint32, uint
 		return b.LastErr
 	}
 	var r *os.File
-	if r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
+	if r, err = os.OpenFile(b.File, os.O_RDONLY|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
 		return
 	}
@@ -387,12 +412,12 @@ func (b *SuperBlock) Open() (err error) {
 	if !b.closed {
 		return
 	}
-	if b.w, err = os.OpenFile(b.File, os.O_WRONLY, 0664); err != nil {
+	if b.w, err = os.OpenFile(b.File, os.O_WRONLY|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
 		return
 	}
 	b.bw.Reset(b.w)
-	if b.r, err = os.OpenFile(b.File, os.O_RDONLY, 0664); err != nil {
+	if b.r, err = os.OpenFile(b.File, os.O_RDONLY|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
 		b.Close()
 		return

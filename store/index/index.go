@@ -53,21 +53,20 @@ const (
 
 // Indexer used for fast recovery super block needle cache.
 type Indexer struct {
-	wg sync.WaitGroup
-
-	f       *os.File
-	bw      *bufio.Writer
-	bufSize int
-	// signal
-	sigCnt  int
-	sigTime time.Duration
-	signal  chan int
-	// index ring buffer
-	ring    *Ring
-	File    string `json:"file"`
-	LastErr error  `json:"last_err"`
+	wg     sync.WaitGroup
+	f      *os.File
+	bw     *bufio.Writer
+	signal chan int
+	ring   *Ring
+	//
+	File    string  `json:"file"`
+	LastErr error   `json:"last_err"`
+	Offset  int64   `json:"offset"`
+	Options Options `json:"options"`
 	// status
-	closed bool
+	syncOffset int64
+	closed     bool
+	write      int
 }
 
 // Index index data.
@@ -96,16 +95,15 @@ Size:           %d
 }
 
 // NewIndexer new a indexer for async merge index data to disk.
-func NewIndexer(file string, sigTime time.Duration, sigCnt, ring, buf int) (i *Indexer, err error) {
+func NewIndexer(file string, options Options) (i *Indexer, err error) {
 	var stat os.FileInfo
 	i = &Indexer{}
-	i.ring = NewRing(ring)
-	i.sigCnt = sigCnt
-	i.sigTime = sigTime
-	i.bufSize = buf
 	i.File = file
 	i.closed = false
-	if i.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0664); err != nil {
+	i.syncOffset = 0
+	i.Options = options
+	i.ring = NewRing(options.RingBuffer)
+	if i.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		return nil, err
 	}
@@ -120,10 +118,10 @@ func NewIndexer(file string, sigTime time.Duration, sigCnt, ring, buf int) (i *I
 			return nil, err
 		}
 	}
-	i.bw = bufio.NewWriterSize(i.f, buf)
+	i.bw = bufio.NewWriterSize(i.f, options.BufferSize)
 	i.wg.Add(1)
 	i.signal = make(chan int, 1)
-	go i.write()
+	go i.merge()
 	return
 }
 
@@ -152,7 +150,7 @@ func (i *Indexer) Add(key int64, offset uint32, size int32) (err error) {
 	index.Offset = offset
 	index.Size = size
 	i.ring.SetAdv()
-	if i.ring.Buffered() > i.sigCnt {
+	if i.ring.Buffered() > i.Options.MergeAtWrite {
 		i.Signal()
 	}
 	return
@@ -173,7 +171,49 @@ func (i *Indexer) Write(key int64, offset uint32, size int32) (err error) {
 		i.LastErr = err
 		return
 	}
-	if err = binary.BigEndian.WriteInt32(i.bw, size); err != nil {
+	if err = binary.BigEndian.WriteInt32(i.bw, size); err == nil {
+		i.Offset += indexSize
+		i.write++
+	} else {
+		i.LastErr = err
+	}
+	return
+}
+
+// sync sync the in-memory data flush to disk.
+func (i *Indexer) sync() (err error) {
+	var (
+		fd     uintptr
+		offset int64
+		size   int64
+	)
+	// append N times call flush then clean the os page cache
+	// page cache no used here...
+	// after upload a photo, we cache in our own cache server.
+	offset = i.syncOffset
+	size = i.Offset - i.syncOffset
+	if i.write < i.Options.MergeAtWrite {
+		return
+	}
+	i.write = 0
+	fd = i.f.Fd()
+	if i.Options.Syncfilerange {
+		if err = myos.Syncfilerange(fd, offset, size, myos.SYNC_FILE_RANGE_WRITE); err != nil {
+			i.LastErr = err
+			log.Errorf("block: %s Syncfilerange() error(%v)", i.File, err)
+			return
+		}
+	} else {
+		if err = myos.Fdatasync(fd); err != nil {
+			i.LastErr = err
+			log.Errorf("block: %s Fdatasync() error(%v)", i.File, err)
+			return
+		}
+	}
+	if err = myos.Fadvise(fd, offset, size, myos.POSIX_FADV_DONTNEED); err == nil {
+		i.syncOffset = i.Offset
+	} else {
+		log.Errorf("block: %s Fadvise() error(%v)", i.File, err)
 		i.LastErr = err
 	}
 	return
@@ -189,14 +229,12 @@ func (i *Indexer) Flush() (err error) {
 		log.Errorf("index: %s Flush() error(%v)", i.File, err)
 		return
 	}
-	// TODO append N times call flush then clean the os page cache
-	// page cache no used here...
-	// after upload a photo, we cache in user-level.
+	err = i.sync()
 	return
 }
 
-// merge get index data from ring then write to disk.
-func (i *Indexer) merge() (err error) {
+// mergeRing get index data from ring then write to disk.
+func (i *Indexer) mergeRing() (err error) {
 	var index *Index
 	for {
 		if index, err = i.ring.Get(); err != nil {
@@ -212,8 +250,8 @@ func (i *Indexer) merge() (err error) {
 	return
 }
 
-// write merge from ring index data, then write to disk.
-func (i *Indexer) write() {
+// merge merge from ring index data, then write to disk.
+func (i *Indexer) merge() {
 	var (
 		err error
 		sig int
@@ -222,20 +260,22 @@ func (i *Indexer) write() {
 	for {
 		select {
 		case sig = <-i.signal:
-		case <-time.After(i.sigTime):
+		case <-time.After(i.Options.MergeAtTime):
 			sig = ready
 		}
 		if sig != ready {
 			break
 		}
-		if err = i.merge(); err != nil {
+		if err = i.mergeRing(); err != nil {
 			break
 		}
 		if err = i.Flush(); err != nil {
 			break
 		}
 	}
-	i.merge()
+	i.mergeRing()
+	i.write = 0
+	i.Flush()
 	i.wg.Done()
 	log.Warningf("index: %s write job exit", i.File)
 	return
@@ -245,10 +285,21 @@ func (i *Indexer) write() {
 func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 	var (
 		data []byte
+		fi   os.FileInfo
+		fd   = r.Fd()
 		ix   = &Index{}
-		rd   = bufio.NewReaderSize(r, i.bufSize)
+		rd   = bufio.NewReaderSize(r, i.Options.BufferSize)
 	)
 	log.Infof("scan index: %s", i.File)
+	// advise sequential read
+	if fi, err = r.Stat(); err != nil {
+		log.Errorf("block: %s Stat() error(%v)", i.File)
+		return
+	}
+	if err = myos.Fadvise(fd, 0, fi.Size(), myos.POSIX_FADV_SEQUENTIAL); err != nil {
+		log.Errorf("block: %s Fadvise() error(%v)", i.File)
+		return
+	}
 	if _, err = r.Seek(0, os.SEEK_SET); err != nil {
 		log.Errorf("index: %s Seek() error(%v)", i.File, err)
 		return
@@ -269,6 +320,11 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 		}
 	}
 	if err == io.EOF {
+		// advise no need page cache
+		if err = myos.Fadvise(fd, 0, fi.Size(), myos.POSIX_FADV_DONTNEED); err != nil {
+			log.Errorf("block: %s Fadvise() error(%v)", i.File)
+			return
+		}
 		err = nil
 		log.Infof("scan index: %s [ok]", i.File)
 	} else {
@@ -299,7 +355,7 @@ func (i *Indexer) Open() (err error) {
 	if !i.closed {
 		return
 	}
-	if i.f, err = os.OpenFile(i.File, os.O_RDWR, 0664); err != nil {
+	if i.f, err = os.OpenFile(i.File, os.O_RDWR|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", i.File, err)
 		return
 	}
@@ -307,7 +363,7 @@ func (i *Indexer) Open() (err error) {
 	i.closed = false
 	i.LastErr = nil
 	i.wg.Add(1)
-	go i.write()
+	go i.merge()
 	return
 }
 

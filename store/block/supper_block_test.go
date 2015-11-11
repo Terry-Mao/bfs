@@ -26,13 +26,21 @@ func TestSuperBlock(t *testing.T) {
 	defer os.Remove(file)
 	defer os.Remove(ifile)
 	// test new block file
-	if b, err = NewSuperBlock(file, 4*1024*1024, 1000, true); err != nil {
+	if b, err = NewSuperBlock(file, Options{
+		BufferSize:    4 * 1024 * 1024,
+		SyncAtWrite:   1024,
+		Syncfilerange: true,
+	}); err != nil {
 		t.Errorf("NewSuperBlock(\"%s\") error(%v)", file, err)
 		t.FailNow()
 	}
 	b.Close()
 	// test parse block file
-	if b, err = NewSuperBlock(file, 4*1024*1024, 1000, true); err != nil {
+	if b, err = NewSuperBlock(file, Options{
+		BufferSize:    4 * 1024 * 1024,
+		SyncAtWrite:   1024,
+		Syncfilerange: true,
+	}); err != nil {
 		t.Errorf("NewSuperBlock(\"%s\") error(%v)", file, err)
 		t.FailNow()
 	}

@@ -22,6 +22,7 @@ const (
 	configIndexRingBuffer = 1024 * 10
 	configIndexSigCnt     = 1024
 	configIndexSigTime    = time.Second * 10 // 10s
+	configIndexSync       = 1024
 	// pprof
 	configPprofListen = "localhost:6060"
 	// stat
@@ -57,10 +58,12 @@ type Config struct {
 	SuperBlockSync          int  `goconf:"block:sync"`
 	SuperBlockSyncfilerange bool `goconf:"block:sync_file_range"`
 	// index
-	IndexRingBuffer int           `goconf:"index:ring_buffer_size"`
-	IndexBufferio   int           `goconf:"index:buffer_io_size:memory"`
-	IndexSigCnt     int           `goconf:"index:save_signal_count"`
-	IndexSigTime    time.Duration `goconf:"index:save_signal_time:time"`
+	IndexRingBuffer    int           `goconf:"index:ring_buffer_size"`
+	IndexBufferio      int           `goconf:"index:buffer_io_size:memory"`
+	IndexSigCnt        int           `goconf:"index:save_signal_count"`
+	IndexSigTime       time.Duration `goconf:"index:save_signal_time:time"`
+	IndexSync          int           `goconf:"index:sync"`
+	IndexSyncfilerange bool          `goconf:"index:sync_file_range"`
 	// pprof
 	PprofEnable bool   `goconf:"pprof:enable"`
 	PprofListen string `goconf:"pprof:listen"`
@@ -133,6 +136,9 @@ func (c *Config) setDefault() {
 	}
 	if c.IndexSigTime < 1*time.Second {
 		c.IndexSigTime = configIndexSigTime
+	}
+	if c.IndexSync < 1 {
+		c.IndexSync = configIndexSync
 	}
 	if len(c.PprofListen) == 0 {
 		c.PprofListen = configPprofListen
