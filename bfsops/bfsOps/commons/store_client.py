@@ -105,11 +105,11 @@ def initFromStore(store_ip):
         store_data = json.loads(data)
         free_volumes = store_data['free_volumes']
         free_volumes_num = len(free_volumes) - 1
-        STORE_INFO[FREE_VOLUME_KEY+IP_STORE[store_ip]] = free_volumes_num
+        STORE_INFO[FREE_VOLUME_KEY+IP_TO_STORE[store_ip]] = free_volumes_num
 
         volumes = store_data['volumes']
         volumes_num = len(volumes)
-        STORE_INFO[VOLUME_KEY+IP_STORE[store_ip]] = volumes_num
+        STORE_INFO[VOLUME_KEY+IP_TO_STORE[store_ip]] = volumes_num
         return True
 
     logger.error("initFromStore() called failed: status: %d, store_ip: %s", status, store_ip)

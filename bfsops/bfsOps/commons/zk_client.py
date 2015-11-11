@@ -36,8 +36,8 @@ def getRack():
 				if data:
 					parsed_data = json.loads(data)
 					ip = parsed_data['stat'].split(':')[0]
-					STORE_IP[store_id] = ip
-					IP_STORE[ip] = store_id
+					STORE_TO_IP[store_id] = ip
+					IP_TO_STORE[ip] = store_id
 					STORE_RACK[store_id] = rack_name
 					STORE_INFO[FREE_VOLUME_KEY+store_id] = -1
 					STORE_INFO[VOLUME_KEY+store_id] = 0
@@ -89,10 +89,6 @@ def getAllVolume():
 		return False
 
 
-def getVolume(volume_id):
-	pass
-
-
 def addGroupStore(group_id, store_id):
 	try:
 		if zk_client.exists('/group') is None:
@@ -130,10 +126,6 @@ def getAllGroup():
 	except Exception as ex:
 		logger.error("getAllGroup() called   error: %s", str(ex))	
 		return False
-
-
-def getGroup(group_id):
-	pass
 
 
 def initFromZk():

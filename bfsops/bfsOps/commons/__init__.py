@@ -43,7 +43,7 @@ def initBfsData():
 		return False
 
 	from store_client import initFromStore
-	for store_ip in IP_STORE:
+	for store_ip in IP_TO_STORE:
 		if initFromStore(store_ip):
 			logger.info("initFromStore() is called, success")
 		else:
