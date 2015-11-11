@@ -162,7 +162,6 @@ func (b *SuperBlock) parseMeta() (err error) {
 func (b *SuperBlock) available(incrOffset uint32) (err error) {
 	if maxOffset-incrOffset < b.Offset {
 		err = errors.ErrSuperBlockNoSpace
-		b.LastErr = err
 	}
 	return
 }

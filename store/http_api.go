@@ -45,6 +45,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		now              = time.Now()
 		v                *Volume
 		n                *needle.Needle
+		ns               []needle.Needle
 		err              error
 		buf              []byte
 		vid, key, cookie int64
@@ -73,7 +74,8 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	buf = h.s.Buffer(1)
-	n = h.s.Needle()
+	ns = h.s.Needle(1)
+	n = &(ns[0])
 	h.s.RLockVolume()
 	if v = h.s.Volumes[int32(vid)]; v != nil {
 		if err = v.Get(key, int32(cookie), buf, n); err != nil {
@@ -94,7 +96,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.s.FreeBuffer(1, buf)
-	h.s.FreeNeedle(n)
+	h.s.FreeNeedle(1, ns)
 	return
 }
 
@@ -117,6 +119,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		buf      []byte
 		v        *Volume
 		n        *needle.Needle
+		ns       []needle.Needle
 		file     multipart.File
 		sr       sizer
 		fr       *os.File
@@ -173,7 +176,8 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetNeedleTooLarge
 		return
 	}
-	n = h.s.Needle()
+	ns = h.s.Needle(1)
+	n = &(ns[0])
 	buf = h.s.Buffer(1)
 	rn, err = file.Read(buf)
 	file.Close()
@@ -190,7 +194,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	}
 	h.s.RUnlockVolume()
 	h.s.FreeBuffer(1, buf)
-	h.s.FreeNeedle(n)
+	h.s.FreeNeedle(1, ns)
 	if err != nil {
 		if storeErr, ok = err.(errors.StoreError); ok {
 			res["ret"] = int(storeErr)
@@ -218,7 +222,6 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		cookie        int64
 		size          int64
 		str           string
-		offsets       []int
 		keys          []string
 		cookies       []string
 		sr            sizer
@@ -226,6 +229,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		fi            os.FileInfo
 		v             *Volume
 		n             *needle.Needle
+		ns            []needle.Needle
 		storeErr      errors.StoreError
 		file          multipart.File
 		fh            *multipart.FileHeader
@@ -266,10 +270,19 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetParamErr
 		return
 	}
-	offsets = make([]int, nn*2)
 	buf = h.s.Buffer(nn)
-	n = h.s.Needle()
+	ns = h.s.Needle(nn)
 	for i, fh = range fhs {
+		if key, err = strconv.ParseInt(keys[i], 10, 64); err != nil {
+			log.Errorf("strconv.ParseInt(\"%s\") error(%v)", keys[i], err)
+			err = errors.ErrParam
+			break
+		}
+		if cookie, err = strconv.ParseInt(cookies[i], 10, 32); err != nil {
+			log.Errorf("strconv.ParseInt(\"%s\") error(%v)", cookies[i], err)
+			err = errors.ErrParam
+			break
+		}
 		file, err = fh.Open()
 		file.Close()
 		if err != nil {
@@ -293,26 +306,16 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			log.Errorf("file.Read() error(%v)", err)
 			break
 		}
-		offsets[i] = tn
+		n = &(ns[i])
+		n.Parse(key, int32(cookie), buf[tn:tn+rn])
 		tn += rn
-		offsets[i+1] = tn
 	}
 	if err == nil {
 		h.s.RLockVolume()
 		if v = h.s.Volumes[int32(vid)]; v != nil {
 			v.Lock()
 			for i = 0; i < nn; i++ {
-				if key, err = strconv.ParseInt(keys[i], 10, 64); err != nil {
-					log.Errorf("strconv.ParseInt(\"%s\") error(%v)", keys[i], err)
-					err = errors.ErrParam
-					break
-				}
-				if cookie, err = strconv.ParseInt(cookies[i], 10, 32); err != nil {
-					log.Errorf("strconv.ParseInt(\"%s\") error(%v)", cookies[i], err)
-					err = errors.ErrParam
-					break
-				}
-				n.Parse(key, int32(cookie), buf[offsets[i]:offsets[i+1]])
+				n = &(ns[i])
 				if err = v.Write(n); err != nil {
 					break
 				}
@@ -327,7 +330,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		h.s.RUnlockVolume()
 	}
 	h.s.FreeBuffer(nn, buf)
-	h.s.FreeNeedle(n)
+	h.s.FreeNeedle(nn, ns)
 	if err != nil {
 		if storeErr, ok = err.(errors.StoreError); ok {
 			res["ret"] = int(storeErr)
