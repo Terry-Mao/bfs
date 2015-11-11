@@ -69,8 +69,8 @@ func NewVolume(id int32, bfile, ifile string, c *Config) (v *Volume, err error) 
 		return nil, err
 	}
 	if v.Indexer, err = index.NewIndexer(ifile, index.Options{
-		MergeAtTime:   c.IndexSigTime,
-		MergeAtWrite:  c.IndexSigCnt,
+		MergeAtTime:   c.IndexMergeTime,
+		MergeAtWrite:  c.IndexMerge,
 		RingBuffer:    c.IndexRingBuffer,
 		BufferSize:    c.IndexBufferio,
 		SyncAtWrite:   c.IndexSync,

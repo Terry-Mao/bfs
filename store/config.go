@@ -20,8 +20,8 @@ const (
 	configSuperBlockSync = 1024
 	// index
 	configIndexRingBuffer = 1024 * 10
-	configIndexSigCnt     = 1024
-	configIndexSigTime    = time.Second * 10 // 10s
+	configIndexMerge      = 1024
+	configIndexMergeTime  = time.Second * 10 // 10s
 	configIndexSync       = 1024
 	// pprof
 	configPprofListen = "localhost:6060"
@@ -60,8 +60,8 @@ type Config struct {
 	// index
 	IndexRingBuffer    int           `goconf:"index:ring_buffer_size"`
 	IndexBufferio      int           `goconf:"index:buffer_io_size:memory"`
-	IndexSigCnt        int           `goconf:"index:save_signal_count"`
-	IndexSigTime       time.Duration `goconf:"index:save_signal_time:time"`
+	IndexMerge         int           `goconf:"index:merge"`
+	IndexMergeTime     time.Duration `goconf:"index:merge_time:time"`
 	IndexSync          int           `goconf:"index:sync"`
 	IndexSyncfilerange bool          `goconf:"index:sync_file_range"`
 	// pprof
@@ -131,11 +131,11 @@ func (c *Config) setDefault() {
 	if c.IndexRingBuffer < configIndexRingBuffer {
 		c.IndexRingBuffer = configIndexRingBuffer
 	}
-	if c.IndexSigCnt < 1 {
-		c.IndexSigCnt = configIndexSigCnt
+	if c.IndexMerge < 1 {
+		c.IndexMerge = configIndexMerge
 	}
-	if c.IndexSigTime < 1*time.Second {
-		c.IndexSigTime = configIndexSigTime
+	if c.IndexMergeTime < 1*time.Second {
+		c.IndexMergeTime = configIndexMergeTime
 	}
 	if c.IndexSync < 1 {
 		c.IndexSync = configIndexSync
