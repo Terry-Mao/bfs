@@ -200,20 +200,20 @@ func (i *Indexer) sync() (err error) {
 	if i.Options.Syncfilerange {
 		if err = myos.Syncfilerange(fd, offset, size, myos.SYNC_FILE_RANGE_WRITE); err != nil {
 			i.LastErr = err
-			log.Errorf("block: %s Syncfilerange() error(%v)", i.File, err)
+			log.Errorf("index: %s Syncfilerange() error(%v)", i.File, err)
 			return
 		}
 	} else {
 		if err = myos.Fdatasync(fd); err != nil {
 			i.LastErr = err
-			log.Errorf("block: %s Fdatasync() error(%v)", i.File, err)
+			log.Errorf("index: %s Fdatasync() error(%v)", i.File, err)
 			return
 		}
 	}
 	if err = myos.Fadvise(fd, offset, size, myos.POSIX_FADV_DONTNEED); err == nil {
 		i.syncOffset = i.Offset
 	} else {
-		log.Errorf("block: %s Fadvise() error(%v)", i.File, err)
+		log.Errorf("index: %s Fadvise() error(%v)", i.File, err)
 		i.LastErr = err
 	}
 	return
@@ -293,11 +293,11 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 	log.Infof("scan index: %s", i.File)
 	// advise sequential read
 	if fi, err = r.Stat(); err != nil {
-		log.Errorf("block: %s Stat() error(%v)", i.File)
+		log.Errorf("index: %s Stat() error(%v)", i.File)
 		return
 	}
 	if err = myos.Fadvise(fd, 0, fi.Size(), myos.POSIX_FADV_SEQUENTIAL); err != nil {
-		log.Errorf("block: %s Fadvise() error(%v)", i.File)
+		log.Errorf("index: %s Fadvise() error(%v)", i.File)
 		return
 	}
 	if _, err = r.Seek(0, os.SEEK_SET); err != nil {
@@ -322,7 +322,7 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 	if err == io.EOF {
 		// advise no need page cache
 		if err = myos.Fadvise(fd, 0, fi.Size(), myos.POSIX_FADV_DONTNEED); err != nil {
-			log.Errorf("block: %s Fadvise() error(%v)", i.File)
+			log.Errorf("index: %s Fadvise() error(%v)", i.File)
 			return
 		}
 		err = nil

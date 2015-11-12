@@ -423,7 +423,6 @@ func (b *SuperBlock) Open() (err error) {
 		return
 	}
 	if err = b.init(); err != nil {
-		log.Errorf("block: %s init error(%v)", b.File, err)
 		b.Close()
 		return
 	}
