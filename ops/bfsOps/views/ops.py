@@ -33,7 +33,8 @@ def bfsopsInitPost():
 
 	try:
 		num_volumes = size_G / config.store_block_size
-		for store_ip in ips:
+		for store_ip_u in ips:
+			store_ip = store_ip_u.encode('utf-8')
 			for store_dir in dirs:
 				result = store_client.storeAddFreeVolume(store_ip, store_dir, num_volumes)
 				if result is None:
@@ -98,7 +99,8 @@ def bfsopsGroupsPost():
 		if rack not in [1, 2, 3] or copys not in [2, 3] or len(ips) % copys != 0:
 			logger.error("bfsopsGroupsPost() called, failed, param error:  ips_length: %d copys: %d, rack: %d", len(ips), copys, rack)
 			abort(400)
-		for store_ip in ips:
+		for store_ip_u in ips:
+			store_ip = store_ip_u.encode('utf-8')
 			if IP_TO_STORE.has_key(store_ip) and IP_TO_STORE[store_ip] in STORE_GROUP:
 				logger.error('grouping_store() called, failed   store_ip: %s  not exist or has been grouped', store_ip)
 				abort(400)
@@ -178,7 +180,7 @@ def bfsopsVolumesPost():
 		abort(400)
 	groups = list(set(request.json['groups']))
 	for group_id in groups:
-		if not GROUP_STORE.has_key(group_id):
+		if not GROUP_STORE.has_key(group_id.encode('utf-8')):
 			abort(400)
 
 	resp = {}
@@ -187,7 +189,8 @@ def bfsopsVolumesPost():
 	
 	need_break = False
 	global MAX_VOLUME_ID
-	for group_id in groups:
+	for group_id_u in groups:
+		group_id = group_id_u.encode('utf-8')
 		stores = GROUP_STORE[group_id]
 		min_free_volume_id = 0
 		for store_id in stores:
@@ -195,7 +198,6 @@ def bfsopsVolumesPost():
 				min_free_volume_id = STORE_INFO[FREE_VOLUME_KEY+store_id]
 		for i in range(min_free_volume_id):
 			volume_id = MAX_VOLUME_ID+1
-			STORE_VOLUME[store_id] = []
 			for store_id in stores:
 				if not store_client.storeAddVolume(STORE_TO_IP[store_id], volume_id):
 					logger.error("storeAddVolume() called, failed, store_ip: %s, volume_id: %d", STORE_TO_IP[store_id], volume_id)
@@ -205,6 +207,8 @@ def bfsopsVolumesPost():
 					logger.error("addVolumeStore() called, failed, store_ip: %s, volume_id: %d", STORE_TO_IP[store_id], volume_id)
 					need_break = True
 					break
+				if not STORE_VOLUME.has_key(store_id):
+					STORE_VOLUME[store_id] = []
 				STORE_VOLUME[store_id].append(volume_id)
 				STORE_INFO[VOLUME_KEY+store_id] += 1
 

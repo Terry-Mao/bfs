@@ -24,18 +24,18 @@ def getRack():
 
 		children = zk_client.get_children('/rack', watcher)
 		for child in children:
-			rack_name = child
+			rack_name = child.encode('utf-8')
 			RACK_STORE[rack_name] = []
 			path1 = join('/rack', rack_name)
 			children1 = zk_client.get_children(path1)
 			for child1 in children1:
-				store_id = child1
+				store_id = child1.encode('utf-8')
 				RACK_STORE[rack_name].append(store_id)
 				path2 = join(path1, store_id)
 				data, stat = zk_client.get(path2)
 				if data:
 					parsed_data = json.loads(data)
-					ip = parsed_data['stat'].split(':')[0]
+					ip = parsed_data['stat'].split(':')[0].encode('utf-8')
 					STORE_TO_IP[store_id] = ip
 					IP_TO_STORE[ip] = store_id
 					STORE_RACK[store_id] = rack_name
@@ -112,13 +112,13 @@ def getAllGroup():
 			return True
 		children = zk_client.get_children('/group')
 		for child in children:
-			group_id = child
+			group_id = child.encode('utf-8')
 			if int(group_id) > MAX_GROUP_ID:
 				MAX_GROUP_ID = int(group_id)
 			path1 = join('/group', group_id)
 			children1 = zk_client.get_children(path1)
 			for child1 in children1:
-				store_id = child1
+				store_id = child1.encode('utf-8')
 				STORE_GROUP[store_id] = group_id
 				if not GROUP_STORE.has_key(group_id):
 					GROUP_STORE[group_id] = []
