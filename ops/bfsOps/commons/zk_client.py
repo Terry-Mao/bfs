@@ -57,7 +57,7 @@ def addVolumeStore(volume_id, store_id):
 		path = '/volume/' + str(volume_id)
 		if zk_client.exists(path) is None:
 			zk_client.create(path)
-		path1 = path + str(store_id)
+		path1 = path + '/' + str(store_id)
 		if zk_client.exists(path1) is None:
 			zk_client.create(path1)
 		return True
@@ -96,7 +96,7 @@ def addGroupStore(group_id, store_id):
 		path = '/group/' + str(group_id)
 		if zk_client.exists(path) is None:
 			zk_client.create(path)
-		path1 = path + str(store_id)
+		path1 = path + '/' + str(store_id)
 		if zk_client.exists(path1) is None:
 			zk_client.create(path1)
 		return True
@@ -106,6 +106,7 @@ def addGroupStore(group_id, store_id):
 
 
 def getAllGroup():
+	global MAX_GROUP_ID
 	try:
 		if zk_client.exists('/group') is None:
 			return True
@@ -119,7 +120,7 @@ def getAllGroup():
 			for child1 in children1:
 				store_id = child1
 				STORE_GROUP[store_id] = group_id
-				if not GROUP_STORE.has_key(store_id):
+				if not GROUP_STORE.has_key(group_id):
 					GROUP_STORE[group_id] = []
 				GROUP_STORE[group_id].append(store_id)
 		return True

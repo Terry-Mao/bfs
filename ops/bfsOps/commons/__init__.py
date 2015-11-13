@@ -28,7 +28,7 @@ def grouping_store(ips, copys, rack):
 
 from flask import Flask
 def createApp():
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder='../templates', static_folder='../static')
     return app
 
 app = createApp()
