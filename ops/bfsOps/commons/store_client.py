@@ -73,8 +73,8 @@ def storeAddFreeVolume(store_ip, base_dir, num_volumes):
     if retcode and status >= 200 and status < 300:
         return json.loads(data)
 
-    logger.error("storeAddFreeVolume() called failed: status: %d, store_ip: %s, num_volumes: %d base_dir: %s",
-     status, store_ip, num_volumes, base_dir)
+    logger.error("storeAddFreeVolume() called failed: store_ip: %s, num_volumes: %d base_dir: %s",
+     store_ip, num_volumes, base_dir)
     return None
     
 
