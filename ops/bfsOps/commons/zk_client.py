@@ -27,7 +27,7 @@ def getRack():
 			rack_name = child.encode('utf-8')
 			RACK_STORE[rack_name] = []
 			path1 = join('/rack', rack_name)
-			children1 = zk_client.get_children(path1)
+			children1 = zk_client.get_children(path1, watcher)
 			for child1 in children1:
 				store_id = child1.encode('utf-8')
 				RACK_STORE[rack_name].append(store_id)
