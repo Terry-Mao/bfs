@@ -35,15 +35,14 @@ type ProbeResult struct {
 	status    int
 }
 
-type ProbeResultList []*ProbeResult
 
-
-func (s *Store)probeStore() (ProbeResultList, error) {
+func (s *Store)probeStore() (*ProbeResult, error) {
 	url = fmt.Sprintf("http://%s/info", s.host)
 	resp, err := http.Get(url)
 	if err != nil {
-		//log
-		return nil, err
+		//log 
+		//result = xxxxxxxx
+		return result, err
 	}
 
 	defer resp.Body.Close()
@@ -59,5 +58,5 @@ func (s *Store)probeStore() (ProbeResultList, error) {
 		//log
 		return nil, err
 	}
-	
+	//dataJson['free_volumes']  dataJson['volumes']
 }
