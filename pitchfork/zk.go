@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
 	"path"
+	"encoding/json"
 	"strings"
 	"time"
 )
@@ -56,6 +56,38 @@ func (z *Zookeeper) createPath(fpath string, flags int32) (err error) {
 	}
 	return
 }
+
+func (z *Zookeeper) setStoreStatus(pathStore string, status int) error {
+	var (
+		data      []byte
+		dataJson  map[string]interface{}
+		status    int
+		stat      *zk.Stat
+		host      string
+		err       error
+	)
+
+	if data, stat, err = z.c.Get(pathStore); err != nil {
+		log.Errorf("zk.Get(\"%s\") error(%v)", pathStore, err)
+		return nil, err
+	}
+
+	if err = json.Unmarshal(data, &dataJson); err != nil {
+		log.Errorf("setStoreStatus() json.Unmarshal() error(%v)", err)
+		return nil, err
+	}
+
+	dataJson["status"] = status
+	if data, err = json.Marshal(dataJson); err == nil {
+		log.Errorf("json.Marshal() error(%v)", err)
+		return err
+	}
+	if _, err = z.c.Set(pathStore, data, stat.Version); err != nil {
+		log.Errorf("zk.Set(\"%s\") error(%v)", pathStore, err)
+		return err
+	}
+}
+
 
 
 // Close close the zookeeper connection.

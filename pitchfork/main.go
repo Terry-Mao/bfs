@@ -22,8 +22,8 @@ func main() {
 	var (
 		config     *Config
 		zk         *Zookeeper
-		pf         *Pitchfork
-		err   error
+		p          *Pitchfork
+		err        error
 	)
 
 	if config, err = NewConfig(configFile); err != nil {
@@ -37,13 +37,15 @@ func main() {
 		return
 	}
 
-	pf = NewPitchfork(zk, config)
-	if err = pf.Register(); err != nil {
+	log.Infof("register pitchfork...")
+	p = NewPitchfork(zk, config)
+	if err = p.Register(); err != nil {
 		log.Errorf("pitchfork Register() failed, Quit now")
 		return
 	}
 
-	go Work(pf)
+	log.Infof("starts probe stores...")
+	go Work(p)
 
 	StartSignal()
 	return

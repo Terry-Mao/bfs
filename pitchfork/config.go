@@ -12,6 +12,7 @@ const (
 	configZookeeperStoreRoot        = '/rack'
 	configZookeeperDirectoryRoot    = "/directory"
 	configProbeInterval             = 3
+	configMaxUsedSpace              = 0.95
 )
 
 var (
@@ -26,6 +27,7 @@ type Config struct {
 	ZookeeperStoreRoot        string        `goconf:"zookeeper:root"`
 	ZookeeperDirectoryRoot    string        `goconf:"zookeeper:root"`
 	ProbeInterval             int           `goconf:"probeinterval"`
+	MaxUsedSpacePercent       float32       `goconf:"restblockspace"`
 }
 
 // NewConfig new a config.
@@ -62,4 +64,6 @@ func (c *Config) setDefault() {
 	if c.ProbeInterval == 0 {
 		c.ProbeInterval = configProbeInterval
 	}
+	if c.MaxUsedSpacePercent == 0 {
+		c.MaxUsedSpacePercent = configMaxUsedSpacePercent
 }
