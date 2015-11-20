@@ -73,8 +73,8 @@ def storeAddFreeVolume(store_ip, base_dir, num_volumes):
     if retcode and status >= 200 and status < 300:
         return json.loads(data)
 
-    logger.error("storeAddFreeVolume() called failed: status: %d, store_ip: %s, num_volumes: %d base_dir: %s",
-     status, store_ip, num_volumes, base_dir)
+    logger.error("storeAddFreeVolume() called failed: store_ip: %s, num_volumes: %d base_dir: %s",
+     store_ip, num_volumes, base_dir)
     return None
     
 
@@ -103,6 +103,9 @@ def initFromStore(store_ip):
     retcode, status, data = store_conn.request('GET', url)
     if retcode and status >= 200 and status < 300:
         store_data = json.loads(data)
+        if store_data['ret'] != 1:
+            return False
+            
         free_volumes = store_data['free_volumes']
         free_volumes_num = len(free_volumes) - 1
         STORE_INFO[FREE_VOLUME_KEY+IP_TO_STORE[store_ip]] = free_volumes_num
