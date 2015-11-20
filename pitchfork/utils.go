@@ -12,7 +12,7 @@ import (
 
 // Divides a set of stores between a set of pitchforks.
 func divideStoreBetweenPitchfork(pitchforks PitchforkList, stores StoreList) (map[string]StoreList, error) {
-	var result map[string]StoreList
+	result := make(map[string]StoreList)
 
 	slen := len(stores)
 	plen := len(pitchforks)

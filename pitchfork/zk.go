@@ -77,7 +77,7 @@ func (z *Zookeeper) setStoreStatus(pathStore string, status int32) error {
 	}
 
 	dataJson["status"] = status
-	if data, err = json.Marshal(dataJson); err == nil {
+	if data, err = json.Marshal(dataJson); err != nil {
 		log.Errorf("json.Marshal() error(%v)", err)
 		return err
 	}

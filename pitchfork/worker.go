@@ -25,9 +25,9 @@ func Work(p *Pitchfork) {
 			return
 		}
 
-		pitchforks, pitchforkChanges, err = p.WatchGetPitchfork()
+		pitchforks, pitchforkChanges, err = p.WatchGetPitchforks()
 		if err != nil {
-			log.Errorf("WatchGetPitchfork() called error(%v)", err)
+			log.Errorf("WatchGetPitchforks() called error(%v)", err)
 			return
 		}
 
@@ -47,7 +47,7 @@ func Work(p *Pitchfork) {
 					select {
 						case <- stopper:
 							break
-						case <- time.After(p.config.ProbeInterval * time.Second):
+						case <- time.After(p.config.ProbeInterval):
 					}
 				}
 			}(stopper)
