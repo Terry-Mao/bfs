@@ -6,17 +6,18 @@ import (
 	"io"
 	"os"
 	"sort"
+	"errors"
 )
 
 
 // Divides a set of stores between a set of pitchforks.
-func divideStoreBetweenPitchfork(pitchforks PitchforkList, stores StoreList) map[string]StoreList {
-	var result StoreList
+func divideStoreBetweenPitchfork(pitchforks PitchforkList, stores StoreList) (map[string]StoreList, error) {
+	var result map[string]StoreList
 
 	slen := len(stores)
 	plen := len(pitchforks)
-	if clen == 0 {
-		return result
+	if slen == 0 || plen == 0 || slen < plen {
+		return nil, errors.New("divideStoreBetweenPitchfork error")
 	}
 
 	sort.Sort(stores)
@@ -41,7 +42,7 @@ func divideStoreBetweenPitchfork(pitchforks PitchforkList, stores StoreList) map
 		p = last
 	}
 
-	return result
+	return result, nil
 }
 
 
@@ -56,19 +57,24 @@ func generateUUID() (string, error) {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
 }
 
-func generateID() (ID string, err error) {
-	var uuid, hostname string
+func generateID() (string, error) {
+	var (
+		uuid      string
+		hostname string
+		ID       string
+		err      error
+	)
 
 	uuid, err = generateUUID()
 	if err != nil {
-		return
+		return "", err
 	}
 
 	hostname, err = os.Hostname()
 	if err != nil {
-		return
+		return "", err
 	}
 
 	ID = fmt.Sprintf("%s:%s", hostname, uuid)
-	return
+	return ID, nil
 }

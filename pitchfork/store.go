@@ -1,20 +1,12 @@
 package main
 
-import (
-	log "github.com/golang/glog"
-	"net/http"
-	"encoding/json"
-	"io/ioutil"
-	"fmt"
-)
-
 const maxOffset = 4294967295
 
 type Store struct {
 	rack      string
 	ID        string
 	host      string
-	status    int
+	status    int32
 }
 type StoreList []*Store
 

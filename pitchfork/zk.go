@@ -37,10 +37,11 @@ func NewZookeeper(addrs []string, timeout time.Duration) (
 }
 
 // createPath create a zookeeper path.
-func (z *Zookeeper) createPath(fpath string, flags int32) (err error) {
+func (z *Zookeeper) createPath(fpath string, flags int32) error {
 	var (
 		str   string
 		tpath = ""
+		err   error
 	)
 	for _, str = range strings.Split(fpath, "/")[1:] {
 		tpath = path.Join(tpath, "/", str)
@@ -48,33 +49,31 @@ func (z *Zookeeper) createPath(fpath string, flags int32) (err error) {
 		if _, err = z.c.Create(tpath, []byte(""), flags, zk.WorldACL(zk.PermAll)); err != nil {
 			if err != zk.ErrNodeExists {
 				log.Errorf("zk.create(\"%s\") error(%v)", tpath, err)
-				return
+				return err
 			} else {
 				err = nil
 			}
 		}
 	}
-	return
+	return nil
 }
 
-func (z *Zookeeper) setStoreStatus(pathStore string, status int) error {
+func (z *Zookeeper) setStoreStatus(pathStore string, status int32) error {
 	var (
 		data      []byte
 		dataJson  map[string]interface{}
-		status    int
 		stat      *zk.Stat
-		host      string
 		err       error
 	)
 
 	if data, stat, err = z.c.Get(pathStore); err != nil {
 		log.Errorf("zk.Get(\"%s\") error(%v)", pathStore, err)
-		return nil, err
+		return err
 	}
 
 	if err = json.Unmarshal(data, &dataJson); err != nil {
 		log.Errorf("setStoreStatus() json.Unmarshal() error(%v)", err)
-		return nil, err
+		return err
 	}
 
 	dataJson["status"] = status
@@ -86,6 +85,7 @@ func (z *Zookeeper) setStoreStatus(pathStore string, status int) error {
 		log.Errorf("zk.Set(\"%s\") error(%v)", pathStore, err)
 		return err
 	}
+	return nil
 }
 
 

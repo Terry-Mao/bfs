@@ -2,8 +2,7 @@ package main
 
 import (
 	log "github.com/golang/glog"
-	"net/http"
-	"os"
+	"github.com/samuel/go-zookeeper/zk"
 	"time"
 )
 
@@ -32,7 +31,10 @@ func Work(p *Pitchfork) {
 			return
 		}
 
-		allStores, err = divideStoreBetweenPitchfork(pitchforks, stores)
+		if allStores, err = divideStoreBetweenPitchfork(pitchforks, stores); err != nil {
+			log.Errorf("divideStoreBetweenPitchfork() called error(%v)", err)
+			return
+		}
 
 		stopper = make(chan struct{})
 
@@ -53,9 +55,9 @@ func Work(p *Pitchfork) {
 
 
 		select {
-		case <-p.stopper:
-			close(stopper)
-			return
+//		case <-p.stopper:
+//			close(stopper)
+//			return
 
 		case <-storeChanges:
 			log.Infof("Triggering rebalance due to store list change")
