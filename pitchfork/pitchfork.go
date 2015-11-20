@@ -139,7 +139,7 @@ func (p *Pitchfork)probeStore(s *Store) error {
 
 	volumes =  dataJson["volumes"].([]interface{})
 	if len(volumes) == 0 {
-		logger.Warningf("probeStore() store not online host:%s", s.host)
+		log.Warningf("probeStore() store not online host:%s", s.host)
 		return nil
 	}
 	for _, volume := range volumes {
@@ -147,7 +147,7 @@ func (p *Pitchfork)probeStore(s *Store) error {
 		block := volumeValue["block"].(map[string]interface{})
 		offset := int64(block["offset"].(float64))
 		if int64(maxOffset * p.config.MaxUsedSpacePercent) < offset {
-			logger.Warningf("probeStore() store block has no enough space, host:%s", s.host)
+			log.Warningf("probeStore() store block has no enough space, host:%s", s.host)
 			status = status & 0xfd
 		}
 		lastErr := block["last_err"]
