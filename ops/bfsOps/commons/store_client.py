@@ -103,6 +103,9 @@ def initFromStore(store_ip):
     retcode, status, data = store_conn.request('GET', url)
     if retcode and status >= 200 and status < 300:
         store_data = json.loads(data)
+        if store_data['ret'] != 1:
+            return False
+            
         free_volumes = store_data['free_volumes']
         free_volumes_num = len(free_volumes) - 1
         STORE_INFO[FREE_VOLUME_KEY+IP_TO_STORE[store_ip]] = free_volumes_num
