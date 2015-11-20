@@ -19,24 +19,27 @@ func Work(p *Pitchfork) {
 		err                error
 	)
 	for {
+		stopper = make(chan struct{})
+
 		stores, storeChanges, err = p.WatchGetStores()
 		if err != nil {
 			log.Errorf("WatchGetStores() called error(%v)", err)
+			close(stopper)
 			return
 		}
 
 		pitchforks, pitchforkChanges, err = p.WatchGetPitchforks()
 		if err != nil {
 			log.Errorf("WatchGetPitchforks() called error(%v)", err)
+			close(stopper)
 			return
 		}
 
 		if allStores, err = divideStoreBetweenPitchfork(pitchforks, stores); err != nil {
 			log.Errorf("divideStoreBetweenPitchfork() called error(%v)", err)
+			close(stopper)
 			return
 		}
-
-		stopper = make(chan struct{})
 
 		for _, store = range allStores[p.ID] {
 			go func(stopper chan struct{}) {
