@@ -101,7 +101,7 @@ func (p *Pitchfork) WatchGetStores() (StoreList, <-chan zk.Event, error) {
 
 			status := int32(dataJson["status"].(float64))
 			host := string(dataJson["stat"].(string))
-			result = append(result, &Store{rack:rackName, ID:storeId, host:host, status:status})  //need to do
+			result = append(result, &Store{rack:rackName, ID:storeId, host:host, status:status})
 		}
 	}
 

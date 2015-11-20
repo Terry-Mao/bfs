@@ -42,7 +42,7 @@ func Work(p *Pitchfork) {
 		}
 
 		for _, store = range allStores[p.ID] {
-			go func(stopper chan struct{}) {
+			go func(stopper chan struct{}, store *Store) {
 				for {
 					if err = p.probeStore(store); err != nil {
 						log.Errorf("probeStore() called error(%v)", err)
@@ -53,7 +53,7 @@ func Work(p *Pitchfork) {
 						case <- time.After(p.config.ProbeInterval):
 					}
 				}
-			}(stopper)
+			}(stopper, store)
 		}
 
 

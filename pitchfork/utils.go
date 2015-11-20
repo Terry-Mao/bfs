@@ -32,8 +32,8 @@ func divideStoreBetweenPitchfork(pitchforks PitchforkList, stores StoreList) (ma
 		if m > 0 && i < m {
 			last++
 		}
-		if last > plen {
-			last = plen
+		if last > slen {
+			last = slen
 		}
 
 		for _, store := range stores[first:last] {
