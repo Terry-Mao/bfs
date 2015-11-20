@@ -53,7 +53,7 @@ func TestStore(t *testing.T) {
 	defer os.Remove("./test/1_1.idx")
 	defer os.Remove("./test/1_2")
 	defer os.Remove("./test/1_2.idx")
-	if z, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack/test/"); err != nil {
+	if z, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack", "", "test"); err != nil {
 		t.Errorf("NewZookeeper() error(%v)", err)
 		t.FailNow()
 	}

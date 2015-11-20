@@ -3,8 +3,8 @@ package os
 
 /*
 #define _XOPEN_SOURCE 600
+#include <unistd.h>
 #include <fcntl.h>
-typedef __off_t off_t;
 */
 import "C"
 

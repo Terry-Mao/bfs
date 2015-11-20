@@ -271,7 +271,6 @@ func (v *Volume) Add(n *needle.Needle) (err error) {
 //   Write
 // }
 // Unlock
-// Free Needle
 func (v *Volume) Write(n *needle.Needle) (err error) {
 	var (
 		now             = time.Now().UnixNano()

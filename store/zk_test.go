@@ -9,19 +9,21 @@ import (
 
 func TestZookeeper(t *testing.T) {
 	var (
-		v     *Volume
-		zk    *Zookeeper
-		err   error
-		lines []string
-		fpath = "/rack/rack-a/store-a/"
-		bfile = "./test/hijohn_1"
-		ifile = "./test/hijohn_1.idx"
+		v        *Volume
+		zk       *Zookeeper
+		err      error
+		lines    []string
+		root     = "/rack"
+		rack     = "rack-a"
+		serverId = "store-a"
+		bfile    = "./test/hijohn_1"
+		ifile    = "./test/hijohn_1.idx"
 	)
 	os.Remove(bfile)
 	os.Remove(ifile)
 	defer os.Remove(bfile)
 	defer os.Remove(ifile)
-	if zk, err = NewZookeeper([]string{"localhost:2181"}, time.Second, fpath); err != nil {
+	if zk, err = NewZookeeper([]string{"localhost:2181"}, time.Second, root, rack, serverId); err != nil {
 		t.Errorf("Newzookeeper() error(%v)", err)
 		t.FailNow()
 	}

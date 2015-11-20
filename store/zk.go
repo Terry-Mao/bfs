@@ -30,15 +30,17 @@ const (
 type Zookeeper struct {
 	c     *zk.Conn
 	fpath string
+	root  string
 }
 
 // NewZookeeper new a connection to zookeeper.
-func NewZookeeper(addrs []string, timeout time.Duration, fpath string) (
-	z *Zookeeper, err error) {
+func NewZookeeper(addrs []string, timeout time.Duration, root, rack, sid string) (z *Zookeeper, err error) {
 	var (
 		s <-chan zk.Event
 	)
 	z = &Zookeeper{}
+	z.root = root
+	z.fpath = strings.TrimRight(path.Join(root, rack, sid), "/")
 	if z.c, s, err = zk.Connect(addrs, timeout); err != nil {
 		log.Errorf("zk.Connect(\"%v\") error(%v)", addrs, err)
 		return
@@ -52,7 +54,6 @@ func NewZookeeper(addrs []string, timeout time.Duration, fpath string) (
 			log.Infof("zookeeper get a event: %s", e.State.String())
 		}
 	}()
-	z.fpath = strings.TrimRight(fpath, "/")
 	err = z.init()
 	return
 }
@@ -160,6 +161,19 @@ func (z *Zookeeper) SetStore(stat, admin, api string) (err error) {
 	}
 	if _, err = z.c.Set(z.fpath, []byte(fmt.Sprintf(storeDataJson, stat, admin, api)), s.Version); err != nil {
 		log.Errorf("zk.Set(\"%s\") error(%v)", z.fpath, err)
+	}
+	return
+}
+
+// SetRoot update root.
+func (z *Zookeeper) SetRoot() (err error) {
+	var s *zk.Stat
+	if _, s, err = z.c.Get(z.root); err != nil {
+		log.Errorf("zk.Get(\"%s\") error(%v)", z.root, err)
+		return
+	}
+	if _, err = z.c.Set(z.root, []byte(""), s.Version); err != nil {
+		log.Errorf("zk.Set(\"%s\") error(%v)", z.root, err)
 	}
 	return
 }

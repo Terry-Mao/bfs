@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	log "github.com/golang/glog"
-	"path"
 )
 
 var (
@@ -16,11 +15,10 @@ func init() {
 
 func main() {
 	var (
-		c     *Config
-		z     *Zookeeper
-		s     *Store
-		fpath string
-		err   error
+		c   *Config
+		z   *Zookeeper
+		s   *Store
+		err error
 	)
 	flag.Parse()
 	defer log.Flush()
@@ -29,9 +27,8 @@ func main() {
 		log.Errorf("NewConfig(\"%s\") error(%v)", configFile, err)
 		return
 	}
-	fpath = path.Join(c.ZookeeperRoot, c.Rack, c.ServerId)
 	log.Infof("init zookeeper...")
-	if z, err = NewZookeeper(c.ZookeeperAddrs, c.ZookeeperTimeout, fpath); err != nil {
+	if z, err = NewZookeeper(c.ZookeeperAddrs, c.ZookeeperTimeout, c.ZookeeperRoot, c.Rack, c.ServerId); err != nil {
 		return
 	}
 	log.Infof("init store...")
@@ -51,6 +48,11 @@ func main() {
 	// update zk store meta
 	if err = z.SetStore(c.StatListen, c.AdminListen, c.ApiListen); err != nil {
 		log.Errorf("zk.SetStore() error(%v)", err)
+		return
+	}
+	// update zk root
+	if err = z.SetRoot(); err != nil {
+		log.Errorf("zk.SetRoot() error(%v)", err)
 		return
 	}
 	log.Infof("wait signal...")

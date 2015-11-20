@@ -42,7 +42,7 @@ func TestHTTPAdmin(t *testing.T) {
 	defer os.Remove("./test/1_1")
 	defer os.Remove(bfile)
 	defer os.Remove(ifile)
-	if z, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack/test-admin/"); err != nil {
+	if z, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack", "", "test-admin"); err != nil {
 		t.Errorf("NewZookeeper() error(%v)", err)
 		t.FailNow()
 	}

@@ -49,7 +49,7 @@ func TestHTTPAPI(t *testing.T) {
 	defer os.Remove("./test/_free_block_1")
 	defer os.Remove("./test/1")
 	defer os.Remove("./test/1_0")
-	if z, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack/test-api/"); err != nil {
+	if z, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack", "", "test-api"); err != nil {
 		t.Errorf("NewZookeeper() error(%v)", err)
 		t.FailNow()
 	}
