@@ -9,13 +9,13 @@ import (
 	"io/ioutil"
 )
 
-
 type Pitchfork struct {
 	ID        string
 	config    *Config
 	zk        *Zookeeper
 }
 
+//NewPitchfork
 func NewPitchfork(zk *Zookeeper, config *Config) *Pitchfork {
 	id, err := generateID()
 	if err != nil {
@@ -25,6 +25,7 @@ func NewPitchfork(zk *Zookeeper, config *Config) *Pitchfork {
 	return &Pitchfork{ID: id, config: config, zk: zk}
 }
 
+//Register register pitchfork in the zookeeper
 func (p *Pitchfork) Register() error {
 	node := fmt.Sprintf("%s/%s", p.config.ZookeeperPitchforkRoot, p.ID)
 	flags := int32(zk.FlagEphemeral)
@@ -32,6 +33,7 @@ func (p *Pitchfork) Register() error {
 	return p.zk.createPath(node, flags)
 }
 
+//WatchGetPitchforks get all the pitchfork nodes and set up the watcher in the zookeeper
 func (p *Pitchfork) WatchGetPitchforks() (PitchforkList, <-chan zk.Event, error) {
 	var (
 		pitchforkRootPath string
@@ -57,6 +59,7 @@ func (p *Pitchfork) WatchGetPitchforks() (PitchforkList, <-chan zk.Event, error)
 	return result, pitchforkChanges, nil
 }
 
+//WatchGetStores get all the store nodes and set up the watcher in the zookeeper
 func (p *Pitchfork) WatchGetStores() (StoreList, <-chan zk.Event, error) {
 	var (
 		storeRootPath      string
@@ -108,6 +111,7 @@ func (p *Pitchfork) WatchGetStores() (StoreList, <-chan zk.Event, error) {
 	return result, storeChanges, nil
 }
 
+//probeStore probe store node and feed back to directory
 func (p *Pitchfork)probeStore(s *Store) error {
 	var (
 		status = int32(0xff)
@@ -172,14 +176,17 @@ feedbackZk:
 
 type PitchforkList []*Pitchfork
 
+//Len
 func (pl PitchforkList) Len() int {
 	return len(pl)
 }
 
+//Less
 func (pl PitchforkList) Less(i, j int) bool {
 	return pl[i].ID < pl[j].ID
 }
 
+//Swap
 func (pl PitchforkList) Swap(i, j int) {
 	pl[i], pl[j] = pl[j], pl[i]
 }

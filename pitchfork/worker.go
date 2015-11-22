@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-
+//Work main flow of pitchfork server
 func Work(p *Pitchfork) {
 	var (
 		stores             StoreList

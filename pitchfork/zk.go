@@ -58,6 +58,7 @@ func (z *Zookeeper) createPath(fpath string, flags int32) error {
 	return nil
 }
 
+//setStoreStatus set status of store node
 func (z *Zookeeper) setStoreStatus(pathStore string, status int32) error {
 	var (
 		data      []byte
@@ -87,8 +88,6 @@ func (z *Zookeeper) setStoreStatus(pathStore string, status int32) error {
 	}
 	return nil
 }
-
-
 
 // Close close the zookeeper connection.
 func (z *Zookeeper) Close() {
