@@ -11,6 +11,7 @@ Table of Contents
 * [Installation](#installation)
 
 ## Features
+* Mostly probe all store nodes and feed back to all directorys
 * Adaptive Designs when store nodes change or pitchfork nodes change
 * High-low coupling pitchfork feed back to directory through zookeeper
 
