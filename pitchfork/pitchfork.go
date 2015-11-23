@@ -41,13 +41,24 @@ func (pl PitchforkList) Swap(i, j int) {
 }
 
 //NewPitchfork
-func NewPitchfork(zk *Zookeeper, config *Config) *Pitchfork {
-	id, err := generateID()
-	if err != nil {
-		panic(err)
+func NewPitchfork(zk *Zookeeper, config *Config) (*Pitchfork, error) {
+	var (
+		id        string
+		p         *Pitchfork
+		err       error
+	)
+	if id, err = generateID(); err != nil {
+		log.Errof("generateID() failed")
+		return nil, err
 	}
 
-	return &Pitchfork{ID: id, config: config, zk: zk}
+	p = &Pitchfork{ID: id, config: config, zk: zk}
+	if err = p.Register(); err != nil {
+		log.Errorf("Register() failed")
+		return nil, err
+	}
+
+	return p, nil
 }
 
 //Register register pitchfork in the zookeeper
@@ -199,7 +210,6 @@ feedbackZk:
     return nil
 }
 
-//
 //Work main flow of pitchfork server
 func (p *Pitchfork)Work() {
 	var (
@@ -246,7 +256,6 @@ func (p *Pitchfork)Work() {
 				}
 			}(stopper, store)
 		}
-
 
 		select {
 		case <-storeChanges:
