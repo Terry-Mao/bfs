@@ -1,12 +1,15 @@
 package main
 
 import (
-	log "github.com/golang/glog"
-	"github.com/samuel/go-zookeeper/zk"
-	"time"
+    "time"
+    "sort"
+    "errors"
+
+    log "github.com/golang/glog"
+    "github.com/samuel/go-zookeeper/zk"
 )
 
-
+//Work main flow of pitchfork server
 func Work(p *Pitchfork) {
 	var (
 		stores             StoreList
@@ -25,9 +28,9 @@ func Work(p *Pitchfork) {
 			return
 		}
 
-		pitchforks, pitchforkChanges, err = p.WatchGetPitchfork()
+		pitchforks, pitchforkChanges, err = p.WatchGetPitchforks()
 		if err != nil {
-			log.Errorf("WatchGetPitchfork() called error(%v)", err)
+			log.Errorf("WatchGetPitchforks() called error(%v)", err)
 			return
 		}
 
@@ -39,26 +42,22 @@ func Work(p *Pitchfork) {
 		stopper = make(chan struct{})
 
 		for _, store = range allStores[p.ID] {
-			go func(stopper chan struct{}) {
+			go func(stopper chan struct{}, store *Store) {
 				for {
 					if err = p.probeStore(store); err != nil {
 						log.Errorf("probeStore() called error(%v)", err)
 					}
 					select {
 						case <- stopper:
-							break
-						case <- time.After(p.config.ProbeInterval * time.Second):
+							return
+						case <- time.After(p.config.ProbeInterval):
 					}
 				}
-			}(stopper)
+			}(stopper, store)
 		}
 
 
 		select {
-//		case <-p.stopper:
-//			close(stopper)
-//			return
-
 		case <-storeChanges:
 			log.Infof("Triggering rebalance due to store list change")
 			close(stopper)
@@ -71,3 +70,37 @@ func Work(p *Pitchfork) {
 }
 
 
+// Divides a set of stores between a set of pitchforks.
+func divideStoreBetweenPitchfork(pitchforks PitchforkList, stores StoreList) (map[string]StoreList, error) {
+	result := make(map[string]StoreList)
+
+	slen := len(stores)
+	plen := len(pitchforks)
+	if slen == 0 || plen == 0 || slen < plen {
+		return nil, errors.New("divideStoreBetweenPitchfork error")
+	}
+
+	sort.Sort(stores)
+	sort.Sort(pitchforks)
+
+	n := slen / plen
+	m := slen % plen
+	p := 0
+	for i, pitchfork := range pitchforks {
+		first := p
+		last := first + n
+		if m > 0 && i < m {
+			last++
+		}
+		if last > slen {
+			last = slen
+		}
+
+		for _, store := range stores[first:last] {
+			result[pitchfork.ID] = append(result[pitchfork.ID], store)
+		}
+		p = last
+	}
+
+	return result, nil
+}
