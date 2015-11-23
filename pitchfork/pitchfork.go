@@ -1,12 +1,16 @@
 package main
 
 import (
-	log "github.com/golang/glog"
-	"github.com/samuel/go-zookeeper/zk"
+	"os"
+	"io"
 	"fmt"
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
 	"io/ioutil"
+	
+	log "github.com/golang/glog"
+	"github.com/samuel/go-zookeeper/zk"
 )
 
 type Pitchfork struct {
@@ -189,4 +193,39 @@ func (pl PitchforkList) Less(i, j int) bool {
 //Swap
 func (pl PitchforkList) Swap(i, j int) {
 	pl[i], pl[j] = pl[j], pl[i]
+}
+
+//generateUUID
+func generateUUID() (string, error) {
+	uuid := make([]byte, 16)
+	n, err := io.ReadFull(rand.Reader, uuid)
+	if n != len(uuid) || err != nil {
+		return "", err
+	}
+	uuid[8] = uuid[8]&^0xc0 | 0x80
+	uuid[6] = uuid[6]&^0xf0 | 0x40
+	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
+}
+
+//generateID
+func generateID() (string, error) {
+	var (
+		uuid      string
+		hostname string
+		ID       string
+		err      error
+	)
+
+	uuid, err = generateUUID()
+	if err != nil {
+		return "", err
+	}
+
+	hostname, err = os.Hostname()
+	if err != nil {
+		return "", err
+	}
+
+	ID = fmt.Sprintf("%s:%s", hostname, uuid)
+	return ID, nil
 }

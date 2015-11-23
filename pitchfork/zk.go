@@ -1,12 +1,13 @@
 package main
 
 import (
-	log "github.com/golang/glog"
-	"github.com/samuel/go-zookeeper/zk"
 	"path"
 	"encoding/json"
 	"strings"
 	"time"
+
+	log "github.com/golang/glog"
+	"github.com/samuel/go-zookeeper/zk"
 )
 
 type Zookeeper struct {
