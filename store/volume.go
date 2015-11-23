@@ -49,6 +49,12 @@ type Volume struct {
 	compactKeys   []int64
 	// status
 	closed bool
+	// check
+	CheckKeys     []int64 `json:"check_keys"`
+	checkMaxIdx   int
+	checkCurIdx   int
+	check         int
+	checkInterval int
 }
 
 // NewVolume new a volume and init it.
@@ -61,6 +67,11 @@ func NewVolume(id int32, bfile, ifile string, c *Config) (v *Volume, err error) 
 	v.needles = make(map[int64]int64, c.VolumeNeedleCache)
 	v.ch = make(chan uint32, c.VolumeDelChan)
 	v.compactKeys = []int64{}
+	v.checkCurIdx = 0
+	v.checkMaxIdx = c.VolumeCheckSize - 1
+	v.check = 0
+	v.checkInterval = c.VolumeCheckInterval
+	v.CheckKeys = make([]int64, c.VolumeCheckSize)
 	if v.Block, err = block.NewSuperBlock(bfile, block.Options{
 		BufferSize:    c.NeedleMaxSize * c.BatchMaxNum,
 		SyncAtWrite:   c.SuperBlockSync,
@@ -227,6 +238,19 @@ func (v *Volume) Get(key int64, cookie int32, buf []byte, n *needle.Needle) (err
 	return
 }
 
+// addCheck add a check key for pitchfork check block health.
+func (v *Volume) addCheck(key int64) {
+	if v.check++; v.check >= v.checkInterval {
+		v.check = 0
+		if v.checkCurIdx > v.checkMaxIdx {
+			v.checkCurIdx = 0
+		}
+		v.CheckKeys[v.checkCurIdx] = key
+		v.checkCurIdx++
+	}
+	return
+}
+
 // Add add a new needle, if key exists append to super block, then update
 // needle cache offset to new offset.
 func (v *Volume) Add(n *needle.Needle) (err error) {
@@ -242,6 +266,7 @@ func (v *Volume) Add(n *needle.Needle) (err error) {
 		if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err == nil {
 			nc, ok = v.needles[n.Key]
 			v.needles[n.Key] = needle.NewCache(offset, n.TotalSize)
+			v.addCheck(n.Key)
 		}
 	}
 	v.lock.Unlock()
@@ -283,6 +308,7 @@ func (v *Volume) Write(n *needle.Needle) (err error) {
 		if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err == nil {
 			nc, ok = v.needles[n.Key]
 			v.needles[n.Key] = needle.NewCache(offset, n.TotalSize)
+			v.addCheck(n.Key)
 		}
 	}
 	if err != nil {

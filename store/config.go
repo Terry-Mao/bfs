@@ -13,9 +13,11 @@ const (
 	configNeedleMaxSize    = 1 * 1024 * 1024 // 1mb
 	configBatchMaxNum      = 30
 	// volume
-	configVolumeDelChan = 1024 * 10
-	configVolumeSigCnt  = 1024 * 10
-	configVolumeSigTime = time.Second * 60 // 1min
+	configVolumeDelChan       = 1024 * 10
+	configVolumeSigCnt        = 1024 * 10
+	configVolumeSigTime       = time.Second * 60 // 1min
+	configVolumeCheckSize     = 32
+	configVolumeCheckInterval = 10000
 	// block
 	configSuperBlockSync = 1024
 	// index
@@ -50,10 +52,12 @@ type Config struct {
 	NeedleMaxSize    int    `goconf:"store:needle_max_size:memory"`
 	BatchMaxNum      int    `goconf:"store:batch_max_num"`
 	// volume
-	VolumeDelChan     int           `goconf:"volume:delete_channel_size"`
-	VolumeSigCnt      int           `goconf:"volume:delete_signal_count"`
-	VolumeNeedleCache int           `goconf:"volume:needle_cache_size"`
-	VolumeSigTime     time.Duration `goconf:"volume:delete_signal_time:time"`
+	VolumeDelChan       int           `goconf:"volume:delete_channel_size"`
+	VolumeSigCnt        int           `goconf:"volume:delete_signal_count"`
+	VolumeNeedleCache   int           `goconf:"volume:needle_cache_size"`
+	VolumeSigTime       time.Duration `goconf:"volume:delete_signal_time:time"`
+	VolumeCheckSize     int           `goconf:"volume:check_size"`
+	VolumeCheckInterval int           `goconf:"volume:check_interval"`
 	// block
 	SuperBlockSync          int  `goconf:"block:sync"`
 	SuperBlockSyncfilerange bool `goconf:"block:sync_file_range"`
@@ -95,6 +99,7 @@ func NewConfig(file string) (c *Config, err error) {
 
 // setDefault set the config default value.
 func (c *Config) setDefault() {
+	// store
 	if c.StoreVolumeCache < 1 {
 		c.StoreVolumeCache = configStoreVolumeCache
 	}
@@ -104,6 +109,7 @@ func (c *Config) setDefault() {
 	if len(c.Rack) == 0 {
 		panic("config rack must set")
 	}
+	// volume
 	if len(c.VolumeIndex) == 0 {
 		c.VolumeIndex = configVolumeIndex
 	}
@@ -125,6 +131,13 @@ func (c *Config) setDefault() {
 	if c.VolumeSigTime < 1 {
 		c.VolumeSigTime = configVolumeSigTime
 	}
+	if c.VolumeCheckSize < 1 {
+		c.VolumeCheckSize = configVolumeCheckSize
+	}
+	if c.VolumeCheckInterval < 1 {
+		c.VolumeCheckInterval = configVolumeCheckInterval
+	}
+	// block
 	if c.SuperBlockSync < 1 {
 		c.SuperBlockSync = configSuperBlockSync
 	}
