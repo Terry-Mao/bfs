@@ -1,12 +1,13 @@
 package main
 
 import (
-	log "github.com/golang/glog"
-	"github.com/samuel/go-zookeeper/zk"
 	"path"
 	"encoding/json"
 	"strings"
 	"time"
+
+	log "github.com/golang/glog"
+	"github.com/samuel/go-zookeeper/zk"
 )
 
 type Zookeeper struct {
@@ -58,6 +59,7 @@ func (z *Zookeeper) createPath(fpath string, flags int32) error {
 	return nil
 }
 
+//setStoreStatus set status of store node
 func (z *Zookeeper) setStoreStatus(pathStore string, status int32) error {
 	var (
 		data      []byte
@@ -77,7 +79,7 @@ func (z *Zookeeper) setStoreStatus(pathStore string, status int32) error {
 	}
 
 	dataJson["status"] = status
-	if data, err = json.Marshal(dataJson); err == nil {
+	if data, err = json.Marshal(dataJson); err != nil {
 		log.Errorf("json.Marshal() error(%v)", err)
 		return err
 	}
@@ -87,8 +89,6 @@ func (z *Zookeeper) setStoreStatus(pathStore string, status int32) error {
 	}
 	return nil
 }
-
-
 
 // Close close the zookeeper connection.
 func (z *Zookeeper) Close() {
