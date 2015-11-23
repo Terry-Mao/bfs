@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+
 	log "github.com/golang/glog"
 )
 
@@ -38,14 +39,13 @@ func main() {
 	}
 
 	log.Infof("register pitchfork...")
-	p = NewPitchfork(zk, config)
-	if err = p.Register(); err != nil {
-		log.Errorf("pitchfork Register() failed, Quit now")
+	if p, err = NewPitchfork(zk, config); err != nil {
+		log.Errorf("pitchfork NewPitchfork() failed, Quit now")
 		return
 	}
 
 	log.Infof("starts probe stores...")
-	go Work(p)
+	go p.Work()
 
 	StartSignal()
 	return

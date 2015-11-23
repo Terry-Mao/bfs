@@ -1,10 +1,11 @@
 package main
 
 import (
-	log "github.com/golang/glog"
 	"os"
 	"os/signal"
 	"syscall"
+
+	log "github.com/golang/glog"
 )
 
 // StartSignal register signals handler.
