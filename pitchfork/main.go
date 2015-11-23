@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	
+
 	log "github.com/golang/glog"
 )
 
@@ -46,7 +46,7 @@ func main() {
 	}
 
 	log.Infof("starts probe stores...")
-	go Work(p)
+	go p.Work()
 
 	StartSignal()
 	return
