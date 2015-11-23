@@ -10,14 +10,17 @@ type Store struct {
 }
 type StoreList []*Store
 
+//Len
 func (sl StoreList) Len() int {
 	return len(sl)
 }
 
+//Less
 func (sl StoreList) Less(i, j int) bool {
 	return sl[i].ID < sl[j].ID
 }
 
+//Swap
 func (sl StoreList) Swap(i, j int) {
 	sl[i], sl[j] = sl[j], sl[i]
 }
