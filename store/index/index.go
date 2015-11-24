@@ -3,8 +3,8 @@ package index
 import (
 	"bufio"
 	"fmt"
-	"github.com/Terry-Mao/bfs/store/encoding/binary"
-	"github.com/Terry-Mao/bfs/store/errors"
+	"github.com/Terry-Mao/bfs/libs/encoding/binary"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	myos "github.com/Terry-Mao/bfs/store/os"
 	log "github.com/golang/glog"
 	"io"

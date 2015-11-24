@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/Terry-Mao/bfs/store/errors"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/store/needle"
 	myos "github.com/Terry-Mao/bfs/store/os"
 	log "github.com/golang/glog"

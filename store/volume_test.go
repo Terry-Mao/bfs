@@ -2,7 +2,7 @@ package main
 
 import (
 	"crypto/rand"
-	"github.com/Terry-Mao/bfs/store/errors"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/store/needle"
 	mrand "math/rand"
 	"os"

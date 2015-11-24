@@ -1,7 +1,7 @@
 package index
 
 import (
-	"github.com/Terry-Mao/bfs/store/errors"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/store/needle"
 	"os"
 	"testing"

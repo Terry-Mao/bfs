@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/Terry-Mao/bfs/store/encoding/binary"
-	"github.com/Terry-Mao/bfs/store/errors"
+	"github.com/Terry-Mao/bfs/libs/encoding/binary"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	"hash/crc32"
 )
 

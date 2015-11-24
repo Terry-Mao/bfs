@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/Terry-Mao/bfs/store/errors"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/store/needle"
 	log "github.com/golang/glog"
 	"mime/multipart"
@@ -110,24 +110,24 @@ type httpUploadHandler struct {
 
 func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		ok       bool
-		rn       int
-		vid      int64
-		key      int64
-		cookie   int64
-		size     int64
-		err      error
-		str      string
-		buf      []byte
-		v        *Volume
-		n        *needle.Needle
-		ns       []needle.Needle
-		file     multipart.File
-		sr       sizer
-		fr       *os.File
-		fi       os.FileInfo
-		storeErr errors.StoreError
-		res      = map[string]interface{}{"ret": errors.RetOK}
+		ok     bool
+		rn     int
+		vid    int64
+		key    int64
+		cookie int64
+		size   int64
+		err    error
+		str    string
+		buf    []byte
+		v      *Volume
+		n      *needle.Needle
+		ns     []needle.Needle
+		file   multipart.File
+		sr     sizer
+		fr     *os.File
+		fi     os.FileInfo
+		uerr   errors.Error
+		res    = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
@@ -198,8 +198,8 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	h.s.FreeBuffer(1, buf)
 	h.s.FreeNeedle(1, ns)
 	if err != nil {
-		if storeErr, ok = err.(errors.StoreError); ok {
-			res["ret"] = int(storeErr)
+		if uerr, ok = err.(errors.Error); ok {
+			res["ret"] = int(uerr)
 		} else {
 			res["ret"] = errors.RetInternalErr
 		}
@@ -232,7 +232,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		v                 *Volume
 		n                 *needle.Needle
 		ns                []needle.Needle
-		storeErr          errors.StoreError
+		uerr              errors.Error
 		file              multipart.File
 		fh                *multipart.FileHeader
 		fhs               []*multipart.FileHeader
@@ -335,8 +335,8 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	h.s.FreeBuffer(nb, buf)
 	h.s.FreeNeedle(nn, ns)
 	if err != nil {
-		if storeErr, ok = err.(errors.StoreError); ok {
-			res["ret"] = int(storeErr)
+		if uerr, ok = err.(errors.Error); ok {
+			res["ret"] = int(uerr)
 		} else {
 			res["ret"] = errors.RetInternalErr
 		}
@@ -355,7 +355,7 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		err      error
 		key, vid int64
 		str      string
-		storeErr errors.StoreError
+		uerr     errors.Error
 		res      = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
@@ -383,8 +383,8 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	}
 	h.s.RUnlockVolume()
 	if err != nil {
-		if storeErr, ok = err.(errors.StoreError); ok {
-			res["ret"] = int(storeErr)
+		if uerr, ok = err.(errors.Error); ok {
+			res["ret"] = int(uerr)
 		} else {
 			res["ret"] = errors.RetInternalErr
 		}
@@ -405,7 +405,7 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		str      string
 		key, vid int64
 		keyStrs  []string
-		storeErr errors.StoreError
+		uerr     errors.Error
 		res      = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
@@ -438,8 +438,8 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	}
 	h.s.RUnlockVolume()
 	if err != nil {
-		if storeErr, ok = err.(errors.StoreError); ok {
-			res["ret"] = int(storeErr)
+		if uerr, ok = err.(errors.Error); ok {
+			res["ret"] = int(uerr)
 		} else {
 			res["ret"] = errors.RetInternalErr
 		}

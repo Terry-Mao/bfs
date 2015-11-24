@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/Terry-Mao/bfs/store/errors"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	log "github.com/golang/glog"
 	"net/http"
 	"strconv"
@@ -36,7 +36,7 @@ func (h httpBulkVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request
 	var (
 		ok           bool
 		err          error
-		storeErr     errors.StoreError
+		uerr         errors.Error
 		vid          int64
 		bfile, ifile string
 		res          = map[string]interface{}{"ret": errors.RetOK}
@@ -56,8 +56,8 @@ func (h httpBulkVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request
 	}
 	log.Infof("bulk volume: %d start", vid)
 	if err = h.s.BulkVolume(int32(vid), bfile, ifile); err != nil {
-		if storeErr, ok = err.(errors.StoreError); ok {
-			res["ret"] = int(storeErr)
+		if uerr, ok = err.(errors.Error); ok {
+			res["ret"] = int(uerr)
 		} else {
 			res["ret"] = errors.RetInternalErr
 		}
@@ -107,11 +107,11 @@ type httpAddVolumeHandler struct {
 
 func (h httpAddVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		ok       bool
-		err      error
-		storeErr errors.StoreError
-		vid      int64
-		res      = map[string]interface{}{"ret": errors.RetOK}
+		ok   bool
+		err  error
+		uerr errors.Error
+		vid  int64
+		res  = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
@@ -126,8 +126,8 @@ func (h httpAddVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request)
 	}
 	log.Infof("add volume: %d", vid)
 	if _, err = h.s.AddVolume(int32(vid)); err != nil {
-		if storeErr, ok = err.(errors.StoreError); ok {
-			res["ret"] = int(storeErr)
+		if uerr, ok = err.(errors.Error); ok {
+			res["ret"] = int(uerr)
 		} else {
 			res["ret"] = errors.RetInternalErr
 		}
@@ -143,7 +143,7 @@ type httpAddFreeVolumeHandler struct {
 func (h httpAddFreeVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		ok         bool
-		storeErr   errors.StoreError
+		uerr       errors.Error
 		err        error
 		sn         int
 		n          int64
@@ -164,8 +164,8 @@ func (h httpAddFreeVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 	}
 	log.Infof("add free volume: %d", n)
 	if sn, err = h.s.AddFreeVolume(int(n), bdir, idir); err != nil {
-		if storeErr, ok = err.(errors.StoreError); ok {
-			res["ret"] = int(storeErr)
+		if uerr, ok = err.(errors.Error); ok {
+			res["ret"] = int(uerr)
 		} else {
 			res["ret"] = errors.RetInternalErr
 		}
