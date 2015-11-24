@@ -2,6 +2,7 @@ package main
 
 const maxOffset = 4294967295
 
+//Store save store node
 type Store struct {
 	rack      string
 	ID        string
