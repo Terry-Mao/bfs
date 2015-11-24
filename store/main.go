@@ -46,7 +46,7 @@ func main() {
 		StartPprof(c.PprofListen)
 	}
 	// update zk store meta
-	if err = z.SetStore(c.StatListen, c.AdminListen, c.ApiListen); err != nil {
+	if err = z.SetStore(c.ServerId, c.Rack, c.StatListen, c.AdminListen, c.ApiListen); err != nil {
 		log.Errorf("zk.SetStore() error(%v)", err)
 		return
 	}

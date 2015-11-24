@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
 	"path"
@@ -21,17 +22,6 @@ import (
 // /volume-1 -                   - /volume-4 volume node path (data: /tmp/block_1,/tmp/block_1.idx,1)
 // /volume-2 -                   - /volume-5
 // /volume-3 -                   - /volume-6
-
-const (
-	storeStatusInit = 0
-)
-
-type storeZK struct {
-	Stat   string `json:"stat"`
-	Admin  string `json:"admin"`
-	Api    string `json:"api"`
-	Status int    `json:"status"`
-}
 
 type Zookeeper struct {
 	c     *zk.Conn
@@ -159,12 +149,15 @@ func (z *Zookeeper) SetVolume(v *Volume) (err error) {
 }
 
 // SetStore set the data into fpath.
-func (z *Zookeeper) SetStore(stat, admin, api string) (err error) {
+func (z *Zookeeper) SetStore(id, rack, stat, admin, api string) (err error) {
 	var (
-		d   []byte
-		s   *zk.Stat
-		szk = &storeZK{
-			Status: storeStatusInit,
+		d    []byte
+		s    *zk.Stat
+		meta = &meta.Store{
+			Id: id,
+			// won't change
+			Rack:   rack,
+			Status: meta.StoreStatusInit,
 		}
 	)
 	if d, s, err = z.c.Get(z.fpath); err != nil {
@@ -172,16 +165,16 @@ func (z *Zookeeper) SetStore(stat, admin, api string) (err error) {
 		return
 	}
 	if len(d) > 0 {
-		if err = json.Unmarshal(d, szk); err != nil {
+		if err = json.Unmarshal(d, meta); err != nil {
 			log.Errorf("json.Unmarshal() error(%v)", err)
 			return
 		}
 	}
-	szk.Stat = stat
-	szk.Admin = admin
-	szk.Api = api
-	// zsk.Status not modifify, may update by pitchfork
-	if d, err = json.Marshal(szk); err != nil {
+	meta.Stat = stat
+	meta.Admin = admin
+	meta.Api = api
+	// meta.Status not modifify, may update by pitchfork
+	if d, err = json.Marshal(meta); err != nil {
 		log.Errorf("json.Marshal() error(%v)", err)
 		return
 	}
