@@ -52,7 +52,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret              = http.StatusOK
 		params           = r.URL.Query()
 	)
-	if r.Method != "GET" || r.Method != "HEAD" {
+	if r.Method != "GET" && r.Method != "HEAD" {
 		ret = http.StatusMethodNotAllowed
 		http.Error(wr, "method not allowed", ret)
 		return
