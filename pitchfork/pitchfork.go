@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"io/ioutil"
-	
+
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
 )
@@ -95,7 +95,7 @@ func (p *Pitchfork) WatchGetPitchforks() (PitchforkList, <-chan zk.Event, error)
 		log.Errorf("zk.ChildrenW(\"%s\") error(%v)", pitchforkRootPath, err)
 		return nil, nil, err
 	}
-	
+
 	result = make(PitchforkList, 0, len(children))
 	for _, child := range children {
 		pitchforkID := child
@@ -213,8 +213,8 @@ feedbackZk:
 	}
     pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.rack, s.ID)
     if err = p.zk.setStoreStatus(pathStore, status); err != nil {
-    	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
-    	return err
+	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
+	return err
     }
     s.status = status
     log.Infof("getStore() called success host:%s status: %d %d", s.host, s.status, status)
@@ -293,8 +293,8 @@ func (p *Pitchfork)headStore(s *Store) error {
 feedbackZk:
     pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.rack, s.ID)
     if err = p.zk.setStoreStatus(pathStore, status); err != nil {
-    	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
-    	return err
+	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
+	return err
     }
     s.status = status
     log.Infof("headStore() called success host:%s status: %d %d", s.host, s.status, status)

@@ -2,8 +2,7 @@ package main
 
 import (
     "time"
-    
-	"github.com/Terry-Mao/goconf"
+    "github.com/Terry-Mao/goconf"
 )
 
 const (
