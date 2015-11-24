@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 	"sort"
+	"sync"
 	"errors"
 	"crypto/rand"
 	"encoding/json"
@@ -48,7 +49,7 @@ func NewPitchfork(zk *Zookeeper, config *Config) (*Pitchfork, error) {
 		err       error
 	)
 	if id, err = generateID(); err != nil {
-		log.Errof("generateID() failed")
+		log.Errorf("generateID() failed")
 		return nil, err
 	}
 
@@ -138,7 +139,7 @@ func (p *Pitchfork) WatchGetStores() (StoreList, <-chan zk.Event, error) {
 				return nil, nil, err
 			}
 
-			status := int32(dataJson["status"].(float64))
+			status := uint32(dataJson["status"].(float64))
 			host := string(dataJson["stat"].(string))
 			result = append(result, &Store{rack:rackName, ID:storeId, host:host, status:status})
 		}
@@ -147,10 +148,10 @@ func (p *Pitchfork) WatchGetStores() (StoreList, <-chan zk.Event, error) {
 	return result, storeChanges, nil
 }
 
-//probeStore probe store node and feed back to directory
-func (p *Pitchfork)probeStore(s *Store) error {
+//getStore get store node and feed back to directory
+func (p *Pitchfork)getStore(s *Store) error {
 	var (
-		status = int32(0xff)
+		status=  uint32(0x80000003)
 		url      string
 		body     []byte
 		resp     *http.Response
@@ -159,24 +160,24 @@ func (p *Pitchfork)probeStore(s *Store) error {
 		err      error
 	)
 	if s.status == 0 {
-		log.Warningf("probeStore() store not online host:%s", s.host)
+		log.Warningf("getStore() store not online host:%s", s.host)
 		return nil
 	}
 	url = fmt.Sprintf("http://%s/info", s.host)
-	if resp, err = http.Get(url); err != nil {
-		status = status & 0xfc
+	if resp, err = http.Get(url); err != nil || resp.StatusCode == 500 {
+		status = status & 0xfffffffc
 		log.Errorf("http.Get() called error(%v)  url:%s", err, url)
 		goto feedbackZk
 	}
 
 	defer resp.Body.Close()
 	if body, err = ioutil.ReadAll(resp.Body); err != nil {
-		log.Errorf("probeStore() ioutil.ReadAll() error(%v)", err)
+		log.Errorf("getStore() ioutil.ReadAll() error(%v)", err)
 		return err
 	}
 
 	if err = json.Unmarshal(body, &dataJson); err != nil {
-		log.Errorf("probeStore() json.Unmarshal() error(%v)", err)
+		log.Errorf("getStore() json.Unmarshal() error(%v)", err)
 		return err
 	}
 
@@ -186,19 +187,99 @@ func (p *Pitchfork)probeStore(s *Store) error {
 		block := volumeValue["block"].(map[string]interface{})
 		offset := int64(block["offset"].(float64))
 		if int64(maxOffset * p.config.MaxUsedSpacePercent) < offset {
-			log.Warningf("probeStore() store block has no enough space, host:%s", s.host)
-			status = status & 0xfd
+			log.Warningf("getStore() store block has no enough space, host:%s", s.host)
+			status = status & 0xfffffffd
 		}
 		lastErr := block["last_err"]
 		if lastErr != nil {
-			status = status & 0xfc
-			log.Errorf("probeStore() store error(%v) host:%s", lastErr, s.host)
+			status = status & 0xfffffffc
+			log.Errorf("getStore() store last_err error(%v) host:%s", lastErr, s.host)
 			goto feedbackZk
 		}
 	}
+
+feedbackZk:
 	if s.status == status {
 		return nil
 	}
+    pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.rack, s.ID)
+    if err = p.zk.setStoreStatus(pathStore, status); err != nil {
+    	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
+    	return err
+    }
+    s.status = status
+    log.Infof("getStore() called success host:%s status: %d %d", s.host, s.status, status)
+    return nil
+}
+
+//headStore head store node and feed back to directory
+func (p *Pitchfork)headStore(s *Store) error {
+	var (
+		status=  uint32(0x80000003)
+		url      string
+		body     []byte
+		resp     *http.Response
+		dataJson map[string]interface{}
+		volumes  []interface{}
+		wg       sync.WaitGroup
+		err      error
+	)
+
+	if s.status == 0 {
+		log.Warningf("headStore() store not online host:%s", s.host)
+		return nil
+	}
+	url = fmt.Sprintf("http://%s/info", s.host)
+	if resp, err = http.Get(url); err != nil || resp.StatusCode != 200 {
+		log.Warningf("headStore Store http.Head error")
+		return nil
+	}
+
+	defer resp.Body.Close()
+	if body, err = ioutil.ReadAll(resp.Body); err != nil {
+		log.Errorf("headStore() ioutil.ReadAll() error(%v)", err)
+		return err
+	}
+
+	if err = json.Unmarshal(body, &dataJson); err != nil {
+		log.Errorf("headStore() json.Unmarshal() error(%v)", err)
+		return err
+	}
+
+	volumes =  dataJson["volumes"].([]interface{})
+	for _, volume := range volumes {
+		volumeValue := volume.(map[string]interface{})
+		vid := int64(volumeValue["id"].(float64))
+		headResult := make([]int, 0) //mabay be change logic
+
+		checkNeedles := volumeValue["check_needles"].([]interface{})
+		for _, needle := range checkNeedles {
+			needleValue := needle.(map[string]interface {})
+			key := int64(needleValue["key"].(float64))
+			cookie := int64(needleValue["cookie"].(float64))
+			if key == 0 {
+				continue
+			}
+
+			wg.Add(1)
+			go func(key int64, cookie int64) {
+				defer wg.Done()
+				url := fmt.Sprintf("http://%s/get?key=%d&cookie=%d&vid=%d", s.host, key, cookie, vid)
+				if resp, err = http.Head(url); err == nil {
+					if resp.StatusCode == 500 {
+						headResult = append(headResult, resp.StatusCode)
+					}
+				}
+			}(key, cookie)
+		}
+		wg.Wait()
+		if len(headResult) != 0 {
+			status = status & 0xfffffffc
+			log.Errorf("headStore result : io error   host:%s", s.host)
+			goto feedbackZk
+		}
+	}
+	return nil
 
 feedbackZk:
     pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.rack, s.ID)
@@ -206,12 +287,13 @@ feedbackZk:
     	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
     	return err
     }
-    log.Infof("probeStore() called success host:%s status: %d %d", s.host, s.status, status)
+    s.status = status
+    log.Infof("headStore() called success host:%s status: %d %d", s.host, s.status, status)
     return nil
 }
 
-//Work main flow of pitchfork server
-func (p *Pitchfork)Work() {
+//Probe main flow of pitchfork server
+func (p *Pitchfork)Probe() {
 	var (
 		stores             StoreList
 		pitchforks         PitchforkList
@@ -243,18 +325,31 @@ func (p *Pitchfork)Work() {
 		stopper = make(chan struct{})
 
 		for _, store = range allStores[p.ID] {
-			go func(stopper chan struct{}, store *Store) {
+			go func(store *Store) {
 				for {
-					if err = p.probeStore(store); err != nil {
+					if err = p.getStore(store); err != nil {
 						log.Errorf("probeStore() called error(%v)", err)
 					}
 					select {
 						case <- stopper:
 							return
-						case <- time.After(p.config.ProbeInterval):
+						case <- time.After(p.config.GetInterval):
 					}
 				}
-			}(stopper, store)
+			}(store)
+
+			go func(store *Store) {
+				for {
+					if err = p.headStore(store); err != nil {
+						log.Errorf("headStore() called error(%v)", err)
+					}
+					select {
+					case <- stopper:
+						return
+					case <- time.After(p.config.HeadInterval):
+					}
+				}
+			}(store)
 		}
 
 		select {

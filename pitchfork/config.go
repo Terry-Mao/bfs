@@ -12,7 +12,8 @@ const (
 	configZookeeperPitchforkRoot    = "/pitchfork"
 	configZookeeperStoreRoot        = "/rack"
 	configZookeeperDirectoryRoot    = "/directory"
-	configProbeInterval             = time.Second * 3
+	configGetInterval               = time.Second * 3
+	configHeadInterval              = time.Second * 60
 	configMaxUsedSpacePercent       = 0.95
 )
 
@@ -27,7 +28,8 @@ type Config struct {
 	ZookeeperPitchforkRoot    string        `goconf:"zookeeper:pitchforkroot"`
 	ZookeeperStoreRoot        string        `goconf:"zookeeper:storeroot"`
 	ZookeeperDirectoryRoot    string        `goconf:"zookeeper:directoryroot"`
-	ProbeInterval             time.Duration `goconf:"store:probe_interval:time"`
+	GetInterval               time.Duration `goconf:"store:get_interval:time"`
+	HeadInterval              time.Duration `goconf:"store:head_interval:time"`
 	MaxUsedSpacePercent       float32       `goconf:"store:max_used_space_percent"`
 }
 
@@ -62,8 +64,11 @@ func (c *Config) setDefault() {
 	if len(c.ZookeeperDirectoryRoot) == 0 {
 		c.ZookeeperDirectoryRoot = configZookeeperDirectoryRoot
 	}
-	if c.ProbeInterval == 0 {
-		c.ProbeInterval = configProbeInterval
+	if c.GetInterval == 0 {
+		c.GetInterval = configGetInterval
+	}
+	if c.HeadInterval == 0 {
+		c.HeadInterval = configHeadInterval
 	}
 	if c.MaxUsedSpacePercent == 0 {
 		c.MaxUsedSpacePercent = configMaxUsedSpacePercent

@@ -54,7 +54,7 @@ func TestPitchfork(t *testing.T) {
     }
 
     for _, store = range storelist {
-    	if err = p.probeStore(store); err != nil {
+    	if err = p.getStore(store); err != nil {
     		t.Errorf("probeStore() called error(%v)", err)
     		t.FailNow()
     	}

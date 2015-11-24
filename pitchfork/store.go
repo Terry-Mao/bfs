@@ -6,7 +6,7 @@ type Store struct {
 	rack      string
 	ID        string
 	host      string
-	status    int32
+	status    uint32
 }
 type StoreList []*Store
 
