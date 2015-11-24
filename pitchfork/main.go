@@ -45,7 +45,7 @@ func main() {
 	}
 
 	log.Infof("starts probe stores...")
-	go p.Work()
+	go p.Probe()
 
 	StartSignal()
 	return

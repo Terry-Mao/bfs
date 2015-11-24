@@ -60,7 +60,7 @@ func (z *Zookeeper) createPath(fpath string, flags int32) error {
 }
 
 //setStoreStatus set status of store node
-func (z *Zookeeper) setStoreStatus(pathStore string, status int32) error {
+func (z *Zookeeper) setStoreStatus(pathStore string, status uint32) error {
 	var (
 		data      []byte
 		dataJson  map[string]interface{}
