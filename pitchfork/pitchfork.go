@@ -15,16 +15,9 @@ import (
 
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
+	"github.com/Terry-Mao/bfs/libs/meta"
 )
 
-//store status uint32 32bit: 10000000000000000000000000000011
-//first bit means readable; second bit means writeable; 32th bit means store onlined
-const (
-	StatusStoreHealth      = uint32(0x80000003)
-	StatusStoreReadonly    = uint32(0xfffffffd)
-	StatusStoreWriteonly   = uint32(0xfffffffe)
-	StatusStoreRWBanned    = uint32(0xfffffffc)
-)
 
 type Pitchfork struct {
 	ID        string
@@ -160,7 +153,7 @@ func (p *Pitchfork) WatchGetStores() (StoreList, <-chan zk.Event, error) {
 //getStore get store node and feed back to directory
 func (p *Pitchfork)getStore(s *Store) error {
 	var (
-		status=  StatusStoreHealth
+		status=  StoreStatusHealth
 		url      string
 		body     []byte
 		resp     *http.Response
@@ -174,7 +167,7 @@ func (p *Pitchfork)getStore(s *Store) error {
 	}
 	url = fmt.Sprintf("http://%s/info", s.host)
 	if resp, err = http.Get(url); err != nil || resp.StatusCode == 500 {
-		status = status & StatusStoreRWBanned
+		status = StoreStatusEnable
 		log.Errorf("http.Get() called error(%v)  url:%s", err, url)
 		goto feedbackZk
 	}
@@ -197,11 +190,11 @@ func (p *Pitchfork)getStore(s *Store) error {
 		offset := int64(block["offset"].(float64))
 		if int64(maxOffset * p.config.MaxUsedSpacePercent) < offset {
 			log.Warningf("getStore() store block has no enough space, host:%s", s.host)
-			status = status & StatusStoreReadonly
+			status = StoreStatusRead
 		}
 		lastErr := block["last_err"]
 		if lastErr != nil {
-			status = status & StatusStoreRWBanned
+			status = StoreStatusEnable
 			log.Errorf("getStore() store last_err error(%v) host:%s", lastErr, s.host)
 			goto feedbackZk
 		}
@@ -224,7 +217,7 @@ feedbackZk:
 //headStore head store node and feed back to directory
 func (p *Pitchfork)headStore(s *Store) error {
 	var (
-		status=  StatusStoreHealth
+		status=  StoreStatusHealth
 		url      string
 		body     []byte
 		resp     *http.Response
@@ -283,7 +276,7 @@ func (p *Pitchfork)headStore(s *Store) error {
 		}
 		wg.Wait()
 		if len(headResult) != 0 {
-			status = status & StatusStoreRWBanned
+			status = StoreStatusEnable
 			log.Errorf("headStore result : io error   host:%s", s.host)
 			goto feedbackZk
 		}
