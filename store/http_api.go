@@ -52,7 +52,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret              = http.StatusOK
 		params           = r.URL.Query()
 	)
-	if r.Method != "GET" {
+	if r.Method != "GET" || r.Method != "HEAD" {
 		ret = http.StatusMethodNotAllowed
 		http.Error(wr, "method not allowed", ret)
 		return
@@ -87,9 +87,11 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	}
 	h.s.RUnlockVolume()
 	if err == nil {
-		if _, err = wr.Write(n.Data); err != nil {
-			log.Errorf("wr.Write() error(%v)", err)
-			ret = http.StatusInternalServerError
+		if r.Method == "GET" {
+			if _, err = wr.Write(n.Data); err != nil {
+				log.Errorf("wr.Write() error(%v)", err)
+				ret = http.StatusInternalServerError
+			}
 		}
 		if log.V(1) {
 			log.Infof("get a needle: %v", n)
