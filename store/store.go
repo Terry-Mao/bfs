@@ -269,7 +269,7 @@ func (s *Store) saveVolumeIndex() (err error) {
 		return
 	}
 	for _, v = range s.Volumes {
-		if n, err = s.vf.Write(v.Meta()); err != nil {
+		if n, err = s.vf.WriteString(fmt.Sprintf("%s\n", string(v.Meta()))); err != nil {
 			return
 		}
 		tn += n
