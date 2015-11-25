@@ -1,15 +1,9 @@
 package main
+import "github.com/Terry-Mao/bfs/libs/meta"
 
 const maxOffset = 4294967295
 
-//Store save store node
-type Store struct {
-	rack      string
-	ID        string
-	host      string
-	status    uint32
-}
-type StoreList []*Store
+type StoreList []*meta.Store
 
 //Len
 func (sl StoreList) Len() int {
@@ -18,7 +12,7 @@ func (sl StoreList) Len() int {
 
 //Less
 func (sl StoreList) Less(i, j int) bool {
-	return sl[i].ID < sl[j].ID
+	return sl[i].Id < sl[j].Id
 }
 
 //Swap

@@ -46,18 +46,18 @@ func TestPitchfork(t *testing.T) {
 
     pitchforklist, _, err = p.WatchGetPitchforks()
     if err != nil {
-    	t.Errorf("pitchfork WatchGetPitchforks() failed, Quit now")
-    	t.FailNow()
+	t.Errorf("pitchfork WatchGetPitchforks() failed, Quit now")
+	t.FailNow()
     }
     for _, p  = range pitchforklist {
-    	fmt.Println(p.ID)
+	fmt.Println(p.ID)
     }
 
     for _, store = range storelist {
-    	if err = p.getStore(store); err != nil {
-    		t.Errorf("probeStore() called error(%v)", err)
-    		t.FailNow()
-    	}
+	if err = p.getStore(store); err != nil {
+		t.Errorf("probeStore() called error(%v)", err)
+		t.FailNow()
+	}
     }
 
 }

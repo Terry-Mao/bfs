@@ -20,7 +20,7 @@ Table of Contents
 ## Architechure
 ### Pitchfork
 Pitchfork contains unique id of pitchfork
-                                                                          
+
 ### Store
 Store contains unique id, rack position in zookeeper and accessed host
 

@@ -8,6 +8,7 @@ import (
 
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
+	"github.com/Terry-Mao/bfs/libs/meta"
 )
 
 type Zookeeper struct {
@@ -59,13 +60,13 @@ func (z *Zookeeper) createPath(fpath string, flags int32) error {
 	return nil
 }
 
-//setStoreStatus set status of store node
-func (z *Zookeeper) setStoreStatus(pathStore string, status uint32) error {
+// setStoreStatus update store status
+func (z *Zookeeper) setStoreStatus(pathStore string, status int) error {
 	var (
-		data      []byte
-		dataJson  map[string]interface{}
-		stat      *zk.Stat
-		err       error
+		data    []byte
+		stat    *zk.Stat
+		store=  &meta.Store{}
+		err     error
 	)
 
 	if data, stat, err = z.c.Get(pathStore); err != nil {
@@ -73,13 +74,14 @@ func (z *Zookeeper) setStoreStatus(pathStore string, status uint32) error {
 		return err
 	}
 
-	if err = json.Unmarshal(data, &dataJson); err != nil {
-		log.Errorf("setStoreStatus() json.Unmarshal() error(%v)", err)
-		return err
+	if len(data) > 0 {
+		if err = json.Unmarshal(data, store); err != nil {
+			log.Errorf("json.Unmarshal() error(%v)", err)
+			return err
+		}
 	}
-
-	dataJson["status"] = status
-	if data, err = json.Marshal(dataJson); err != nil {
+	store.Status = status
+	if data, err = json.Marshal(store); err != nil {
 		log.Errorf("json.Marshal() error(%v)", err)
 		return err
 	}
@@ -89,6 +91,7 @@ func (z *Zookeeper) setStoreStatus(pathStore string, status uint32) error {
 	}
 	return nil
 }
+
 
 // Close close the zookeeper connection.
 func (z *Zookeeper) Close() {

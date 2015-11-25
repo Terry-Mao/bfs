@@ -12,22 +12,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"io/ioutil"
-	
+
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
+	"github.com/Terry-Mao/bfs/libs/meta"
 )
 
-//store status uint32 32bit: 10000000000000000000000000000011
-//first bit means readable; second bit means writeable; 32th bit means store onlined
-const (
-	StatusStoreHealth      = uint32(0x80000003)
-	StatusStoreReadonly    = uint32(0xfffffffd)
-	StatusStoreWriteonly   = uint32(0xfffffffe)
-	StatusStoreRWBanned    = uint32(0xfffffffc)
-)
 
 type Pitchfork struct {
-	ID        string
+	Id        string
 	config    *Config
 	zk        *Zookeeper
 }
@@ -42,7 +35,7 @@ func (pl PitchforkList) Len() int {
 
 //Less
 func (pl PitchforkList) Less(i, j int) bool {
-	return pl[i].ID < pl[j].ID
+	return pl[i].Id < pl[j].Id
 }
 
 //Swap
@@ -57,12 +50,12 @@ func NewPitchfork(zk *Zookeeper, config *Config) (*Pitchfork, error) {
 		p         *Pitchfork
 		err       error
 	)
-	if id, err = generateID(); err != nil {
-		log.Errorf("generateID() failed")
+	if id, err = generateId(); err != nil {
+		log.Errorf("generateId() failed")
 		return nil, err
 	}
 
-	p = &Pitchfork{ID: id, config: config, zk: zk}
+	p = &Pitchfork{Id: id, config: config, zk: zk}
 	if err = p.Register(); err != nil {
 		log.Errorf("Register() failed")
 		return nil, err
@@ -73,7 +66,7 @@ func NewPitchfork(zk *Zookeeper, config *Config) (*Pitchfork, error) {
 
 //Register register pitchfork in the zookeeper
 func (p *Pitchfork) Register() error {
-	node := fmt.Sprintf("%s/%s", p.config.ZookeeperPitchforkRoot, p.ID)
+	node := fmt.Sprintf("%s/%s", p.config.ZookeeperPitchforkRoot, p.Id)
 	flags := int32(zk.FlagEphemeral)
 
 	return p.zk.createPath(node, flags)
@@ -95,11 +88,11 @@ func (p *Pitchfork) WatchGetPitchforks() (PitchforkList, <-chan zk.Event, error)
 		log.Errorf("zk.ChildrenW(\"%s\") error(%v)", pitchforkRootPath, err)
 		return nil, nil, err
 	}
-	
+
 	result = make(PitchforkList, 0, len(children))
 	for _, child := range children {
-		pitchforkID := child
-		result = append(result, &Pitchfork{ID:pitchforkID, config:p.config, zk:p.zk})
+		pitchforkId := child
+		result = append(result, &Pitchfork{Id:pitchforkId, config:p.config, zk:p.zk})
 	}
 
 	return result, pitchforkChanges, nil
@@ -113,7 +106,7 @@ func (p *Pitchfork) WatchGetStores() (StoreList, <-chan zk.Event, error) {
 		storeChanges       <-chan zk.Event
 		result             StoreList
 		data               []byte
-		dataJson           map[string]interface{}
+		store=             &meta.Store{}
 		err                error
 	)
 
@@ -130,27 +123,23 @@ func (p *Pitchfork) WatchGetStores() (StoreList, <-chan zk.Event, error) {
 
 	result = make(StoreList, 0, len(children))
 	for _, child := range children {
-		rackName := child
-		pathRack := fmt.Sprintf("%s/%s", storeRootPath, rackName)
+		pathRack := fmt.Sprintf("%s/%s", storeRootPath, child)
 		if children1, _, err = p.zk.c.Children(pathRack); err != nil {
 			log.Errorf("zk.Children(\"%s\") error(%v)", pathRack, err)
 			return nil, nil, err
 		}
 		for _, child1 := range children1 {
-			storeId := child1
-			pathStore := fmt.Sprintf("%s/%s", pathRack, storeId)
+			pathStore := fmt.Sprintf("%s/%s", pathRack, child1)
 			if data, _, err = p.zk.c.Get(pathStore); err != nil {
 				log.Errorf("zk.Get(\"%s\") error(%v)", pathStore, err)
 				return nil, nil, err
 			}
-			if err = json.Unmarshal(data, &dataJson); err != nil {
-				log.Errorf("json.Marshal() error(%v)", err)
+			if err = json.Unmarshal(data, store); err != nil {
+				log.Errorf("json.Unmarshal() error(%v)", err)
 				return nil, nil, err
 			}
 
-			status := uint32(dataJson["status"].(float64))
-			host := string(dataJson["stat"].(string))
-			result = append(result, &Store{rack:rackName, ID:storeId, host:host, status:status})
+			result = append(result, store)
 		}
 	}
 
@@ -158,9 +147,9 @@ func (p *Pitchfork) WatchGetStores() (StoreList, <-chan zk.Event, error) {
 }
 
 //getStore get store node and feed back to directory
-func (p *Pitchfork)getStore(s *Store) error {
+func (p *Pitchfork)getStore(s *meta.Store) error {
 	var (
-		status=  StatusStoreHealth
+		status=  meta.StoreStatusHealth
 		url      string
 		body     []byte
 		resp     *http.Response
@@ -168,13 +157,13 @@ func (p *Pitchfork)getStore(s *Store) error {
 		volumes  []interface{}
 		err      error
 	)
-	if s.status == 0 {
-		log.Warningf("getStore() store not online host:%s", s.host)
+	if s.Status == 0 {
+		log.Warningf("getStore() store not online host:%s", s.Stat)
 		return nil
 	}
-	url = fmt.Sprintf("http://%s/info", s.host)
+	url = fmt.Sprintf("http://%s/info", s.Stat)
 	if resp, err = http.Get(url); err != nil || resp.StatusCode == 500 {
-		status = status & StatusStoreRWBanned
+		status = meta.StoreStatusEnable
 		log.Errorf("http.Get() called error(%v)  url:%s", err, url)
 		goto feedbackZk
 	}
@@ -196,35 +185,35 @@ func (p *Pitchfork)getStore(s *Store) error {
 		block := volumeValue["block"].(map[string]interface{})
 		offset := int64(block["offset"].(float64))
 		if int64(maxOffset * p.config.MaxUsedSpacePercent) < offset {
-			log.Warningf("getStore() store block has no enough space, host:%s", s.host)
-			status = status & StatusStoreReadonly
+			log.Warningf("getStore() store block has no enough space, host:%s", s.Stat)
+			status = meta.StoreStatusRead
 		}
 		lastErr := block["last_err"]
 		if lastErr != nil {
-			status = status & StatusStoreRWBanned
-			log.Errorf("getStore() store last_err error(%v) host:%s", lastErr, s.host)
+			status = meta.StoreStatusEnable
+			log.Errorf("getStore() store last_err error(%v) host:%s", lastErr, s.Stat)
 			goto feedbackZk
 		}
 	}
 
 feedbackZk:
-	if s.status == status {
+	if s.Status == status {
 		return nil
 	}
-    pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.rack, s.ID)
+    pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.Rack, s.Id)
     if err = p.zk.setStoreStatus(pathStore, status); err != nil {
-    	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
-    	return err
+	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
+	return err
     }
-    s.status = status
-    log.Infof("getStore() called success host:%s status: %d %d", s.host, s.status, status)
+    s.Status = status
+    log.Infof("getStore() called success host:%s status: %d %d", s.Stat, s.Status, status)
     return nil
 }
 
 //headStore head store node and feed back to directory
-func (p *Pitchfork)headStore(s *Store) error {
+func (p *Pitchfork)headStore(s *meta.Store) error {
 	var (
-		status=  StatusStoreHealth
+		status=  meta.StoreStatusHealth
 		url      string
 		body     []byte
 		resp     *http.Response
@@ -234,11 +223,11 @@ func (p *Pitchfork)headStore(s *Store) error {
 		err      error
 	)
 
-	if s.status == 0 {
-		log.Warningf("headStore() store not online host:%s", s.host)
+	if s.Status == 0 {
+		log.Warningf("headStore() store not online host:%s", s.Stat)
 		return nil
 	}
-	url = fmt.Sprintf("http://%s/info", s.host)
+	url = fmt.Sprintf("http://%s/info", s.Stat)
 	if resp, err = http.Get(url); err != nil || resp.StatusCode != 200 {
 		log.Warningf("headStore Store http.Head error")
 		return nil
@@ -273,7 +262,7 @@ func (p *Pitchfork)headStore(s *Store) error {
 			wg.Add(1)
 			go func(key int64, cookie int64) {
 				defer wg.Done()
-				url := fmt.Sprintf("http://%s/get?key=%d&cookie=%d&vid=%d", s.host, key, cookie, vid)
+				url := fmt.Sprintf("http://%s/get?key=%d&cookie=%d&vid=%d", s.Api, key, cookie, vid)
 				if resp, err = http.Head(url); err == nil {
 					if resp.StatusCode == 500 {
 						headResult = append(headResult, resp.StatusCode)
@@ -283,21 +272,21 @@ func (p *Pitchfork)headStore(s *Store) error {
 		}
 		wg.Wait()
 		if len(headResult) != 0 {
-			status = status & StatusStoreRWBanned
-			log.Errorf("headStore result : io error   host:%s", s.host)
+			status = meta.StoreStatusEnable
+			log.Errorf("headStore result : io error   host:%s", s.Api)
 			goto feedbackZk
 		}
 	}
 	return nil
 
 feedbackZk:
-    pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.rack, s.ID)
+    pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.Rack, s.Id)
     if err = p.zk.setStoreStatus(pathStore, status); err != nil {
-    	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
-    	return err
+	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
+	return err
     }
-    s.status = status
-    log.Infof("headStore() called success host:%s status: %d %d", s.host, s.status, status)
+    s.Status = status
+    log.Infof("headStore() called success host:%s status: %d %d", s.Stat, s.Status, status)
     return nil
 }
 
@@ -310,7 +299,7 @@ func (p *Pitchfork)Probe() {
 		pitchforkChanges   <-chan zk.Event
 		allStores          map[string]StoreList
 		stopper            chan struct{}
-		store              *Store
+		store              *meta.Store
 		err                error
 	)
 	for {
@@ -333,8 +322,8 @@ func (p *Pitchfork)Probe() {
 
 		stopper = make(chan struct{})
 
-		for _, store = range allStores[p.ID] {
-			go func(store *Store) {
+		for _, store = range allStores[p.Id] {
+			go func(store *meta.Store) {
 				for {
 					if err = p.getStore(store); err != nil {
 						log.Errorf("probeStore() called error(%v)", err)
@@ -347,7 +336,7 @@ func (p *Pitchfork)Probe() {
 				}
 			}(store)
 
-			go func(store *Store) {
+			go func(store *meta.Store) {
 				for {
 					if err = p.headStore(store); err != nil {
 						log.Errorf("headStore() called error(%v)", err)
@@ -385,12 +374,12 @@ func generateUUID() (string, error) {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
 }
 
-//generateID
-func generateID() (string, error) {
+//generateId
+func generateId() (string, error) {
 	var (
 		uuid      string
 		hostname string
-		ID       string
+		Id       string
 		err      error
 	)
 
@@ -404,8 +393,8 @@ func generateID() (string, error) {
 		return "", err
 	}
 
-	ID = fmt.Sprintf("%s:%s", hostname, uuid)
-	return ID, nil
+	Id = fmt.Sprintf("%s:%s", hostname, uuid)
+	return Id, nil
 }
 
 // Divides a set of stores between a set of pitchforks.
@@ -435,7 +424,7 @@ func divideStoreBetweenPitchfork(pitchforks PitchforkList, stores StoreList) (ma
 		}
 
 		for _, store := range stores[first:last] {
-			result[pitchfork.ID] = append(result[pitchfork.ID], store)
+			result[pitchfork.Id] = append(result[pitchfork.Id], store)
 		}
 		p = last
 	}
