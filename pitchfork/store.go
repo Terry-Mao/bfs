@@ -5,17 +5,17 @@ const maxOffset = 4294967295
 
 type StoreList []*meta.Store
 
-//Len
+// Len
 func (sl StoreList) Len() int {
 	return len(sl)
 }
 
-//Less
+// Less
 func (sl StoreList) Less(i, j int) bool {
 	return sl[i].Id < sl[j].Id
 }
 
-//Swap
+// Swap
 func (sl StoreList) Swap(i, j int) {
 	sl[i], sl[j] = sl[j], sl[i]
 }

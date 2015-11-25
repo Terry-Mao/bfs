@@ -5,6 +5,7 @@ import (
 	"path"
 	"strings"
 	"time"
+	"fmt"
 
 	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
@@ -59,22 +60,29 @@ func (z *Zookeeper) createPath(fpath string, flags int32) (err error) {
 	return
 }
 
+// createPitchfork create pitchfork node in zk
+func (z *Zookeeper) createPitchfork(fpath string) (node string, err error) {
+	if node, err = z.c.Create(fmt.Sprintf("%s/",fpath), []byte(""), int32(zk.FlagEphemeral|zk.FlagSequence), zk.WorldACL(zk.PermAll)); err != nil {
+		log.Errorf("zk.Create error(%v)", err)
+	}
+	return
+}
+
 // setStoreStatus update store status
-func (z *Zookeeper) setStoreStatus(pathStore string, status int) error {
+func (z *Zookeeper) setStoreStatus(pathStore string, status int) (err error) {
 	var (
 		data  []byte
 		stat  *zk.Stat
 		store = &meta.Store{}
-		err   error
 	)
 	if data, stat, err = z.c.Get(pathStore); err != nil {
 		log.Errorf("zk.Get(\"%s\") error(%v)", pathStore, err)
-		return err
+		return
 	}
 	if len(data) > 0 {
 		if err = json.Unmarshal(data, store); err != nil {
 			log.Errorf("json.Unmarshal() error(%v)", err)
-			return err
+			return
 		}
 	}
 	store.Status = status
@@ -84,9 +92,9 @@ func (z *Zookeeper) setStoreStatus(pathStore string, status int) error {
 	}
 	if _, err = z.c.Set(pathStore, data, stat.Version); err != nil {
 		log.Errorf("zk.Set(\"%s\") error(%v)", pathStore, err)
-		return err
+		return
 	}
-	return nil
+	return
 }
 
 // Close close the zookeeper connection.
