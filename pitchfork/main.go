@@ -15,38 +15,31 @@ func init() {
 }
 
 func main() {
+	var (
+		config *Config
+		zk     *Zookeeper
+		p      *Pitchfork
+		err    error
+	)
 	flag.Parse()
 	defer log.Flush()
-
 	log.Infof("bfs pitchfork start")
-
-	var (
-		config     *Config
-		zk         *Zookeeper
-		p          *Pitchfork
-		err        error
-	)
-
 	if config, err = NewConfig(configFile); err != nil {
 		log.Errorf("NewConfig(\"%s\") error(%v)", configFile, err)
 		return
 	}
-
 	log.Infof("init zookeeper...")
 	if zk, err = NewZookeeper(config.ZookeeperAddrs, config.ZookeeperTimeout); err != nil {
 		log.Errorf("NewZookeeper() failed, Quit now")
 		return
 	}
-
 	log.Infof("register pitchfork...")
 	if p, err = NewPitchfork(zk, config); err != nil {
 		log.Errorf("pitchfork NewPitchfork() failed, Quit now")
 		return
 	}
-
 	log.Infof("starts probe stores...")
 	go p.Probe()
-
 	StartSignal()
 	return
 }

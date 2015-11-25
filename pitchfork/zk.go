@@ -1,18 +1,18 @@
 package main
 
 import (
-	"path"
 	"encoding/json"
+	"path"
 	"strings"
 	"time"
 
+	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
-	"github.com/Terry-Mao/bfs/libs/meta"
 )
 
 type Zookeeper struct {
-	c     *zk.Conn
+	c *zk.Conn
 }
 
 // NewZookeeper new a connection to zookeeper.
@@ -39,11 +39,10 @@ func NewZookeeper(addrs []string, timeout time.Duration) (
 }
 
 // createPath create a zookeeper path.
-func (z *Zookeeper) createPath(fpath string, flags int32) error {
+func (z *Zookeeper) createPath(fpath string, flags int32) (err error) {
 	var (
 		str   string
 		tpath = ""
-		err   error
 	)
 	for _, str = range strings.Split(fpath, "/")[1:] {
 		tpath = path.Join(tpath, "/", str)
@@ -51,29 +50,27 @@ func (z *Zookeeper) createPath(fpath string, flags int32) error {
 		if _, err = z.c.Create(tpath, []byte(""), flags, zk.WorldACL(zk.PermAll)); err != nil {
 			if err != zk.ErrNodeExists {
 				log.Errorf("zk.create(\"%s\") error(%v)", tpath, err)
-				return err
+				return
 			} else {
 				err = nil
 			}
 		}
 	}
-	return nil
+	return
 }
 
 // setStoreStatus update store status
 func (z *Zookeeper) setStoreStatus(pathStore string, status int) error {
 	var (
-		data    []byte
-		stat    *zk.Stat
-		store=  &meta.Store{}
-		err     error
+		data  []byte
+		stat  *zk.Stat
+		store = &meta.Store{}
+		err   error
 	)
-
 	if data, stat, err = z.c.Get(pathStore); err != nil {
 		log.Errorf("zk.Get(\"%s\") error(%v)", pathStore, err)
 		return err
 	}
-
 	if len(data) > 0 {
 		if err = json.Unmarshal(data, store); err != nil {
 			log.Errorf("json.Unmarshal() error(%v)", err)
@@ -91,7 +88,6 @@ func (z *Zookeeper) setStoreStatus(pathStore string, status int) error {
 	}
 	return nil
 }
-
 
 // Close close the zookeeper connection.
 func (z *Zookeeper) Close() {

@@ -1,30 +1,26 @@
 package main
 
 import (
-	"os"
-	"io"
-	"fmt"
-	"time"
-	"sort"
-	"sync"
-	"errors"
-	"crypto/rand"
 	"encoding/json"
-	"net/http"
-	"io/ioutil"
-
+	"errors"
+	"fmt"
+	"github.com/Terry-Mao/bfs/libs/meta"
+	"github.com/Terry-Mao/bfs/libs/uuid"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
-	"github.com/Terry-Mao/bfs/libs/meta"
+	"io/ioutil"
+	"net/http"
+	"os"
+	"sort"
+	"sync"
+	"time"
 )
 
-
 type Pitchfork struct {
-	Id        string
-	config    *Config
-	zk        *Zookeeper
+	Id     string
+	config *Config
+	zk     *Zookeeper
 }
-
 
 type PitchforkList []*Pitchfork
 
@@ -43,33 +39,22 @@ func (pl PitchforkList) Swap(i, j int) {
 	pl[i], pl[j] = pl[j], pl[i]
 }
 
-//NewPitchfork
-func NewPitchfork(zk *Zookeeper, config *Config) (*Pitchfork, error) {
-	var (
-		id        string
-		p         *Pitchfork
-		err       error
-	)
-	if id, err = generateId(); err != nil {
-		log.Errorf("generateId() failed")
-		return nil, err
+// NewPitchfork
+func NewPitchfork(zk *Zookeeper, config *Config) (p *Pitchfork, err error) {
+	p = &Pitchfork{}
+	p.config = config
+	p.zk = zk
+	if p.Id, err = p.id(); err != nil {
+		return
 	}
-
-	p = &Pitchfork{Id: id, config: config, zk: zk}
-	if err = p.Register(); err != nil {
-		log.Errorf("Register() failed")
-		return nil, err
-	}
-
-	return p, nil
+	err = p.init()
+	return
 }
 
-//Register register pitchfork in the zookeeper
-func (p *Pitchfork) Register() error {
-	node := fmt.Sprintf("%s/%s", p.config.ZookeeperPitchforkRoot, p.Id)
-	flags := int32(zk.FlagEphemeral)
-
-	return p.zk.createPath(node, flags)
+// init register temporary pitchfork node in the zookeeper.
+func (p *Pitchfork) init() (err error) {
+	// TODO
+	return p.zk.createPath(fmt.Sprintf("%s/%s", p.config.ZookeeperPitchforkRoot, p.Id), int32(zk.FlagEphemeral))
 }
 
 //WatchGetPitchforks get all the pitchfork nodes and set up the watcher in the zookeeper
@@ -92,7 +77,7 @@ func (p *Pitchfork) WatchGetPitchforks() (PitchforkList, <-chan zk.Event, error)
 	result = make(PitchforkList, 0, len(children))
 	for _, child := range children {
 		pitchforkId := child
-		result = append(result, &Pitchfork{Id:pitchforkId, config:p.config, zk:p.zk})
+		result = append(result, &Pitchfork{Id: pitchforkId, config: p.config, zk: p.zk})
 	}
 
 	return result, pitchforkChanges, nil
@@ -101,13 +86,13 @@ func (p *Pitchfork) WatchGetPitchforks() (PitchforkList, <-chan zk.Event, error)
 //WatchGetStores get all the store nodes and set up the watcher in the zookeeper
 func (p *Pitchfork) WatchGetStores() (StoreList, <-chan zk.Event, error) {
 	var (
-		storeRootPath      string
-		children,children1 []string
-		storeChanges       <-chan zk.Event
-		result             StoreList
-		data               []byte
-		store=             &meta.Store{}
-		err                error
+		storeRootPath       string
+		children, children1 []string
+		storeChanges        <-chan zk.Event
+		result              StoreList
+		data                []byte
+		store               = &meta.Store{}
+		err                 error
 	)
 
 	storeRootPath = p.config.ZookeeperStoreRoot
@@ -147,9 +132,9 @@ func (p *Pitchfork) WatchGetStores() (StoreList, <-chan zk.Event, error) {
 }
 
 //getStore get store node and feed back to directory
-func (p *Pitchfork)getStore(s *meta.Store) error {
+func (p *Pitchfork) getStore(s *meta.Store) error {
 	var (
-		status=  meta.StoreStatusHealth
+		status   = meta.StoreStatusHealth
 		url      string
 		body     []byte
 		resp     *http.Response
@@ -179,12 +164,12 @@ func (p *Pitchfork)getStore(s *meta.Store) error {
 		return err
 	}
 
-	volumes =  dataJson["volumes"].([]interface{})
+	volumes = dataJson["volumes"].([]interface{})
 	for _, volume := range volumes {
 		volumeValue := volume.(map[string]interface{})
 		block := volumeValue["block"].(map[string]interface{})
 		offset := int64(block["offset"].(float64))
-		if int64(maxOffset * p.config.MaxUsedSpacePercent) < offset {
+		if int64(maxOffset*p.config.MaxUsedSpacePercent) < offset {
 			log.Warningf("getStore() store block has no enough space, host:%s", s.Stat)
 			status = meta.StoreStatusRead
 		}
@@ -200,20 +185,20 @@ feedbackZk:
 	if s.Status == status {
 		return nil
 	}
-    pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.Rack, s.Id)
-    if err = p.zk.setStoreStatus(pathStore, status); err != nil {
-	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
-	return err
-    }
-    s.Status = status
-    log.Infof("getStore() called success host:%s status: %d %d", s.Stat, s.Status, status)
-    return nil
+	pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.Rack, s.Id)
+	if err = p.zk.setStoreStatus(pathStore, status); err != nil {
+		log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
+		return err
+	}
+	s.Status = status
+	log.Infof("getStore() called success host:%s status: %d %d", s.Stat, s.Status, status)
+	return nil
 }
 
 //headStore head store node and feed back to directory
-func (p *Pitchfork)headStore(s *meta.Store) error {
+func (p *Pitchfork) headStore(s *meta.Store) error {
 	var (
-		status=  meta.StoreStatusHealth
+		status   = meta.StoreStatusHealth
 		url      string
 		body     []byte
 		resp     *http.Response
@@ -244,7 +229,7 @@ func (p *Pitchfork)headStore(s *meta.Store) error {
 		return err
 	}
 
-	volumes =  dataJson["volumes"].([]interface{})
+	volumes = dataJson["volumes"].([]interface{})
 	for _, volume := range volumes {
 		volumeValue := volume.(map[string]interface{})
 		vid := int64(volumeValue["id"].(float64))
@@ -252,7 +237,7 @@ func (p *Pitchfork)headStore(s *meta.Store) error {
 
 		checkNeedles := volumeValue["check_needles"].([]interface{})
 		for _, needle := range checkNeedles {
-			needleValue := needle.(map[string]interface {})
+			needleValue := needle.(map[string]interface{})
 			key := int64(needleValue["key"].(float64))
 			cookie := int64(needleValue["cookie"].(float64))
 			if key == 0 {
@@ -280,27 +265,27 @@ func (p *Pitchfork)headStore(s *meta.Store) error {
 	return nil
 
 feedbackZk:
-    pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.Rack, s.Id)
-    if err = p.zk.setStoreStatus(pathStore, status); err != nil {
-	log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
-	return err
-    }
-    s.Status = status
-    log.Infof("headStore() called success host:%s status: %d %d", s.Stat, s.Status, status)
-    return nil
+	pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.Rack, s.Id)
+	if err = p.zk.setStoreStatus(pathStore, status); err != nil {
+		log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
+		return err
+	}
+	s.Status = status
+	log.Infof("headStore() called success host:%s status: %d %d", s.Stat, s.Status, status)
+	return nil
 }
 
 //Probe main flow of pitchfork server
-func (p *Pitchfork)Probe() {
+func (p *Pitchfork) Probe() {
 	var (
-		stores             StoreList
-		pitchforks         PitchforkList
-		storeChanges       <-chan zk.Event
-		pitchforkChanges   <-chan zk.Event
-		allStores          map[string]StoreList
-		stopper            chan struct{}
-		store              *meta.Store
-		err                error
+		stores           StoreList
+		pitchforks       PitchforkList
+		storeChanges     <-chan zk.Event
+		pitchforkChanges <-chan zk.Event
+		allStores        map[string]StoreList
+		stopper          chan struct{}
+		store            *meta.Store
+		err              error
 	)
 	for {
 		stores, storeChanges, err = p.WatchGetStores()
@@ -329,9 +314,9 @@ func (p *Pitchfork)Probe() {
 						log.Errorf("probeStore() called error(%v)", err)
 					}
 					select {
-						case <- stopper:
-							return
-						case <- time.After(p.config.GetInterval):
+					case <-stopper:
+						return
+					case <-time.After(p.config.GetInterval):
 					}
 				}
 			}(store)
@@ -342,9 +327,9 @@ func (p *Pitchfork)Probe() {
 						log.Errorf("headStore() called error(%v)", err)
 					}
 					select {
-					case <- stopper:
+					case <-stopper:
 						return
-					case <- time.After(p.config.HeadInterval):
+					case <-time.After(p.config.HeadInterval):
 					}
 				}
 			}(store)
@@ -362,39 +347,17 @@ func (p *Pitchfork)Probe() {
 	}
 }
 
-//generateUUID
-func generateUUID() (string, error) {
-	uuid := make([]byte, 16)
-	n, err := io.ReadFull(rand.Reader, uuid)
-	if n != len(uuid) || err != nil {
-		return "", err
+// id get a pitchfork node id.
+func (p *Pitchfork) id() (str string, err error) {
+	var uuidStr, host string
+	if uuidStr, err = uuid.New(); err != nil {
+		return
 	}
-	uuid[8] = uuid[8]&^0xc0 | 0x80
-	uuid[6] = uuid[6]&^0xf0 | 0x40
-	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
-}
-
-//generateId
-func generateId() (string, error) {
-	var (
-		uuid      string
-		hostname string
-		Id       string
-		err      error
-	)
-
-	uuid, err = generateUUID()
-	if err != nil {
-		return "", err
+	if host, err = os.Hostname(); err != nil {
+		return
 	}
-
-	hostname, err = os.Hostname()
-	if err != nil {
-		return "", err
-	}
-
-	Id = fmt.Sprintf("%s:%s", hostname, uuid)
-	return Id, nil
+	str = fmt.Sprintf("%s:%s", host, uuidStr)
+	return
 }
 
 // Divides a set of stores between a set of pitchforks.

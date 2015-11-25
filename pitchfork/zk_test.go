@@ -1,18 +1,17 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 	"time"
-	"fmt"
 )
-
 
 func TestZk(t *testing.T) {
 
 	var (
-		config     *Config
-		zk         *Zookeeper
-		err        error
+		config *Config
+		zk     *Zookeeper
+		err    error
 	)
 
 	if config, err = NewConfig(configFile); err != nil {
