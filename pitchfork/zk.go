@@ -65,6 +65,7 @@ func (z *Zookeeper) createPitchfork(fpath string) (node string, err error) {
 	if node, err = z.c.Create(fmt.Sprintf("%s/",fpath), []byte(""), int32(zk.FlagEphemeral|zk.FlagSequence), zk.WorldACL(zk.PermAll)); err != nil {
 		log.Errorf("zk.Create error(%v)", err)
 	}
+	node = strings.Split(node, "/")[2]
 	return
 }
 
