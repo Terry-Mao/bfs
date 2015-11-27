@@ -22,3 +22,17 @@ type Store struct {
 	Rack   string `json:"rack"`
 	Status int    `json:"status"`
 }
+
+type StoreList []*Store
+
+func (sl StoreList) Len() int {
+	return len(sl)
+}
+
+func (sl StoreList) Less(i, j int) bool {
+	return sl[i].Id < sl[j].Id
+}
+
+func (sl StoreList) Swap(i, j int) {
+	sl[i], sl[j] = sl[j], sl[i]
+}

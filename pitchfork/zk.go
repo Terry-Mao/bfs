@@ -2,14 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"path"
-	"strings"
-	"time"
-	"fmt"
-
 	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
+	"path"
+	"time"
 )
 
 type Zookeeper struct {
@@ -39,38 +36,18 @@ func NewZookeeper(addrs []string, timeout time.Duration) (
 	return
 }
 
-// createPath create a zookeeper path.
-func (z *Zookeeper) createPath(fpath string, flags int32) (err error) {
-	var (
-		str   string
-		tpath = ""
-	)
-	for _, str = range strings.Split(fpath, "/")[1:] {
-		tpath = path.Join(tpath, "/", str)
-		log.V(1).Infof("create zookeeper path: \"%s\"", tpath)
-		if _, err = z.c.Create(tpath, []byte(""), flags, zk.WorldACL(zk.PermAll)); err != nil {
-			if err != zk.ErrNodeExists {
-				log.Errorf("zk.create(\"%s\") error(%v)", tpath, err)
-				return
-			} else {
-				err = nil
-			}
-		}
-	}
-	return
-}
-
-// createPitchfork create pitchfork node in zk
-func (z *Zookeeper) createPitchfork(fpath string) (node string, err error) {
-	if node, err = z.c.Create(fmt.Sprintf("%s/",fpath), []byte(""), int32(zk.FlagEphemeral|zk.FlagSequence), zk.WorldACL(zk.PermAll)); err != nil {
+// NewNode create pitchfork node in zk.
+func (z *Zookeeper) NewNode(fpath string) (node string, err error) {
+	if node, err = z.c.Create(path.Join(fpath, "")+"/", []byte(""), int32(zk.FlagEphemeral|zk.FlagSequence), zk.WorldACL(zk.PermAll)); err != nil {
 		log.Errorf("zk.Create error(%v)", err)
+	} else {
+		node = path.Base(node)
 	}
-	node = strings.Split(node, "/")[2]
 	return
 }
 
-// setStoreStatus update store status
-func (z *Zookeeper) setStoreStatus(pathStore string, status int) (err error) {
+// SetStoreStatus update store status.
+func (z *Zookeeper) SetStoreStatus(pathStore string, status int) (err error) {
 	var (
 		data  []byte
 		stat  *zk.Stat

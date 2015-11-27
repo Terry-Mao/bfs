@@ -15,10 +15,9 @@ import (
 )
 
 const (
-	retrySleep  = 15 * time.Second  //zookeeper FlagEphemeral 
-	retryCount  = 3
+	retrySleep = 15 * time.Second //zookeeper FlagEphemeral
+	retryCount = 3
 )
-
 
 type Pitchfork struct {
 	Id     string
@@ -59,7 +58,7 @@ func NewPitchfork(zk *Zookeeper, config *Config) (p *Pitchfork, err error) {
 
 // init register temporary pitchfork node in the zookeeper.
 func (p *Pitchfork) init() (node string, err error) {
-	node, err = p.zk.createPitchfork(p.config.ZookeeperPitchforkRoot)
+	node, err = p.zk.NewNode(p.config.ZookeeperPitchforkRoot)
 	return
 }
 
@@ -86,7 +85,7 @@ func (p *Pitchfork) WatchGetPitchforks() (result PitchforkList, pitchforkChanges
 }
 
 // WatchGetStores get all the store nodes and set up the watcher in the zookeeper
-func (p *Pitchfork) WatchGetStores() (result StoreList, storeChanges <-chan zk.Event, err error) {
+func (p *Pitchfork) WatchGetStores() (result meta.StoreList, storeChanges <-chan zk.Event, err error) {
 	var (
 		storeRootPath       string
 		children, children1 []string
@@ -103,7 +102,7 @@ func (p *Pitchfork) WatchGetStores() (result StoreList, storeChanges <-chan zk.E
 		log.Errorf("zk.Children(\"%s\") error(%v)", storeRootPath, err)
 		return
 	}
-	result = make(StoreList, 0, len(children))
+	result = make(meta.StoreList, 0, len(children))
 	for _, child := range children {
 		pathRack := fmt.Sprintf("%s/%s", storeRootPath, child)
 		if children1, _, err = p.zk.c.Children(pathRack); err != nil {
@@ -161,7 +160,7 @@ func (p *Pitchfork) getStore(s *meta.Store) (err error) {
 		volumeValue := volume.(map[string]interface{})
 		block := volumeValue["block"].(map[string]interface{})
 		offset := int64(block["offset"].(float64))
-		if int64(maxOffset*p.config.MaxUsedSpacePercent) < offset {
+		if int64(meta.MaxVolumeOffset*p.config.MaxUsedSpacePercent) < offset {
 			log.Warningf("getStore() store block has no enough space, host:%s", s.Stat)
 			status = meta.StoreStatusRead
 		}
@@ -176,10 +175,10 @@ func (p *Pitchfork) getStore(s *meta.Store) (err error) {
 
 feedbackZk:
 	if s.Status == status {
-		return nil  //need return nil
+		return nil //need return nil
 	}
 	pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.Rack, s.Id)
-	if err = p.zk.setStoreStatus(pathStore, status); err != nil {
+	if err = p.zk.SetStoreStatus(pathStore, status); err != nil {
 		log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
 		return
 	}
@@ -254,7 +253,7 @@ func (p *Pitchfork) headStore(s *meta.Store) (err error) {
 
 feedbackZk:
 	pathStore := fmt.Sprintf("%s/%s/%s", p.config.ZookeeperStoreRoot, s.Rack, s.Id)
-	if err = p.zk.setStoreStatus(pathStore, status); err != nil {
+	if err = p.zk.SetStoreStatus(pathStore, status); err != nil {
 		log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
 		return
 	}
@@ -266,11 +265,11 @@ feedbackZk:
 // Probe main flow of pitchfork server
 func (p *Pitchfork) Probe() {
 	var (
-		stores           StoreList
+		stores           meta.StoreList
 		pitchforks       PitchforkList
 		storeChanges     <-chan zk.Event
 		pitchforkChanges <-chan zk.Event
-		allStores        map[string]StoreList
+		allStores        map[string]meta.StoreList
 		stopper          chan struct{}
 		store            *meta.Store
 		err              error
@@ -286,7 +285,7 @@ func (p *Pitchfork) Probe() {
 			log.Errorf("WatchGetPitchforks() called error(%v)", err)
 			return
 		}
-		for i:=0 ; i < retryCount; i++ {
+		for i := 0; i < retryCount; i++ {
 			if allStores, err = divideStoreBetweenPitchfork(pitchforks, stores); err == nil {
 				break
 			}
@@ -334,10 +333,9 @@ func (p *Pitchfork) Probe() {
 	}
 }
 
-
 // Divides a set of stores between a set of pitchforks.
-func divideStoreBetweenPitchfork(pitchforks PitchforkList, stores StoreList) (result map[string]StoreList, err error) {
-	result = make(map[string]StoreList)
+func divideStoreBetweenPitchfork(pitchforks PitchforkList, stores meta.StoreList) (result map[string]meta.StoreList, err error) {
+	result = make(map[string]meta.StoreList)
 
 	slen := len(stores)
 	plen := len(pitchforks)
