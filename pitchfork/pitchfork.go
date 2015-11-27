@@ -84,15 +84,14 @@ func (p *Pitchfork) WatchGetPitchforks() (result PitchforkList, pitchforkChanges
 	return
 }
 
-// WatchGetStores get all the store nodes and set up the watcher in the zookeeper
-func (p *Pitchfork) WatchGetStores() (result meta.StoreList, storeChanges <-chan zk.Event, err error) {
+// watchGetStores get all the store nodes and set up the watcher in the zookeeper
+func (p *Pitchfork) watchGetStores() (result meta.StoreList, storeChanges <-chan zk.Event, err error) {
 	var (
 		storeRootPath       string
 		children, children1 []string
 		data                []byte
 		store               = &meta.Store{}
 	)
-
 	storeRootPath = p.config.ZookeeperStoreRoot
 	if _, _, storeChanges, err = p.zk.c.GetW(storeRootPath); err != nil {
 		log.Errorf("zk.GetW(\"%s\") error(%v)", storeRootPath, err)
@@ -270,7 +269,7 @@ feedbackZk:
 	return nil
 }
 
-// Probe main flow of pitchfork server
+// Probe main flow of pitchfork server.
 func (p *Pitchfork) Probe() {
 	var (
 		stores           meta.StoreList
@@ -283,8 +282,8 @@ func (p *Pitchfork) Probe() {
 		err              error
 	)
 	for {
-		if stores, storeChanges, err = p.WatchGetStores(); err != nil {
-			log.Errorf("WatchGetStores() called error(%v)", err)
+		if stores, storeChanges, err = p.watchGetStores(); err != nil {
+			log.Errorf("watchGetStores() called error(%v)", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
