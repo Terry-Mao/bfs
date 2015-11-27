@@ -171,6 +171,7 @@ func (p *Pitchfork) getStore(s *meta.Store) (err error) {
 			log.Errorf("getStore() store last_err error(%v) host:%s", lastErr, s.Stat)
 			goto feedbackZk
 		}
+		//update /volume state
 	}
 
 feedbackZk:
