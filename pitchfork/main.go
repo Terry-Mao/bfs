@@ -29,7 +29,7 @@ func main() {
 		return
 	}
 	log.Infof("init zookeeper...")
-	if zk, err = NewZookeeper(config.ZookeeperAddrs, config.ZookeeperTimeout); err != nil {
+	if zk, err = NewZookeeper(config.ZookeeperAddrs, config.ZookeeperTimeout, config.ZookeeperPitchforkRoot, config.ZookeeperStoreRoot); err != nil {
 		log.Errorf("NewZookeeper() failed, Quit now")
 		return
 	}
