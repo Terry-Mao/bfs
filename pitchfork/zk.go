@@ -79,11 +79,11 @@ func (z *Zookeeper) SetStoreStatus(pathStore string, status int) (err error) {
 func (z *Zookeeper) SetRoot(pathRoot string) (err error) {
 	var stat *zk.Stat
 	if _, stat, err = z.c.Get(pathRoot); err != nil {
-		log.Errorf("zk.Get(\"%s\") error(%v)", z.root, err)
+		log.Errorf("zk.Get(\"%s\") error(%v)", pathRoot, err)
 		return
 	}
 	if _, err = z.c.Set(pathRoot, []byte(""), stat.Version); err != nil {
-		log.Errorf("zk.Set(\"%s\") error(%v)", z.root, err)
+		log.Errorf("zk.Set(\"%s\") error(%v)", pathRoot, err)
 	}
 	return
 }
