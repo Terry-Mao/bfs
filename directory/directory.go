@@ -101,7 +101,22 @@ func (d *Directory) updateStoreStatus() err error {
 
 // getStoreVolumes get all volumes in zk
 func (d *Directory) getStoreVolumes() err error {
-
+	var (
+		volumeRootPath    string
+		children          []string
+		data              []byte
+	)
+	volumeRootPath = d.config.ZookeeperVolumeRoot
+	if children, _, err = d.zk.c.Children(volumeRootPath); err != nil {
+		log.Errorf("zk.Children(\"%s\") error(%v)", err)
+		return
+	}
+	for _, child := range children {
+		pathVolume := fmt.Sprintf("%s/%s", volumeRootPath, child)
+		if data, _, err = d.zk.c.Get(pathVolume); err != nil {
+			
+		}
+	}
 }
 
 // updateStoreState watch zk and update store state
