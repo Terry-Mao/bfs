@@ -182,6 +182,10 @@ feedbackZk:
 		log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
 		return
 	}
+	if err = p.zk.SetRoot(p.config.ZookeeperStoreRoot); err != nil {
+		log.Errorf("SetRoot() called error(%v)", err)
+		return
+	}
 	s.Status = status
 	log.Infof("getStore() called success host:%s status: %d %d", s.Stat, s.Status, status)
 	return
@@ -257,6 +261,10 @@ feedbackZk:
 		log.Errorf("setStoreStatus() called error(%v) path:%s", err, pathStore)
 		return
 	}
+	if err = p.zk.SetRoot(p.config.ZookeeperStoreRoot); err != nil {
+		log.Errorf("SetRoot() called error(%v)", err)
+		return
+	}
 	s.Status = status
 	log.Infof("headStore() called success host:%s status: %d %d", s.Stat, s.Status, status)
 	return nil
@@ -275,15 +283,15 @@ func (p *Pitchfork) Probe() {
 		err              error
 	)
 	for {
-		stores, storeChanges, err = p.WatchGetStores()
-		if err != nil {
+		if stores, storeChanges, err = p.WatchGetStores(); err != nil {
 			log.Errorf("WatchGetStores() called error(%v)", err)
-			return
+			time.Sleep(1 * time.Second)
+			continue
 		}
-		pitchforks, pitchforkChanges, err = p.WatchGetPitchforks()
-		if err != nil {
+		if pitchforks, pitchforkChanges, err = p.WatchGetPitchforks(); err != nil {
 			log.Errorf("WatchGetPitchforks() called error(%v)", err)
-			return
+			time.Sleep(1 * time.Second)
+			continue
 		}
 		for i := 0; i < retryCount; i++ {
 			if allStores, err = divideStoreBetweenPitchfork(pitchforks, stores); err == nil {
