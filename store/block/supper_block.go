@@ -60,6 +60,7 @@ type SuperBlock struct {
 	Ver     byte    `json:"ver"`
 	Options Options `json:"options"`
 	magic   []byte  `json:"-"`
+	Padding uint32  `json:"padding"`
 	// status
 	closed     bool
 	write      int
@@ -75,6 +76,7 @@ func NewSuperBlock(file string, options Options) (b *SuperBlock, err error) {
 	b.closed = false
 	b.write = 0
 	b.syncOffset = 0
+	b.Padding = needle.PaddingSize
 	b.buf = make([]byte, options.BufferSize)
 	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)

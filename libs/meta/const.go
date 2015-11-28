@@ -1,5 +1,5 @@
 package meta
 
 const (
-	MaxVolumeOffset = 4294967295
+	MaxBlockOffset = uint32(4294967295)
 )

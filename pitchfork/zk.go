@@ -50,15 +50,29 @@ func (z *Zookeeper) NewNode(fpath string) (node string, err error) {
 	return
 }
 
-// SetStoreStatus update store status.
-func (z *Zookeeper) SetStoreStatus(pathStore string, status int) (err error) {
+// setRoot update root.
+func (z *Zookeeper) setRoot() (err error) {
+	var stat *zk.Stat
+	if _, stat, err = z.c.Get(z.storeRootPath); err != nil {
+		log.Errorf("zk.Get(\"%s\") error(%v)", z.storeRootPath, err)
+		return
+	}
+	if _, err = z.c.Set(z.storeRootPath, []byte(""), stat.Version); err != nil {
+		log.Errorf("zk.Set(\"%s\") error(%v)", z.storeRootPath, err)
+	}
+	return
+}
+
+// SetStore update store status.
+func (z *Zookeeper) SetStore(s *meta.Store) (err error) {
 	var (
 		data  []byte
 		stat  *zk.Stat
 		store = &meta.Store{}
+		spath = path.Join(z.storeRootPath, s.Rack, s.Id)
 	)
-	if data, stat, err = z.c.Get(pathStore); err != nil {
-		log.Errorf("zk.Get(\"%s\") error(%v)", pathStore, err)
+	if data, stat, err = z.c.Get(spath); err != nil {
+		log.Errorf("zk.Get(\"%s\") error(%v)", spath, err)
 		return
 	}
 	if len(data) > 0 {
@@ -67,15 +81,16 @@ func (z *Zookeeper) SetStoreStatus(pathStore string, status int) (err error) {
 			return
 		}
 	}
-	store.Status = status
+	store.Status = s.Status
 	if data, err = json.Marshal(store); err != nil {
 		log.Errorf("json.Marshal() error(%v)", err)
 		return err
 	}
-	if _, err = z.c.Set(pathStore, data, stat.Version); err != nil {
-		log.Errorf("zk.Set(\"%s\") error(%v)", pathStore, err)
+	if _, err = z.c.Set(spath, data, stat.Version); err != nil {
+		log.Errorf("zk.Set(\"%s\") error(%v)", spath, err)
 		return
 	}
+	err = z.setRoot()
 	return
 }
 
@@ -109,19 +124,6 @@ func (z *Zookeeper) Store(rack, store string) (data []byte, err error) {
 	var spath = path.Join(z.storeRootPath, rack, store)
 	if data, _, err = z.c.Get(spath); err != nil {
 		log.Errorf("zk.Get(\"%s\") error(%v)", spath, err)
-	}
-	return
-}
-
-// SetRoot update root.
-func (z *Zookeeper) SetRoot() (err error) {
-	var stat *zk.Stat
-	if _, stat, err = z.c.Get(z.storeRootPath); err != nil {
-		log.Errorf("zk.Get(\"%s\") error(%v)", z.storeRootPath, err)
-		return
-	}
-	if _, err = z.c.Set(z.storeRootPath, []byte(""), stat.Version); err != nil {
-		log.Errorf("zk.Set(\"%s\") error(%v)", z.storeRootPath, err)
 	}
 	return
 }
