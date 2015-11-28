@@ -79,34 +79,36 @@ func (z *Zookeeper) SetStoreStatus(pathStore string, status int) (err error) {
 	return
 }
 
-// WatchGetStore
-func (z *Zookeeper) WatchGetPitchforks() (pitchforks []string, pitchforkChanges <-chan zk.Event, err error) {
-	if pitchforks, _, pitchforkChanges, err = z.c.ChildrenW(z.pitchforkRootPath); err != nil {
+// WatchPitchforks watch pitchfork nodes.
+func (z *Zookeeper) WatchPitchforks() (nodes []string, ev <-chan zk.Event, err error) {
+	if nodes, _, ev, err = z.c.ChildrenW(z.pitchforkRootPath); err != nil {
 		log.Errorf("zk.ChildrenW(\"%s\") error(%v)", z.pitchforkRootPath, err)
 	}
 	return
 }
 
-// WatchGetStore
-func (z *Zookeeper) WatchGetRacks() (racks []string, storeChanges <-chan zk.Event, err error) {
-	if racks, _, storeChanges, err = z.c.ChildrenW(z.storeRootPath); err != nil {
+// WatchRacks watch the rack nodes.
+func (z *Zookeeper) WatchRacks() (nodes []string, ev <-chan zk.Event, err error) {
+	if nodes, _, ev, err = z.c.ChildrenW(z.storeRootPath); err != nil {
 		log.Errorf("zk.ChildrenW(\"%s\") error(%v)", z.storeRootPath, err)
 	}
 	return
 }
 
-// GetStores
-func (z *Zookeeper) GetStores(rackPath string) (stores []string, err error) {
-	if stores, _, err = z.c.Children(rackPath); err != nil {
-		log.Errorf("zk.Children(\"%s\") error(%v)", rackPath, err)
+// Stores get all stores from a rack.
+func (z *Zookeeper) Stores(rack string) (stores []string, err error) {
+	var spath = path.Join(z.storeRootPath, rack)
+	if stores, _, err = z.c.Children(spath); err != nil {
+		log.Errorf("zk.Children(\"%s\") error(%v)", spath, err)
 	}
 	return
 }
 
-// GetStore
-func (z *Zookeeper) GetStore(storePath string) (data []byte, err error) {
-	if data, _, err = z.c.Get(storePath); err != nil {
-		log.Errorf("zk.Get(\"%s\") error(%v)", storePath, err)
+// Store get a store node data.
+func (z *Zookeeper) Store(rack, store string) (data []byte, err error) {
+	var spath = path.Join(z.storeRootPath, rack, store)
+	if data, _, err = z.c.Get(spath); err != nil {
+		log.Errorf("zk.Get(\"%s\") error(%v)", spath, err)
 	}
 	return
 }
