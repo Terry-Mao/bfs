@@ -1,14 +1,15 @@
 package main
 
 // Directory
+// id means store serverid; vid means volume id; gid means group id
 type Directory struct {
-	storesWritable   StoreStateList        //可读可写store列表 init from updateStoreState
-	storesReadable   StoreStateList        //只读stores列表 init from updateStoreState
-	storesMeta       StoreList             //所有store节点 init from watchGetStores and updateStoreStatus
+	idStore          map[string]*meta.Store // store status
+	idVolumes        map[string][]string    // init from getStoreVolume
 
-	idStore          map[string]*meta.Store //init from updateStoreStatus
-	volumeStore      map[int]*meta.Store    //init from getStoreVolume
-	storeVolumes     map[string][]int       //init from getStoreVolume
+	vidVolume        map[string]*meta.Volume
+	vidStores        map[string][]string    // init from getStoreVolume    for  http Read
+
+	gidStores        map[string][]string
 
 	genkey           *Genkey
 	//hbase client
@@ -27,132 +28,134 @@ func (d *Directory) init() {
 
 }
 
-// watchGetStores get all the store nodes and set up the watcher in the zookeeper
-func (d *Directory) watchGetStores() (storeChanges <-chan zk.Event, err error) {
+// watchStores get all the store nodes and set up the watcher in the zookeeper
+func (d *Directory) watchStores() (ev <-chan zk.Event, err error) {
 	var (
-		storeMeta           StoreList
-		storeRootPath       string
-		children, children1 []string
-		data                []byte
-		store               = &meta.Store{}
+		storeMeta              *meta.Store
+		idStore                map[string]*meta.Store
+		idVolumes              map[string][]string
+		rack, store            string
+		racks, stores, volumes []string
+		data                   []byte
 	)
 
-	storeRootPath = d.config.ZookeeperStoreRoot
-	if _, _, storeChanges, err = d.zk.c.GetW(storeRootPath); err != nil {
-		log.Errorf("zk.GetW(\"%s\") error(%v)", storeRootPath, err)
+	if racks, ev, err = d.zk.WatchRacks(); err != nil {
 		return
 	}
-	if children, _, err = d.zk.c.Children(storeRootPath); err != nil {
-		log.Errorf("zk.Children(\"%s\") error(%v)", storeRootPath, err)
-		return
-	}
-	storeMeta = make(StoreList, 0)
-	for _, child := range children {
-		pathRack := fmt.Sprintf("%s/%s", storeRootPath, child)
-		if children1, _, err = d.zk.c.Children(pathRack); err != nil {
-			log.Errorf("zk.Children(\"%s\") error(%v)", pathRack, err)
+	idVolumes = make(map[string][]string)
+	idStore = make(map[string]*meta.Store)
+	for _, rack = range racks {
+		if stores, err = d.zk.Stores(rack); err != nil {
 			return
 		}
-		for _, child1 := range children1 {
-			pathStore := fmt.Sprintf("%s/%s", pathRack, child1)
-			if data, _, err = d.zk.c.Get(pathStore); err != nil {
-				log.Errorf("zk.Get(\"%s\") error(%v)", pathStore, err)
+		for _, store = range stores {
+			if data, err = d.zk.Store(rack, store); err != nil {
 				return
 			}
-			if err = json.Unmarshal(data, store); err != nil {
+			storeMeta = new(meta.Store)
+			if err = json.Unmarshal(data, storeMeta); err != nil {
 				log.Errorf("json.Unmarshal() error(%v)", err)
 				return
 			}
-
-			storeMeta = append(storeMeta, store)
+			if volumes, err = d.zk.StoreVolumes(rack, store); err != nil {
+				return
+			}
+			idVolumes[storeMeta.Id] = volumes
+			idStore[storeMeta.Id] = storeMeta
 		}
 	}
-	d.storesMeta = storeMeta
+	d.idVolumes = idVolumes
+	d.idStore = idStore
 	return
 }
 
-// updateStoreStatus timer get store statement from zookeeper 
-func (d *Directory) updateStoreStatus() err error {
+// Volumes get all volumes in zk
+func (d *Directory) syncVolumes() err error {
 	var (
-		store          *meta.Store
-		storeState     =&StoreState{}
-		idStore        =make(map[string]*meta.Store)
-		storesWritable =make(StoreStateList, 0)
-		storesReadable =make(StoreStateList, 0)
+		volumeMeta     *meta.Volume
+		vidVolume      map[string]*meta.Volume
+		volume,store   string
+		volumes,stores []string
+		vidStores      map[string][]string
+		data           []byte
 	)
-	for _, store = range d.storesMeta {
-		idStore[store.Id] = store
-		storeState.Id = store.Id
-		switch store.Status {
-		case meta.StoreStatusHealth:
-			storesWritable = append(storesWritable, storeState)
-		case meta.StoreStatusRead:
-			storesReadable = append(storesReadable, storeState)
-		case meta.StoreStatusEnable:
-			log.Warnf("store not online %s status:%d", store.Stat, store.Status)
-		default:
-			log.Errorf("unknonw status  %s  status:%d", store.Stat, store.Status)
-		}
-	}
-	d.idStore = idStore
-	d.storesWritable = storesWritable
-	d.storesReadable = storesReadable
-}
-
-// getStoreVolumes get all volumes in zk
-func (d *Directory) getStoreVolumes() err error {
-	var (
-		volumeRootPath    string
-		children          []string
-		data              []byte
-	)
-	volumeRootPath = d.config.ZookeeperVolumeRoot
-	if children, _, err = d.zk.c.Children(volumeRootPath); err != nil {
-		log.Errorf("zk.Children(\"%s\") error(%v)", err)
+	if volumes, _, err = d.zk.Volumes(); err != nil {
 		return
 	}
-	for _, child := range children {
-		pathVolume := fmt.Sprintf("%s/%s", volumeRootPath, child)
-		if data, _, err = d.zk.c.Get(pathVolume); err != nil {
-			
+	vidVolume = make(map[string]*meta.Volume)
+	vidStores = make(map[string][]string)
+	for _, volume = range volumes {
+		if data, _, err = d.zk.Volume(volume); err != nil {
+			return
 		}
+		volumeMeta = new(meta.Volume)
+		if err = json.Unmarshal(data, volumeMeta); err != nil {
+			log.Errorf("json.Unmarshal() error(%v)", err)
+			return
+		}
+		vidVolume[volume] = volumeMeta
+		if stores, err = d.zk.VolumeStores(volume); err != nil {
+			return
+		}
+		vidStores[volume] = stores
 	}
+	d.vidVolume = vidVolume
+	d.vidStores = vidStores
+	return
 }
 
-// updateStoreState watch zk and update store state
-func (d *Directory) updateStoreState() err error {
-	//update  storesWritable  storesReadable  storesAll
+// Groups get all groups
+func (d *Directory) watchGroups() (ev <-chan zk.Event, err error) {
+	var (
+		gidStores     map[int][]string
+		group         string
+		groups,stores []string
+		data          []byte
+	)
+	if groups, ev, err = d.zk.WatchGroups()(); err != nil {
+		return
+	}
+	groupsMeta = make(map[int][]string)
+	for _, group = range groups {
+		if stores, err = d.zk.GroupStores(group); err != nil {
+			return
+		}
+		gidStores[group] = stores
+	}
+	d.gidStores = gidStores
 }
 
 // SyncZookeeper Synchronous zookeeper data to memory
 func (d *Directory) SyncZookeeper() {
 	var (
 		storeChanges     <-chan zk.Event
+		groupChanges     <-chan zk.Event
 		err              error
 	)
 	for {
-		if storeChanges, err = d.WatchGetStores(); err != nil {
-			log.Errorf("watchGetStores() called error(%v)", err)
+		if storeChanges, err = d.watchStores(); err != nil {
+			log.Errorf("watchStores() called error(%v)", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		if err = d.updateStoreStatus(); err != nil {
-			log.Errorf("updateStoreStatus() called error(%v)", err)
-			time.Sleep(1 * time.Second)
+		if groupChanges, err = d.watchGroups(); err != nil {
+			log.Errorf("watchGroups() called error(%v)", err)
+			time.Sleep(! * time.Second)
 			continue
 		}
 		select {
 		case <-storeChanges:
 			log.Infof("stores status change or new store")
 			break
+		case <-groupChanges:
+			log.Infof("new group")
+			break
 		case <-time.After(d.config.PullInterval):
-			log.Infof("stores state need sync")
-			if err = d.getStoreVolumes(); err != nil {
-				log.Errorf("getStoreVolumes() called error(%v)", err)
-			}
-			if err = d.updateStoreState(); err != nil {
-				log.Errorf("updateStoreState() called error(%v)", err)
+			if err = d.syncVolumes(); err != nil {
+				log.Errorf("syncVolumes() called error(%v)", err)
 			}
 		}
 	}
 }
+
+//

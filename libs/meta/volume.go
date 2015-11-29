@@ -2,8 +2,10 @@ package meta
 
 // volume zk meta data.
 type Volume struct {
-	NumReqs         string `json:"numReqs"`
-	RestSpace       string `json:"restSpace"`
-	AvgResponseTime string `json:"avgResponseTime"`
+	NumReqs         int    `json:"numReqs"`
+	RestSpace       int    `json:"restSpace"`
+	AvgResponseTime float  `json:"avgResponseTime"`
 	Id              string `json:"id"`
 }
+
+type VolumeList []*Volume
