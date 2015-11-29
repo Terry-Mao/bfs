@@ -19,13 +19,10 @@ type Directory struct {
 }
 
 // NewDirectory
-func NewDirectory() d *Directory {
+func NewDirectory(config *Config, zk *Zookeeper) d *Directory {
 	d = &Directory{}
-
-}
-
-func (d *Directory) init() {
-
+	d.config = config
+	d.zk = zk
 }
 
 // watchStores get all the store nodes and set up the watcher in the zookeeper
@@ -143,6 +140,7 @@ func (d *Directory) SyncZookeeper() {
 			time.Sleep(! * time.Second)
 			continue
 		}
+	selectBack:
 		select {
 		case <-storeChanges:
 			log.Infof("stores status change or new store")
@@ -154,6 +152,7 @@ func (d *Directory) SyncZookeeper() {
 			if err = d.syncVolumes(); err != nil {
 				log.Errorf("syncVolumes() called error(%v)", err)
 			}
+			goto selectBack
 		}
 	}
 }
