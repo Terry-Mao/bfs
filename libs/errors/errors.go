@@ -12,6 +12,7 @@ var (
 		// common
 		RetOK:       "ok",
 		RetParamErr: "store param error",
+		RetInternalErr: "internal server error",
 		// api
 		RetUploadMaxFile: "exceed upload max file num",
 		// block
