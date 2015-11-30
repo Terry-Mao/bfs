@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"github.com/Terry-Mao/bfs/libs/errors"
+	"github.com/Terry-Mao/bfs/libs/stat"
 	"github.com/Terry-Mao/bfs/store/block"
 	"github.com/Terry-Mao/bfs/store/index"
 	"github.com/Terry-Mao/bfs/store/needle"
-	"github.com/Terry-Mao/bfs/store/stat"
 	log "github.com/golang/glog"
 	"sort"
 	"strconv"

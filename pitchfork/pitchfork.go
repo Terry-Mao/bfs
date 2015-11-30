@@ -183,6 +183,7 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err erro
 			status = store.Status
 			if volume.Block.LastErr != nil {
 				store.Status = meta.StoreStatusFail
+				break
 			} else {
 				if volume.Block.Full() {
 					log.Infof("block: %s, offset: %d", volume.Block.File, volume.Block.Offset)

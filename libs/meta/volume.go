@@ -11,9 +11,9 @@ type Volume struct {
 */
 
 type Volume struct {
-	Id int32 `json:"id"`
-	//Stats   *stat.Stats       `json:"stats"`
+	Id           int32       `json:"id"`
 	Block        *SuperBlock `json:"block"`
 	CheckNeedles []*Needle   `json:"check_needles"`
+	//Stats   *stat.Stats       `json:"stats"`
 	//Indexer *index.Indexer    `json:"index"`
 }

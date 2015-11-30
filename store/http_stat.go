@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/Terry-Mao/bfs/libs/errors"
-	"github.com/Terry-Mao/bfs/store/stat"
+	"github.com/Terry-Mao/bfs/libs/stat"
 	log "github.com/golang/glog"
 	"net/http"
 	"time"
