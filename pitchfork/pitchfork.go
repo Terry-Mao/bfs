@@ -11,6 +11,7 @@ import (
 
 const (
 	retrySleep = time.Second * 1
+	retryCount = 3
 )
 
 type Pitchfork struct {
@@ -108,6 +109,7 @@ func (p *Pitchfork) Probe() {
 		stop = make(chan struct{})
 		for _, store = range stores {
 			go p.checkHealth(store, stop)
+			go p.checkNeedles(store, stop)
 		}
 		select {
 		case <-sev:
@@ -161,10 +163,9 @@ func (p *Pitchfork) divide(pitchforks []string, stores []*meta.Store) []*meta.St
 // checkHealth check the store health.
 func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err error) {
 	var (
-		status  int
-		needle  *meta.Needle
-		volume  *meta.Volume
-		volumes []*meta.Volume
+		status,i  int
+		volume    *meta.Volume
+		volumes   []*meta.Volume
 	)
 	log.Infof("check_health job start")
 	for {
@@ -175,34 +176,89 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err erro
 		case <-time.After(p.config.GetInterval):
 			break
 		}
+		status = store.Status
+		for i = 0; i < retryCount; i++ {
+			if volumes, err = store.Info(); err == nil {
+				break
+			}
+		}
+		if err == nil {
+			for _, volume = range volumes {
+				if volume.Block.LastErr != nil {
+					log.Infof("get store block.lastErr:%s   host:%s", volume.Block.LastErr, store.Stat)
+					store.Status = meta.StoreStatusFail
+					break
+				} else if volume.Block.Full() {
+						log.Infof("block: %s, offset: %d", volume.Block.File, volume.Block.Offset)
+						store.Status = meta.StoreStatusRead
+				}
+			}
+		} else {
+			log.Errorf("get store info failed, retry host:%s", store.Stat)
+			store.Status = meta.StoreStatusFail
+		}
+
+		if status != store.Status {
+			if err = p.zk.SetStore(store); err != nil {
+				log.Errorf("update store zk status failed, retry")
+				continue
+			}
+			if err = p.zk.setRoot(); err != nil {
+				log.Errorf("setRoot zk failed")
+			}
+		}
+	}
+	return
+}
+
+// checkNeedles check the store health.
+func (p *Pitchfork) checkNeedles(store *meta.Store, stop chan struct{}) (err error) {
+	var (
+		status,i  int
+		needle    *meta.Needle
+		volume    *meta.Volume
+		volumes   []*meta.Volume
+	)
+	log.Infof("checkNeedles job start")
+	for {
+		select {
+		case <-stop:
+			log.Infof("checkNeedles job stop")
+			return
+		case <-time.After(p.config.HeadInterval):
+			break
+		}
 		if volumes, err = store.Info(); err != nil {
-			log.Errorf("get store info failed, retry")
+			log.Errorf("get store info failed, retry host:%s", store.Stat)
 			continue
 		}
+		status = store.Status
 		for _, volume = range volumes {
-			status = store.Status
 			if volume.Block.LastErr != nil {
-				store.Status = meta.StoreStatusFail
 				break
 			} else {
-				if volume.Block.Full() {
-					log.Infof("block: %s, offset: %d", volume.Block.File, volume.Block.Offset)
-					store.Status = meta.StoreStatusRead
-				} else {
-					for _, needle = range volume.CheckNeedles {
-						// recheck?
-						if err = store.Head(needle); err != nil {
-							store.Status = meta.StoreStatusFail
+				for _, needle = range volume.CheckNeedles {
+					for i = 0; i < retryCount; i++ {
+						if err = store.Head(needle, volume.Id); err == nil {
 							break
 						}
 					}
+					if err != nil {
+						log.Errorf("head store failed, needle:%d host:%s", needle.Key, store.Stat)
+						store.Status = meta.StoreStatusFail
+						goto feedback
+					}
 				}
 			}
-			if status != store.Status {
-				if err = p.zk.SetStore(store); err != nil {
-					log.Errorf("update store zk status failed, retry")
-					continue
-				}
+		}
+	feedback:
+		if status != store.Status {
+			if err = p.zk.SetStore(store); err != nil {
+				log.Errorf("update store zk status failed, retry")
+				continue
+			}
+			if err = p.zk.setRoot(); err != nil {
+				log.Errorf("setRoot zk failed")
 			}
 		}
 	}

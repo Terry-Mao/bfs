@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	log "github.com/golang/glog"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	"io/ioutil"
 	"net/http"
 )
@@ -22,6 +23,7 @@ const (
 	StoreStatusFail   = StoreStatusEnable
 	// api
 	statAPI = "http://%s/info"
+	getAPI = "http://%s/get?key=%d&cookie=%d&vid=%d"
 )
 
 type StoreList []*Store
@@ -51,6 +53,11 @@ type Store struct {
 // statAPI get stat http api.
 func (s *Store) statAPI() string {
 	return fmt.Sprintf(statAPI, s.Stat)
+}
+
+// getApi get file http api
+func (s *Store) getAPI(n *Needle, vid int32) string {
+	return fmt.Sprintf(getAPI, s.Stat, n.Key, n.Cookie, vid)
 }
 
 // Info get store volumes info.
@@ -83,6 +90,17 @@ func (s *Store) Info() (vs []*Volume, err error) {
 }
 
 // Head send a head request to store.
-func (s *Store) Head(n *Needle) (err error) {
+func (s *Store) Head(n *Needle, vid int32) (err error) {
+	var (
+		resp    *http.Response
+		url     string
+	)
+	url = s.getAPI(n, vid)
+	if resp, err = http.Head(url); err != nil {
+		return
+	}
+	if resp.StatusCode == http.StatusInternalServerError {
+		err = errors.ErrInternal
+	}
 	return
 }
