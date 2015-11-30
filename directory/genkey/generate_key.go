@@ -10,7 +10,7 @@ const (
 // Genkey generate key for upload file
 type Genkey struct {
 	client    *Client
-	queue     *Queue
+	keys      chan int64
 }
 
 // NewGenkey 
@@ -21,14 +21,14 @@ func NewGenkey(zservers []string, zpath string, ztimeout time.Duration, workerId
 	}
 	g = &Genkey{}
 	g.client = NewClient(workerId)
-	g.queue = NewQueue()
+	g.keys = make(chan int64, maxSize)
 	go g.preGenerate()
 	return
 }
 
 // Getkey get key for upload file
 func (g *Genkey) Getkey() int64 {
-	return g.queue.Pop()
+	return <-g.keys
 }
 
 // preGenerate pre generate key until 1000
@@ -39,16 +39,13 @@ func (g *Genkey) preGenerate() {
 		err   error
 	)
 	for {
-		if g.queue.Size() > maxSize {
-			time.Sleep(1 * time.Second)
-		}
 		if keys, err = g.client.Ids(100); err != nil {
 			log.Errorf("preGenerate() error(%v)  need check!!", err)
 			time.Sleep(errorSleep)
 			continue
 		}
 		for _, key := range keys {
-			g.queue.Push(key)
+			g.keys <- key
 		}
 	}
 }
