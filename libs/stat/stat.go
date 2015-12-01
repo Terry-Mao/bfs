@@ -158,3 +158,9 @@ type Info struct {
 	// stats
 	Stats *Stats `json:"stats"`
 }
+
+// StatsVolume  for zk /volume stat
+type StatsVolume struct {
+	TotalAddProcessed       uint64 `json:"total_add_processed"`
+	TotalAddDelay           uint64 `json:"total_add_delay"`
+}
