@@ -1,16 +1,19 @@
 package main
+import (
+	"github.com/Terry-Mao/bfs/libs/stat"
+)
 
 // Directory
 // id means store serverid; vid means volume id; gid means group id
 type Directory struct {
 	idStore          map[string]*meta.Store // store status
 	idVolumes        map[string][]string    // init from getStoreVolume
+	idGroup          map[string]string      // for http read
 
 	vidVolume        map[string]*meta.Volume
 	vidStores        map[string][]string    // init from getStoreVolume    for  http Read
 
 	gidStores        map[string][]string
-
 	genkey           *Genkey
 	//hbase client
 
@@ -25,8 +28,8 @@ func NewDirectory(config *Config, zk *Zookeeper) d *Directory {
 	d.zk = zk
 }
 
-// watchStores get all the store nodes and set up the watcher in the zookeeper
-func (d *Directory) watchStores() (ev <-chan zk.Event, err error) {
+// Stores get all the store nodes and set a watcher
+func (d *Directory) stores() (ev <-chan zk.Event, err error) {
 	var (
 		storeMeta              *meta.Store
 		idStore                map[string]*meta.Store
@@ -67,30 +70,30 @@ func (d *Directory) watchStores() (ev <-chan zk.Event, err error) {
 }
 
 // Volumes get all volumes in zk
-func (d *Directory) syncVolumes() err error {
+func (d *Directory) volumes() err error {
 	var (
-		volumeMeta     *meta.Volume
-		vidVolume      map[string]*meta.Volume
+		volumeState    *meta.StateVolume
+		vidVolume      map[string]*meta.StateVolume
 		volume,store   string
 		volumes,stores []string
 		vidStores      map[string][]string
 		data           []byte
 	)
-	if volumes, _, err = d.zk.Volumes(); err != nil {
+	if volumes, err = d.zk.Volumes(); err != nil {
 		return
 	}
-	vidVolume = make(map[string]*meta.Volume)
+	vidVolume = make(map[string]*meta.StateVolume)
 	vidStores = make(map[string][]string)
 	for _, volume = range volumes {
-		if data, _, err = d.zk.Volume(volume); err != nil {
+		if data, err = d.zk.Volume(volume); err != nil {
 			return
 		}
-		volumeMeta = new(meta.Volume)
-		if err = json.Unmarshal(data, volumeMeta); err != nil {
+		volumeState = new(meta.StateVolume)
+		if err = json.Unmarshal(data, volumeState); err != nil {
 			log.Errorf("json.Unmarshal() error(%v)", err)
 			return
 		}
-		vidVolume[volume] = volumeMeta
+		vidVolume[volume] = volumeState
 		if stores, err = d.zk.VolumeStores(volume); err != nil {
 			return
 		}
@@ -101,13 +104,13 @@ func (d *Directory) syncVolumes() err error {
 	return
 }
 
-// Groups get all groups
-func (d *Directory) watchGroups() (ev <-chan zk.Event, err error) {
+// Groups get all groups and set a watcher
+func (d *Directory) groups() (ev <-chan zk.Event, err error) {
 	var (
-		gidStores     map[int][]string
-		group         string
-		groups,stores []string
-		data          []byte
+		gidStores,idGroup map[int][]string
+		group,store       string
+		groups,stores     []string
+		data              []byte
 	)
 	if groups, ev, err = d.zk.WatchGroups()(); err != nil {
 		return
@@ -118,8 +121,12 @@ func (d *Directory) watchGroups() (ev <-chan zk.Event, err error) {
 			return
 		}
 		gidStores[group] = stores
+		for _,store = range stores {
+			idGroup[store] = group
+		}
 	}
 	d.gidStores = gidStores
+	d.idGroup = idGroup
 }
 
 // SyncZookeeper Synchronous zookeeper data to memory
@@ -130,13 +137,13 @@ func (d *Directory) SyncZookeeper() {
 		err              error
 	)
 	for {
-		if storeChanges, err = d.watchStores(); err != nil {
-			log.Errorf("watchStores() called error(%v)", err)
+		if storeChanges, err = d.stores(); err != nil {
+			log.Errorf("Stores() called error(%v)", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		if groupChanges, err = d.watchGroups(); err != nil {
-			log.Errorf("watchGroups() called error(%v)", err)
+		if groupChanges, err = d.groups(); err != nil {
+			log.Errorf("Groups() called error(%v)", err)
 			time.Sleep(! * time.Second)
 			continue
 		}
@@ -149,12 +156,10 @@ func (d *Directory) SyncZookeeper() {
 			log.Infof("new group")
 			break
 		case <-time.After(d.config.PullInterval):
-			if err = d.syncVolumes(); err != nil {
+			if err = d.volumes(); err != nil {
 				log.Errorf("syncVolumes() called error(%v)", err)
 			}
 			goto selectBack
 		}
 	}
 }
-
-//

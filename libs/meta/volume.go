@@ -12,3 +12,10 @@ type Volume struct {
 type InfoVolume struct {
 	Volumes      []*Volume   `json:"volumes"`
 }
+
+// StateVolume  for zk /volume stat
+type StateVolume struct {
+	TotalAddProcessed       uint64 `json:"total_add_processed"`
+	TotalAddDelay           uint64 `json:"total_add_delay"`
+	RestSpace               uint32 `json:"rest_space"`
+}

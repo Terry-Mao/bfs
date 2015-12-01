@@ -192,8 +192,8 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err erro
 						log.Infof("block: %s, offset: %d", volume.Block.File, volume.Block.Offset)
 						store.Status = meta.StoreStatusRead
 				}
-				if err = p.zk.SetVolumeStat(volume.Id, volume.Stats); err != nil {
-					log.Errorf("zk.SetVolumeStat() error(%v)", err)
+				if err = p.zk.SetVolumeState(volume); err != nil {
+					log.Errorf("zk.SetVolumeState() error(%v)", err)
 				}
 			}
 		} else {
