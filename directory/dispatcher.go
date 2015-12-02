@@ -7,10 +7,10 @@ import (
 // Dispatcher
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gidR   map[string]bool  // for read
-	gidW   map[string]int   // for write
-	gidWIndex map[string]int // volume index  directory:idVolumes[store][index] =>volume id
-	dr     *Directory
+	gidR      map[string]bool  // for read
+	gidW      map[string]int   // for write
+	gidWIndex map[string]int   // volume index  directory:idVolumes[store][index] =>volume id
+	dr        *Directory
 }
 
 const (
@@ -23,12 +23,12 @@ const (
 )
 
 // 
-func (d *Dispatcher) Init(dr *Directory) err error {
+func (d *Dispatcher) Init(dr *Directory) (err error) {
 	var (
 		gid,store,volume         string
 		stores                   []string
 		storeMeta                *meta.Store
-		volumeState              *meta.StateVolume
+		volumeState              *meta.VolumeState
 		writable,readable        bool
 		totalAdd,totalAddDelay   uint64
 		restSpace,minScore,score uint32
@@ -51,7 +51,7 @@ func (d *Dispatcher) Init(dr *Directory) err error {
 				for _, volume = range dr.idVolumes[store] {
 					volumeState = dr.vidVolume[volume]
 					totalAdd = totalAdd + volumeState.TotalAddProcessed
-					restSpace = restSpace + volumeState.RestSpace
+					restSpace = restSpace + volumeState.FreeSpace
 					totalAddDelay = totalAddDelay + volumeState.TotalAddDelay
 				}
 				score = d.calScore(totalAdd, restSpace, totalAddDelay)
