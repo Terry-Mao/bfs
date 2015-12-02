@@ -22,7 +22,7 @@ type Directory struct {
 }
 
 // NewDirectory
-func NewDirectory(config *Config, zk *Zookeeper) d *Directory {
+func NewDirectory(config *Config, zk *Zookeeper) (d *Directory) {
 	d = &Directory{}
 	d.config = config
 	d.zk = zk
@@ -70,10 +70,10 @@ func (d *Directory) stores() (ev <-chan zk.Event, err error) {
 }
 
 // Volumes get all volumes in zk
-func (d *Directory) volumes() err error {
+func (d *Directory) volumes() (err error) {
 	var (
-		volumeState    *meta.StateVolume
-		vidVolume      map[string]*meta.StateVolume
+		volumeState    *meta.VolumeState
+		vidVolume      map[string]*meta.VolumeState
 		volume,store   string
 		volumes,stores []string
 		vidStores      map[string][]string
@@ -82,13 +82,13 @@ func (d *Directory) volumes() err error {
 	if volumes, err = d.zk.Volumes(); err != nil {
 		return
 	}
-	vidVolume = make(map[string]*meta.StateVolume)
+	vidVolume = make(map[string]*meta.VolumeState)
 	vidStores = make(map[string][]string)
 	for _, volume = range volumes {
 		if data, err = d.zk.Volume(volume); err != nil {
 			return
 		}
-		volumeState = new(meta.StateVolume)
+		volumeState = new(meta.VolumeState)
 		if err = json.Unmarshal(data, volumeState); err != nil {
 			log.Errorf("json.Unmarshal() error(%v)", err)
 			return
