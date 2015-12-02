@@ -10,6 +10,7 @@ const (
 	configZookeeperTimeout          = time.Second * 1 // 1s
 	configZookeeperPitchforkRoot    = "/pitchfork"
 	configZookeeperStoreRoot        = "/rack"
+	configZookeeperVolumeRoot       = "/volume"
 	configGetInterval               = time.Second * 3
 	configHeadInterval              = time.Second * 60
 	configMaxUsedSpacePercent       = 0.95
@@ -25,6 +26,7 @@ type Config struct {
 	ZookeeperTimeout          time.Duration `goconf:"zookeeper:timeout"`
 	ZookeeperPitchforkRoot    string        `goconf:"zookeeper:pitchforkroot"`
 	ZookeeperStoreRoot        string        `goconf:"zookeeper:storeroot"`
+	ZookeeperVolumeRoot       string        `goconf:"zookeeper:volumeroot"`
 	GetInterval               time.Duration `goconf:"store:get_interval:time"`
 	HeadInterval              time.Duration `goconf:"store:head_interval:time"`
 	MaxUsedSpacePercent       float32       `goconf:"store:max_used_space_percent"`
@@ -57,6 +59,9 @@ func (c *Config) setDefault() {
 	}
 	if len(c.ZookeeperStoreRoot) == 0 {
 		c.ZookeeperStoreRoot = configZookeeperStoreRoot
+	}
+	if len(c.ZookeeperVolumeRoot) == 0 {
+		c.ZookeeperVolumeRoot = configZookeeperVolumeRoot
 	}
 	if c.GetInterval == 0 {
 		c.GetInterval = configGetInterval

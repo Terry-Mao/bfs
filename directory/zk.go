@@ -17,8 +17,7 @@ type Zookeeper struct {
 }
 
 // NewZookeeper new a connection to zookeeper.
-func NewZookeeper(addrs []string, timeout time.Duration, storeRootPath,volumeRootPath,groupRootPath string) (
-	z *Zookeeper, err error) {
+func NewZookeeper(addrs []string, timeout time.Duration, storeRootPath,volumeRootPath,groupRootPath string) (z *Zookeeper, err error) {
 	var (
 		s <-chan zk.Event
 	)

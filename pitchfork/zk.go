@@ -7,16 +7,18 @@ import (
 	"github.com/samuel/go-zookeeper/zk"
 	"path"
 	"time"
+	"fmt"
 )
 
 type Zookeeper struct {
 	c                 *zk.Conn
 	storeRootPath     string
 	pitchforkRootPath string
+	volumeRootPath    string
 }
 
 // NewZookeeper new a connection to zookeeper.
-func NewZookeeper(addrs []string, timeout time.Duration, pitchforkRootPath string, storeRootPath string) (
+func NewZookeeper(addrs []string, timeout time.Duration, pitchforkRootPath,storeRootPath,volumeRootPath string) (
 	z *Zookeeper, err error) {
 	var (
 		s <-chan zk.Event
@@ -28,6 +30,7 @@ func NewZookeeper(addrs []string, timeout time.Duration, pitchforkRootPath strin
 	}
 	z.storeRootPath = storeRootPath
 	z.pitchforkRootPath = pitchforkRootPath
+	z.volumeRootPath = volumeRootPath
 	go func() {
 		var e zk.Event
 		for {
@@ -124,6 +127,33 @@ func (z *Zookeeper) Store(rack, store string) (data []byte, err error) {
 	var spath = path.Join(z.storeRootPath, rack, store)
 	if data, _, err = z.c.Get(spath); err != nil {
 		log.Errorf("zk.Get(\"%s\") error(%v)", spath, err)
+	}
+	return
+}
+
+// SetVolumeStat set volume stat 
+func (z *Zookeeper) SetVolumeState(volume  *meta.Volume) (err error) {
+	var (
+		d       []byte
+		s       *zk.Stat
+		spath   string
+		vstate = &meta.StateVolume{
+			TotalAddProcessed: volume.Stats.TotalAddProcessed,
+			TotalAddDelay: volume.Stats.TotalAddDelay,
+		}
+	)
+	vstate.RestSpace = volume.Block.RestSpace()
+	spath = path.Join(z.volumeRootPath, fmt.Sprintf("%d", volume.Id))
+	if _, s, err = z.c.Get(spath); err != nil {
+		log.Errorf("zk.Get(\"%s\") error(%v)", spath, err)
+		return
+	}
+	if d, err = json.Marshal(vstate); err != nil {
+		log.Errorf("json.Marshal() error(%v)", err)
+		return
+	}
+	if _, err = z.c.Set(spath, d, s.Version); err != nil {
+		log.Errorf("zk.Set(\"%s\") error(%v)", spath, err)
 	}
 	return
 }

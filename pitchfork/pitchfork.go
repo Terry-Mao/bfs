@@ -163,9 +163,9 @@ func (p *Pitchfork) divide(pitchforks []string, stores []*meta.Store) []*meta.St
 // checkHealth check the store health.
 func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err error) {
 	var (
-		status,i  int
-		volume    *meta.Volume
-		volumes   []*meta.Volume
+		status,i   int
+		volume     *meta.Volume
+		volumes    []*meta.Volume
 	)
 	log.Infof("check_health job start")
 	for {
@@ -192,6 +192,9 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err erro
 						log.Infof("block: %s, offset: %d", volume.Block.File, volume.Block.Offset)
 						store.Status = meta.StoreStatusRead
 				}
+				if err = p.zk.SetVolumeState(volume); err != nil {
+					log.Errorf("zk.SetVolumeState() error(%v)", err)
+				}
 			}
 		} else {
 			log.Errorf("get store info failed, retry host:%s", store.Stat)
@@ -215,7 +218,7 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err erro
 func (p *Pitchfork) checkNeedles(store *meta.Store, stop chan struct{}) (err error) {
 	var (
 		status,i  int
-		needle    *meta.Needle
+		needle    meta.Needle
 		volume    *meta.Volume
 		volumes   []*meta.Volume
 	)
@@ -239,7 +242,7 @@ func (p *Pitchfork) checkNeedles(store *meta.Store, stop chan struct{}) (err err
 			} else {
 				for _, needle = range volume.CheckNeedles {
 					for i = 0; i < retryCount; i++ {
-						if err = store.Head(needle, volume.Id); err == nil {
+						if err = store.Head(&needle, volume.Id); err == nil {
 							break
 						}
 					}

@@ -16,3 +16,8 @@ type SuperBlock struct {
 func (b *SuperBlock) Full() bool {
 	return ((MaxBlockOffset - b.Offset) < (blockLeftSpace / b.Padding))
 }
+
+// RestSpace cal rest space of volume
+func (b *SuperBlock) RestSpace() uint32 {
+	return MaxBlockOffset - b.Offset
+}
