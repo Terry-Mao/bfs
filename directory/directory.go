@@ -22,7 +22,7 @@ type Directory struct {
 }
 
 // NewDirectory
-func NewDirectory(config *Config, zk *Zookeeper) d *Directory {
+func NewDirectory(config *Config, zk *Zookeeper) (d *Directory) {
 	d = &Directory{}
 	d.config = config
 	d.zk = zk
@@ -70,7 +70,7 @@ func (d *Directory) stores() (ev <-chan zk.Event, err error) {
 }
 
 // Volumes get all volumes in zk
-func (d *Directory) volumes() err error {
+func (d *Directory) volumes() (err error) {
 	var (
 		volumeState    *meta.StateVolume
 		vidVolume      map[string]*meta.StateVolume
