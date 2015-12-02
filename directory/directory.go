@@ -12,20 +12,25 @@ type Directory struct {
 
 	vidVolume        map[string]*meta.Volume
 	vidStores        map[string][]string    // init from getStoreVolume    for  http Read
-
 	gidStores        map[string][]string
+
 	genkey           *Genkey
-	//hbase client
+	hbaseDao         *hbase.HBaseDao
 
 	config           *Config
 	zk               *Zookeeper
 }
 
 // NewDirectory
-func NewDirectory(config *Config, zk *Zookeeper) (d *Directory) {
+func NewDirectory(config *Config, zk *Zookeeper) (d *Directory, err error) {
 	d = &Directory{}
 	d.config = config
 	d.zk = zk
+	if d.genkey, err = NewGenkey(config.SfZookeeperAddrs, config.SfZookeeperPath, config.SfZookeeperTimeout, config.SfWorkId); err != nil {
+		return nil, err
+	}
+	d.hbaseDao = hbase.NewHBaseDao()//////
+	return
 }
 
 // Stores get all the store nodes and set a watcher
