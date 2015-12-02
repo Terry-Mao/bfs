@@ -41,7 +41,7 @@ func (p *Pitchfork) init() (node string, err error) {
 }
 
 // watchPitchforks get all the pitchfork nodes and set up the watcher in the zookeeper.
-func (p *Pitchfork) watchPitchforks() (res []string, ev <-chan zk.Event, err error) {
+func (p *Pitchfork) watch() (res []string, ev <-chan zk.Event, err error) {
 	if res, ev, err = p.zk.WatchPitchforks(); err == nil {
 		sort.Strings(res)
 	}
@@ -97,7 +97,7 @@ func (p *Pitchfork) Probe() {
 			time.Sleep(retrySleep)
 			continue
 		}
-		if pitchforks, pev, err = p.watchPitchforks(); err != nil {
+		if pitchforks, pev, err = p.watch(); err != nil {
 			log.Errorf("WatchGetPitchforks() called error(%v)", err)
 			time.Sleep(retrySleep)
 			continue
@@ -163,9 +163,9 @@ func (p *Pitchfork) divide(pitchforks []string, stores []*meta.Store) []*meta.St
 // checkHealth check the store health.
 func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err error) {
 	var (
-		status,i   int
-		volume     *meta.Volume
-		volumes    []*meta.Volume
+		status, i int
+		volume    *meta.Volume
+		volumes   []*meta.Volume
 	)
 	log.Infof("check_health job start")
 	for {
@@ -181,6 +181,7 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err erro
 			if volumes, err = store.Info(); err == nil {
 				break
 			}
+			time.Sleep(retrySleep)
 		}
 		if err == nil {
 			for _, volume = range volumes {
@@ -189,8 +190,8 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err erro
 					store.Status = meta.StoreStatusFail
 					break
 				} else if volume.Block.Full() {
-						log.Infof("block: %s, offset: %d", volume.Block.File, volume.Block.Offset)
-						store.Status = meta.StoreStatusRead
+					log.Infof("block: %s, offset: %d", volume.Block.File, volume.Block.Offset)
+					store.Status = meta.StoreStatusRead
 				}
 				if err = p.zk.SetVolumeState(volume); err != nil {
 					log.Errorf("zk.SetVolumeState() error(%v)", err)
@@ -200,14 +201,10 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err erro
 			log.Errorf("get store info failed, retry host:%s", store.Stat)
 			store.Status = meta.StoreStatusFail
 		}
-
 		if status != store.Status {
 			if err = p.zk.SetStore(store); err != nil {
 				log.Errorf("update store zk status failed, retry")
 				continue
-			}
-			if err = p.zk.setRoot(); err != nil {
-				log.Errorf("setRoot zk failed")
 			}
 		}
 	}
@@ -217,7 +214,7 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err erro
 // checkNeedles check the store health.
 func (p *Pitchfork) checkNeedles(store *meta.Store, stop chan struct{}) (err error) {
 	var (
-		status,i  int
+		status, i int
 		needle    meta.Needle
 		volume    *meta.Volume
 		volumes   []*meta.Volume
@@ -237,31 +234,28 @@ func (p *Pitchfork) checkNeedles(store *meta.Store, stop chan struct{}) (err err
 		}
 		status = store.Status
 		for _, volume = range volumes {
-			if volume.Block.LastErr != nil {
+			if err = volume.Block.LastErr; err != nil {
 				break
-			} else {
-				for _, needle = range volume.CheckNeedles {
-					for i = 0; i < retryCount; i++ {
-						if err = store.Head(&needle, volume.Id); err == nil {
-							break
-						}
+			}
+			for _, needle = range volume.CheckNeedles {
+				for i = 0; i < retryCount; i++ {
+					if err = store.Head(&needle, volume.Id); err == nil {
+						break
 					}
-					if err != nil {
-						log.Errorf("head store failed, needle:%d host:%s", needle.Key, store.Stat)
-						store.Status = meta.StoreStatusFail
-						goto feedback
-					}
+					log.Errorf("head store failed, needle:%d host:%s", needle.Key, store.Stat)
+					time.Sleep(retrySleep)
+				}
+				if err != nil {
+					store.Status = meta.StoreStatusFail
+					goto failed
 				}
 			}
 		}
-	feedback:
+	failed:
 		if status != store.Status {
 			if err = p.zk.SetStore(store); err != nil {
 				log.Errorf("update store zk status failed, retry")
 				continue
-			}
-			if err = p.zk.setRoot(); err != nil {
-				log.Errorf("setRoot zk failed")
 			}
 		}
 	}
