@@ -137,12 +137,12 @@ func (z *Zookeeper) SetVolumeState(volume  *meta.Volume) (err error) {
 		d       []byte
 		s       *zk.Stat
 		spath   string
-		vstate = &meta.StateVolume{
+		vstate = &meta.VolumeState{
 			TotalAddProcessed: volume.Stats.TotalAddProcessed,
 			TotalAddDelay: volume.Stats.TotalAddDelay,
 		}
 	)
-	vstate.RestSpace = volume.Block.RestSpace()
+	vstate.FreeSpace = volume.Block.FreeSpace()
 	spath = path.Join(z.volumeRootPath, fmt.Sprintf("%d", volume.Id))
 	if _, s, err = z.c.Get(spath); err != nil {
 		log.Errorf("zk.Get(\"%s\") error(%v)", spath, err)

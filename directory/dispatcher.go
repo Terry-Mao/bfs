@@ -28,7 +28,7 @@ func (d *Dispatcher) Init(dr *Directory) (err error) {
 		gid,store,volume         string
 		stores                   []string
 		storeMeta                *meta.Store
-		volumeState              *meta.StateVolume
+		volumeState              *meta.VolumeState
 		writable,readable        bool
 		totalAdd,totalAddDelay   uint64
 		restSpace,minScore,score uint32
@@ -51,7 +51,7 @@ func (d *Dispatcher) Init(dr *Directory) (err error) {
 				for _, volume = range dr.idVolumes[store] {
 					volumeState = dr.vidVolume[volume]
 					totalAdd = totalAdd + volumeState.TotalAddProcessed
-					restSpace = restSpace + volumeState.RestSpace
+					restSpace = restSpace + volumeState.FreeSpace
 					totalAddDelay = totalAddDelay + volumeState.TotalAddDelay
 				}
 				score = d.calScore(totalAdd, restSpace, totalAddDelay)
