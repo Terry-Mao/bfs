@@ -1,83 +1,114 @@
 package main
-import "github.com/Terry-Mao/bfs/libs/meta"
+import (
+	"github.com/Terry-Mao/bfs/libs/meta"
+	"errors"
+)
 
-/*
-// StoreState contains store state data
-type StoreState struct {
-	Id              string
-	restSpace       int           //rest space of store
-	avgResponseTime float         //average response time of write req
-	numReqs         int           //num reqs of interval time
-	score           int           //score effect probability of being chosen
-}*/
-
-// 
+// Dispatcher
+// get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gidReadable   []string   // for read
-	gidScore      map[string]int   // for write
-	dr            *Directory
+	gidR   map[string]bool  // for read
+	gidW   map[string]int   // for write
+	gidWIndex map[string]int // volume index  directory:idVolumes[store][index] =>volume id
+	dr     *Directory
 }
 
+const (
+	nanoToMs = 1000000   // ns ->  ms
+	maxRate = 10000
+	restSpaceRate = 6000
+	addDelayRate = maxRate - restSpaceRate
+	spaceBenchmark = meta.MaxBlockOffset // 1 volume
+	addDelayBenchmark = 1 // 1ms   <1ms means no load
+)
+
 // 
-func (d Dispatcher) Init(dr *Directory) err error {
+func (d *Dispatcher) Init(dr *Directory) err error {
 	var (
-		gid,store,volume  string
-		stores            []string
-		storeMata         *meta.Store
-		volumeMeta        *meta.Volume
-		writable,readable bool
-		numReqs,restSpace,minScore,score int
-		avgResponseTime   float
+		gid,store,volume         string
+		stores                   []string
+		storeMeta                *meta.Store
+		volumeState              *meta.StateVolume
+		writable,readable        bool
+		totalAdd,totalAddDelay   uint64
+		restSpace,minScore,score uint32
 	)
 	for gid, stores = range dr.gidStores {
 		writable = readable = true
 		for _, store = range stores {
-			storeMata = dr.idStore[store]
-			if storeMata.Status == meta.StoreStatusEnable || storeMeta.Status == meta.StoreStatusRead {
+			storeMeta = dr.idStore[store]
+			if storeMeta.Status == meta.StoreStatusEnable || storeMeta.Status == meta.StoreStatusRead {
 				writable = false
 			}
-			if storeMeta.Status != meta.StoreStatusEnable {
+			if storeMeta.Status == meta.StoreStatusEnable {
 				readable = false
 			}
 		}
 		if writable {
 			d.gidStatus[gid] = meta.StoreStatusHealth
 			for _, store = range stores {
-				numReqs = restSpace = minScore = avgResponseTime = 0
+				totalAdd = totalAddDelay = restSpace = minScore = 0
 				for _, volume = range dr.idVolumes[store] {
-					volumeMeta = dr.vidVolume[volume]
-					numReqs = numReqs + volumeMeta.NumReqs
-					restSpace = restSpace + volumeMeta.RestSpace
-					avgResponseTime = volumeMeta.AvgResponseTime * volumeMeta.NumReqs
+					volumeState = dr.vidVolume[volume]
+					totalAdd = totalAdd + volumeState.TotalAddProcessed
+					restSpace = restSpace + volumeState.RestSpace
+					totalAddDelay = totalAddDelay + volumeState.TotalAddDelay
 				}
-				avgResponseTime = avgResponseTime / numReqs
-				score = d.calScore(numReqs, restSpace, avgResponseTime)
+				score = d.calScore(totalAdd, restSpace, totalAddDelay)
 				if score < minScore {
 					minScore = score
 				}
 			}
-			d.gidScore[gid] = minScore
+			d.gidW[gid] = minScore
 		}
 		if readable {
-			d.gidReadable = append(d.gidReadable, gid)
+			d.gidR[gid] = true
 		}
 	}
 	return
 }
 
-// cal_score algorithm of calculating score
-func (d *Dispatcher) calScore(numReqs, restSpace int, avgResponseTime float) score int {
-	//
+// cal_score algorithm of calculating score      bug: 0ms   todo:
+func (d *Dispatcher) calScore(totalAdd, totalAddDelay uint64, restSpace uint32) int {
+	return int((restSpace / uint32(spaceBenchmark)) * restSpaceRate + ((addDelayMaxScore / (((uint32(totalAddDelay) / nanoToMs) / uint32(totalAdd)) / addDelayBenchmark)) * addDelayRate)
+}
+
+// WritableStores get suitable stores for writing
+func (d *Dispatcher) WritableStores() (stores []string, vid string, err error) {
+	var (
+		store,gid     string
+		ok            bool
+	)
+	//get gid
+	if stores, ok = d.dr.gidStores[gid]; !ok {
+		return nil, nil, errors.New("gid cannot mathc stores")
+	}
+	if len(stores) > 0 {
+		store = stores[0]
+		vid = (d.gidWIndex[gid] + 1) % len(d.dr.idVolumes[store])
+		d.gidWIndex[gid] = vid
+	}
 	return
 }
 
-// WritableStoreGroup get suitable stores for writing
-func (d *Dispatcher) WritableStores() ([]*meta.Store, err error) {
-	// gidScore
-}
-
-// ReadableStoreGroup get suitable stores for reading
-func (d *Dispatcher) ReadableStores(vid int) ([]*meta.Store, err error) {
-	// gidReadable
+// ReadableStores get suitable stores for reading
+func (d *Dispatcher) ReadableStores(vid string) (stores []string, err error) {
+	var (
+		store,gid    string
+		ok           bool
+	)
+	if stores, ok = d.dr.vidStores[vid]; !ok {
+		return nil, errors.New("vid cannot match stores")
+	}
+	if len(stores) > 0 {
+		store = stores[0]
+		if gid, ok = d.dr.idGroup[store]; !ok {
+			return nil, errors.New("idGroup internal error")
+		}
+		if _, ok = d.gidR[gid]; !ok {
+			return nil, errors.New("vid of group cannot read")
+		}
+	}
+	return
 }
 

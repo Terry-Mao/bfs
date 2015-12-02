@@ -63,10 +63,9 @@ func (s *Store) getAPI(n *Needle, vid int32) string {
 // Info get store volumes info.
 func (s *Store) Info() (vs []*Volume, err error) {
 	var (
-		ok       bool
 		body     []byte
 		resp     *http.Response
-		dataJson map[string]interface{}
+		dataJson InfoVolume
 		url      = s.statAPI()
 	)
 	if resp, err = http.Get(url); err != nil {
@@ -82,10 +81,7 @@ func (s *Store) Info() (vs []*Volume, err error) {
 		log.Errorf("json.Unmarshal() error(%v)", err)
 		return
 	}
-	if vs, ok = dataJson["volumes"].([]*Volume); !ok {
-		log.Errorf("type assection failed")
-		vs = nil
-	}
+	vs = dataJson.Volumes
 	return
 }
 
