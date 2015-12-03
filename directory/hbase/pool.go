@@ -1,4 +1,4 @@
-package pool
+package hbase
 
 import (
 	"container/list"

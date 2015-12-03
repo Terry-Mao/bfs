@@ -1,6 +1,8 @@
 package main
 import (
-	"github.com/Terry-Mao/bfs/libs/stat"
+	"github.com/Terry-Mao/bfs/directory/hbase"
+	"github.com/Terry-Mao/bfs/directory/snowflake"
+	log "github.com/golang/glog"
 )
 
 // Directory
@@ -15,7 +17,7 @@ type Directory struct {
 	gidStores        map[string][]string
 
 	genkey           *Genkey
-	hbaseDao         *hbase.HBaseDao
+	hbase            *HBaseClient
 
 	config           *Config
 	zk               *Zookeeper
@@ -29,7 +31,10 @@ func NewDirectory(config *Config, zk *Zookeeper) (d *Directory, err error) {
 	if d.genkey, err = NewGenkey(config.SfZookeeperAddrs, config.SfZookeeperPath, config.SfZookeeperTimeout, config.SfWorkId); err != nil {
 		return nil, err
 	}
-	d.hbaseDao = hbase.NewHBaseDao()//////
+	if err = hbase.Init(config.HbaseAddr, config.HbaseTimeout, config.HbaseMaxIdle, config.HbaseMaxActive); err != nil {
+		return nil, err
+	}
+	d.hbase = hbase.NewHBaseClient()
 	return
 }
 
