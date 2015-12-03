@@ -1,60 +1,164 @@
 package hbase
 
 import (
-	"bilizone/model/hbase"
-	"bilizone/model/stat"
+	"directory/hbase/hbasethrift"
+	"directory/hbase/meta"
 	"bytes"
+	"time"
+	"errors"
 	"encoding/binary"
-	log "github.com/felixhao/log4go"
+	log "github.com/golang/glog"
 )
 
-type HBaseDao struct {
+const (
+	retrySleep = time.Second * 1
+	retryCount = 3
+)
+
+type HBaseClient struct {
 }
 
-func NewHBaseDao() *HBaseDao {
-	return &HBaseDao{}
+// NewHBaseClient
+func NewHBaseClient() *HBaseClient {
+	return &HBaseClient{}
 }
 
-func (dao *HBaseDao) GetStat(aid int64) (s *stat.Stat, err error) {
-	bs := make([]byte, 8)
-	binary.BigEndian.PutUint64(bs, uint64(aid))
-	// get client
-	c, err := hbasePool.Get()
-	if err != nil {
-		log.Error("hbasePool.Get() error(%v)", err)
+// Get if m return nil means not found
+func (h *HBaseClient) Get(key int64) (m *meta.Meta, err error) {
+	var (
+		ks	= make([]byte, 8)
+		i     int
+		v     uint32
+		c     interface{}
+		r     *hbasethrift.TResult_
+		cv    *hbasethrift.TColumnValue
+	)
+	binary.BigEndian.PutUint64(ks, uint64(key))
+	if c, err = hbasePool.Get(); err != nil {
+		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
-	r, err := c.(hbase.THBaseService).Get(stat.HbaseTable, &hbase.TGet{Row: bs})
+	for i = 0; i < retryCount; i++ {
+		if r, err = c.(hbasethrift.THBaseService).Get(meta.HbaseTable, &hbasethrift.TGet{Row: ks}); err == nil {
+			break
+		}
+		time.Sleep(retrySleep)
+	}
 	if err != nil {
-		log.Error("client.Get error(%v)", err)
+		log.Errorf("client.Get error(%v)", err)
 		return
 	}
-	s = &stat.Stat{}
-	for _, cv := range r.ColumnValues {
+	if len(r.ColumnValues) == 0 {
+		return
+	}
+	m = &meta.Meta{}
+	m.Key = key
+	for _, cv = range r.ColumnValues {
 		if cv != nil {
-			v := int(binary.BigEndian.Uint64(cv.Value))
-			if bytes.Equal(cv.Family, stat.HbaseFamilyPlat) {
-				if bytes.Equal(cv.Qualifier, stat.HbaseColumnWeb) {
-					s.Web = v
-				} else if bytes.Equal(cv.Qualifier, stat.HbaseColumnH5) {
-					s.H5 = v
-				} else if bytes.Equal(cv.Qualifier, stat.HbaseColumnOuter) {
-					s.Outer = v
-				} else if bytes.Equal(cv.Qualifier, stat.HbaseColumnIos) {
-					s.Ios = v
-				} else if bytes.Equal(cv.Qualifier, stat.HbaseColumnAndroid) {
-					s.Android = v
-				}
-			} else if bytes.Equal(cv.Family, stat.HbaseFamilyOther) {
-				if bytes.Equal(cv.Qualifier, stat.HbaseColumnFav) {
-					s.Fav = v
-				} else if bytes.Equal(cv.Qualifier, stat.HbaseColumnShare) {
-					s.Share = v
-				} else if bytes.Equal(cv.Qualifier, stat.HbaseColumnReply) {
-					s.Reply = v
+			v = binary.BigEndian.Uint32(cv.Value)
+			if bytes.Equal(cv.Family, meta.HbaseFamilyBasic) {
+				if bytes.Equal(cv.Qualifier, meta.HbaseColumnVid) {
+					m.Vid = int32(v)
+				} else if bytes.Equal(cv.Qualifier, meta.HbaseColumnCookie) {
+					m.Cookie = int32(v)
 				}
 			}
 		}
+	}
+	return
+}
+
+// Put overwriting is bug,  banned
+func (h *HBaseClient) Put(m *meta.Meta) (err error) {
+	var (
+		i     int
+		ks  = make([]byte, 8)
+		vs  = make([]byte, 4)
+		cs  = make([]byte, 4)
+		c     interface{}
+		exist = false
+	)
+	if nil == m {
+		return errors.New("meta.Meta is nil")
+	}
+	binary.BigEndian.PutUint64(ks, uint64(m.Key))
+	binary.BigEndian.PutUint32(vs, uint32(m.Vid))
+	binary.BigEndian.PutUint32(cs, uint32(m.Cookie))
+	if c, err = hbasePool.Get(); err != nil {
+		log.Errorf("hbasePool.Get() error(%v)", err)
+		return
+	}
+	for i = 0; i < retryCount; i++ {
+		if exist, err = c.(hbasethrift.THBaseService).Exists(meta.HbaseTable, &hbasethrift.TGet{Row: ks}); err == nil {
+			break
+		}
+		time.Sleep(retrySleep)
+	}
+	if err != nil {
+		log.Errorf("client.Exists error(%v)", err)
+		return
+	}
+	if exist {
+		return errors.New(fmt.Sprintf("key already exists in hbase  key:%v", m.Key))
+	}
+	for i = 0; i < retryCount; i++ {
+		if err = c.(hbasethrift.THBaseService).Put(meta.HbaseTable, &hbasethrift.TPut{
+			Row: ks,
+			ColumnValues: []*hbasethrift.TColumnValue{
+				&hbasethrift.TColumnValue{
+					Family:    meta.HbaseFamilyBasic,
+					Qualifier: meta.HbaseColumnVid,
+					Value:     vs,
+				},
+				&hbasethrift.TColumnValue{
+					Family:    meta.HbaseFamilyBasic,
+					Qualifier: meta.HbaseColumnCookie,
+					Value:     cs,
+				},
+			},
+		}); err == nil {
+			break
+		}
+		time.Sleep(retrySleep)
+	}
+	if err != nil {
+		log.Errorf("client.Put error(%v)", err)
+	}
+	return
+}
+
+// Del
+func (h *HBaseClient) Del(key int64) (err error) {
+	var (
+		i     int
+		ks  = make([]byte, 8)
+		c     interface{}
+	)
+	binary.BigEndian.PutUint64(ks, uint64(key))
+	if c, err = hbasePool.Get(); err != nil {
+		log.Errorf("hbasePool.Get() error(%v)", err)
+		return
+	}
+	for i = 0; i < retryCount; i++ {
+		if err = c.(hbasethrift.THBaseService).DeleteSingle(meta.HbaseTable, &hbasethrift.TDelete{
+			Row: ks,
+			Columns: []*hbasethrift.TColumn{
+				&hbasethrift.TColumn{
+					Family:    meta.HbaseFamilyBasic,
+					Qualifier: meta.HbaseColumnVid,
+				},
+				&hbasethrift.TColumn{
+					Family:    meta.HbaseFamilyBasic,
+					Qualifier: meta.HbaseColumnCookie,
+				},
+			},
+		}); err == nil {
+			break
+		}
+		time.Sleep(retrySleep)
+	}
+	if err != nil {
+		log.Errorf("client.DeleteSingle error(%v)", err)
 	}
 	return
 }
