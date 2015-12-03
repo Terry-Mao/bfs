@@ -38,6 +38,7 @@ func (h *HBaseClient) Get(key int64) (m *meta.Meta, err error) {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
+	defer hbasePool.Put(c, false)
 	for i = 0; i < retryCount; i++ {
 		if r, err = c.(hbasethrift.THBaseService).Get(meta.HbaseTable, &hbasethrift.TGet{Row: ks}); err == nil {
 			break
@@ -88,6 +89,7 @@ func (h *HBaseClient) Put(m *meta.Meta) (err error) {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
+	defer hbasePool.Put(c, false)
 	for i = 0; i < retryCount; i++ {
 		if exist, err = c.(hbasethrift.THBaseService).Exists(meta.HbaseTable, &hbasethrift.TGet{Row: ks}); err == nil {
 			break
@@ -139,6 +141,7 @@ func (h *HBaseClient) Del(key int64) (err error) {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
+	defer hbasePool.Put(c, false)
 	for i = 0; i < retryCount; i++ {
 		if err = c.(hbasethrift.THBaseService).DeleteSingle(meta.HbaseTable, &hbasethrift.TDelete{
 			Row: ks,
