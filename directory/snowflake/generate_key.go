@@ -1,10 +1,15 @@
 package genkey
 
-log "github.com/golang/glog"
+import (
+	log "github.com/golang/glog"
+	"time"
+	"errors"
+)
 
 const (
 	maxSize        = 1000
 	errorSleep     = 100 * time.Millisecond
+	genKeyTimeout  = 2 * time.Second
 )
 
 // Genkey generate key for upload file
@@ -27,8 +32,14 @@ func NewGenkey(zservers []string, zpath string, ztimeout time.Duration, workerId
 }
 
 // Getkey get key for upload file
-func (g *Genkey) Getkey() int64 {
-	return <-g.keys
+func (g *Genkey) Getkey() (key int64, err error) {
+	select {
+	case key <-g.keys:
+		return
+	case <-time.After(genKeyTimeout):
+		err = errors.New("getKey timeout")
+		return
+	}
 }
 
 // preGenerate pre generate key until 1000

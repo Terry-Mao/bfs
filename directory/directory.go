@@ -16,12 +16,15 @@ type Directory struct {
 	vidStores        map[string][]string    // init from getStoreVolume    for  http Read
 	gidStores        map[string][]string
 
-	genkey           *Genkey
-	hbase            *HBaseClient
+	genkey           *Genkey                // snowflake client for gen key
+	hbase            *HBaseClient           // hbase client
+	dispatcher       *Dispatcher            // dispatch for write or read reqs
 
 	config           *Config
 	zk               *Zookeeper
 }
+
+// 
 
 // NewDirectory
 func NewDirectory(config *Config, zk *Zookeeper) (d *Directory, err error) {
@@ -35,11 +38,12 @@ func NewDirectory(config *Config, zk *Zookeeper) (d *Directory, err error) {
 		return nil, err
 	}
 	d.hbase = hbase.NewHBaseClient()
+	dispatcher = NewDispatcher(d)
 	return
 }
 
 // Stores get all the store nodes and set a watcher
-func (d *Directory) stores() (ev <-chan zk.Event, err error) {
+func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 	var (
 		storeMeta              *meta.Store
 		idStore                map[string]*meta.Store
@@ -80,7 +84,7 @@ func (d *Directory) stores() (ev <-chan zk.Event, err error) {
 }
 
 // Volumes get all volumes in zk
-func (d *Directory) volumes() (err error) {
+func (d *Directory) syncVolumes() (err error) {
 	var (
 		volumeState    *meta.VolumeState
 		vidVolume      map[string]*meta.VolumeState
@@ -115,7 +119,7 @@ func (d *Directory) volumes() (err error) {
 }
 
 // Groups get all groups and set a watcher
-func (d *Directory) groups() (ev <-chan zk.Event, err error) {
+func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
 	var (
 		gidStores,idGroup map[int][]string
 		group,store       string
@@ -147,16 +151,17 @@ func (d *Directory) SyncZookeeper() {
 		err              error
 	)
 	for {
-		if storeChanges, err = d.stores(); err != nil {
+		if storeChanges, err = d.syncStores(); err != nil {
 			log.Errorf("Stores() called error(%v)", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		if groupChanges, err = d.groups(); err != nil {
+		if groupChanges, err = d.syncGroups(); err != nil {
 			log.Errorf("Groups() called error(%v)", err)
 			time.Sleep(! * time.Second)
 			continue
 		}
+		d.dispatcher.Update()
 	selectBack:
 		select {
 		case <-storeChanges:
@@ -166,10 +171,95 @@ func (d *Directory) SyncZookeeper() {
 			log.Infof("new group")
 			break
 		case <-time.After(d.config.PullInterval):
-			if err = d.volumes(); err != nil {
+			if err = d.syncVolumes(); err != nil {
 				log.Errorf("syncVolumes() called error(%v)", err)
 			}
 			goto selectBack
 		}
 	}
+}
+
+// cookie  rand uint16
+func (d *Directory) cookie() (cookie int32) {
+	return int32(uint16(time.Now().UnixNano()))
+}
+
+// Rstores get readable stores for http get
+func (d *Directory) Rstores(key int64, cookie int32) (hosts []string, vid int32, ret int, err error) {
+	var (
+		m   *meta.Meta
+	)
+	ret = http.StatusOK
+	if m ,err = d.hbase.Get(key); err != nil {
+		return
+	}
+	if m == nil {
+		ret = http.StatusNotFound
+		return
+	}
+	if m.Cookie != cookie {
+		ret = http.StatusBadRequest
+		return
+	}
+	vid = m.Vid
+	if hosts, err = d.dispatcher.RStores(vid); err != nil {
+		return
+	}
+	if len(hosts) == 0 {
+		ret = http.StatusInternalServerError
+	}
+	return
+}
+
+// Wstores get writable stores for http upload
+func (d *Directory) Wstores(numKeys int) (keys []int64, vid, cookie int32, hosts []string, ret int, err error) {
+	var (
+		m    *meta.Meta
+		i    int
+		key  int64
+	)
+	ret = http.StatusOK
+	if numKeys > d.config.configBatchMaxNum {
+		ret = http.StatusBadRequest
+		return
+	}
+	if hosts, vid, err = d.dispatcher.WStores(); err != nil {
+		return
+	}
+	keys = make([]int64, numKeys)
+	for i=0; i<numKeys; i++ {
+		if key, err = d.genkey.Getkey(); err != nil {
+			return
+		}
+		keys[i] = key
+	}
+	cookie = d.cookie()
+	return
+}
+
+// Dstores get delable stores for http del
+func (d *Directory) Dstores(key int64, cookie int32) (hosts []string, vid int32, ret int, err error) {
+	var (
+		m    *meta.Meta
+	)
+	ret = http.StatusOK
+	if m, err = d.hbase.Get(key); err != nil {
+		return
+	}
+	if m == nil {
+		ret = http.StatusNotFound
+		return
+	}
+	if m.Cookie != cookie {
+		ret = http.StatusBadRequest
+		return
+	}
+	if err = d.hbase.Del(key); err != nil {
+		return
+	}
+	vid = m.Vid
+	if hosts, err = d.dispatcher.DStores(vid); err != nil {
+		return
+	}
+	return
 }
