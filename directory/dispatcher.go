@@ -7,7 +7,6 @@ import (
 // Dispatcher
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gidR      map[string]bool  // for read
 	gidW      map[string]int   // for write
 	gidWIndex map[string]int   // volume index  directory:idVolumes[store][index] =>volume id
 	dr        *Directory
@@ -23,33 +22,41 @@ const (
 )
 
 // 
-func (d *Dispatcher) Init(dr *Directory) (err error) {
+func NewDispatcher(dr *Directory) (d *Dispatcher) {
+	d = new(Dispatcher)
+	d.dr = dr
+	d.gidW = make(map[string]int)
+	d.gidWIndex = make(map[string]int)
+	return
+}
+
+// Update when zk updates
+func (d *Dispatcher) Update() (err error) {
 	var (
 		gid,store,volume         string
 		stores                   []string
 		storeMeta                *meta.Store
 		volumeState              *meta.VolumeState
-		writable,readable        bool
+		writable,ok              bool
 		totalAdd,totalAddDelay   uint64
 		restSpace,minScore,score uint32
 	)
-	for gid, stores = range dr.gidStores {
-		writable = readable = true
+	for gid, stores = range d.dr.gidStores {
+		writable = true
 		for _, store = range stores {
-			storeMeta = dr.idStore[store]
-			if storeMeta.Status == meta.StoreStatusEnable || storeMeta.Status == meta.StoreStatusRead {
-				writable = false
+			if storeMeta, ok = d.dr.idStore[store]; !ok {
+				log.Errorf("idStore cannot match store: %s", store)
+				break
 			}
-			if storeMeta.Status == meta.StoreStatusEnable {
-				readable = false
+			if storeMeta.Status == meta.StoreStatusFail || storeMeta.Status == meta.StoreStatusRead {
+				writable = false
 			}
 		}
 		if writable {
-			d.gidStatus[gid] = meta.StoreStatusHealth
 			for _, store = range stores {
 				totalAdd = totalAddDelay = restSpace = minScore = 0
-				for _, volume = range dr.idVolumes[store] {
-					volumeState = dr.vidVolume[volume]
+				for _, volume = range d.dr.idVolumes[store] {
+					volumeState = d.dr.vidVolume[volume]
 					totalAdd = totalAdd + volumeState.TotalAddProcessed
 					restSpace = restSpace + volumeState.FreeSpace
 					totalAddDelay = totalAddDelay + volumeState.TotalAddDelay
@@ -61,28 +68,22 @@ func (d *Dispatcher) Init(dr *Directory) (err error) {
 			}
 			d.gidW[gid] = minScore
 		}
-		if readable {
-			d.gidR[gid] = true
-		}
 	}
 	return
 }
 
-// cal_score algorithm of calculating score      bug: 0ms   todo:
+// cal_score algorithm of calculating score      bug: 0ms   todo
 func (d *Dispatcher) calScore(totalAdd, totalAddDelay uint64, restSpace uint32) int {
 	return int((restSpace / uint32(spaceBenchmark)) * restSpaceRate + ((addDelayMaxScore / (((uint32(totalAddDelay) / nanoToMs) / uint32(totalAdd)) / addDelayBenchmark)) * addDelayRate)
 }
 
-// WritableStores get suitable stores for writing
-func (d *Dispatcher) WritableStores() (stores []string, vid string, err error) {
+// WStores get suitable stores for writing
+func (d *Dispatcher) WStores() (stores []string, vid string, err error) {
 	var (
 		store,gid     string
-		ok            bool
 	)
 	//get gid
-	if stores, ok = d.dr.gidStores[gid]; !ok {
-		return nil, nil, errors.New("gid cannot mathc stores")
-	}
+	stores = d.dr.gidStores[gid]
 	if len(stores) > 0 {
 		store = stores[0]
 		vid = (d.gidWIndex[gid] + 1) % len(d.dr.idVolumes[store])
@@ -91,24 +92,46 @@ func (d *Dispatcher) WritableStores() (stores []string, vid string, err error) {
 	return
 }
 
-// ReadableStores get suitable stores for reading
-func (d *Dispatcher) ReadableStores(vid string) (stores []string, err error) {
+// RStores get suitable stores for reading
+func (d *Dispatcher) RStores(vid string) (stores []string, err error) {
 	var (
 		store,gid    string
+		storeMeta    *meta.Store
 		ok           bool
 	)
 	if stores, ok = d.dr.vidStores[vid]; !ok {
-		return nil, errors.New("vid cannot match stores")
+		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
 	}
-	if len(stores) > 0 {
-		store = stores[0]
-		if gid, ok = d.dr.idGroup[store]; !ok {
-			return nil, errors.New("idGroup internal error")
+	for _, store = range stores {
+		if storeMeta, ok = d.dr.idStore[store]; !ok {
+			log.Errorf("idStore cannot match store: %s", store)
+			continue
 		}
-		if _, ok = d.gidR[gid]; !ok {
-			return nil, errors.New("vid of group cannot read")
+		if storeMeta.Status == meta.StoreStatusFail {
+			delete(stores, store)
 		}
 	}
 	return
 }
 
+// DStores get suitable stores for delete 
+func (d *Dispatcher) DStores(vid string) (stores []string, err error) {
+	var (
+		store,gid    string
+		storeMeta    *meta.Store
+		ok           bool
+	)
+	if stores, ok = d.dr.vidStores[vid]; !ok {
+		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
+	}
+	for _, store = range stores {
+		if storeMeta, ok = d.dr.idStore[store]; !ok {
+			log.Errorf("idStore cannot match store: %s", store)
+			continue
+		}
+		if storeMeta.Status == meta.StoreStatusFail {
+			return nil, errors.New(fmt.Sprintf("bad store : %s", store))
+		}
+	}
+	return
+}
