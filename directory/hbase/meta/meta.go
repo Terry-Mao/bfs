@@ -9,8 +9,8 @@ var (
 	HbaseColumnCookie  = []byte("cookie")
 )
 
-type Meta struct {
-	// click
+// File Hbase
+type File struct {
 	Key     int64 `json:"key"`
 	Vid     int32 `json:"vid"`
 	Cookie  int32 `json:"cookie"`
