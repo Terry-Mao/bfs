@@ -14,9 +14,6 @@ type Dispatcher struct {
 
 const (
 	nsToMs = 1000000   // ns ->  us
-	maxRate = 100      //100 *  100 %
-	restSpaceRate = 60 //100 *  60 %
-	addDelayRate = maxRate - restSpaceRate
 	spaceBenchmark = meta.MaxBlockOffset // 1 volume
 	addDelayBenchmark = 1 // 1ms   <1ms means no load, adScore==0
 )
@@ -79,11 +76,11 @@ func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace uint32) uint32 
 	var (
 		rsScore, adScore   uint32
 	)
-	rsScore = (restSpace / spaceBenchmark) * restSpaceRate
+	rsScore = restSpace / spaceBenchmark
 	if totalAdd == 0 {
 		adScore = 0 // ignored
 	}
-	adScore = (((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark) * addDelayRate
+	adScore = ((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark
 	//rsScore < adScore todo
 	return rsScore - adScore
 }
