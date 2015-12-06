@@ -23,8 +23,8 @@ func NewHBaseClient() *HBaseClient {
 	return &HBaseClient{}
 }
 
-// Get if m return nil means not found
-func (h *HBaseClient) Get(key int64) (m *meta.Meta, err error) {
+// Get if f return nil means not found
+func (h *HBaseClient) Get(key int64) (f *meta.File, err error) {
 	var (
 		ks	= make([]byte, 8)
 		i     int
@@ -52,16 +52,16 @@ func (h *HBaseClient) Get(key int64) (m *meta.Meta, err error) {
 	if len(r.ColumnValues) == 0 {
 		return
 	}
-	m = &meta.Meta{}
-	m.Key = key
+	f = &meta.File{}
+	f.Key = key
 	for _, cv = range r.ColumnValues {
 		if cv != nil {
 			v = binary.BigEndian.Uint32(cv.Value)
 			if bytes.Equal(cv.Family, meta.HbaseFamilyBasic) {
 				if bytes.Equal(cv.Qualifier, meta.HbaseColumnVid) {
-					m.Vid = int32(v)
+					f.Vid = int32(v)
 				} else if bytes.Equal(cv.Qualifier, meta.HbaseColumnCookie) {
-					m.Cookie = int32(v)
+					f.Cookie = int32(v)
 				}
 			}
 		}
@@ -70,7 +70,7 @@ func (h *HBaseClient) Get(key int64) (m *meta.Meta, err error) {
 }
 
 // Put overwriting is bug,  banned
-func (h *HBaseClient) Put(m *meta.Meta) (err error) {
+func (h *HBaseClient) Put(f *meta.File) (err error) {
 	var (
 		i     int
 		ks  = make([]byte, 8)
@@ -79,12 +79,12 @@ func (h *HBaseClient) Put(m *meta.Meta) (err error) {
 		c     interface{}
 		exist = false
 	)
-	if nil == m {
-		return errors.New("meta.Meta is nil")
+	if nil == f {
+		return errors.New("meta.File is nil")
 	}
-	binary.BigEndian.PutUint64(ks, uint64(m.Key))
-	binary.BigEndian.PutUint32(vs, uint32(m.Vid))
-	binary.BigEndian.PutUint32(cs, uint32(m.Cookie))
+	binary.BigEndian.PutUint64(ks, uint64(f.Key))
+	binary.BigEndian.PutUint32(vs, uint32(f.Vid))
+	binary.BigEndian.PutUint32(cs, uint32(f.Cookie))
 	if c, err = hbasePool.Get(); err != nil {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
@@ -101,7 +101,7 @@ func (h *HBaseClient) Put(m *meta.Meta) (err error) {
 		return
 	}
 	if exist {
-		return errors.New(fmt.Sprintf("key already exists in hbase  key:%v", m.Key))
+		return errors.New(fmt.Sprintf("key already exists in hbase  key:%v", f.Key))
 	}
 	for i = 0; i < retryCount; i++ {
 		if err = c.(hbasethrift.THBaseService).Put(meta.HbaseTable, &hbasethrift.TPut{

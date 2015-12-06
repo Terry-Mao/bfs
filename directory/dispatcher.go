@@ -7,38 +7,39 @@ import (
 // Dispatcher
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gidW      map[string]int   // for write
+	gidW      map[string]uint32   // for write  gid:score
 	gidWIndex map[string]int   // volume index  directory:idVolumes[store][index] =>volume id
 	dr        *Directory
 }
 
 const (
-	nanoToMs = 1000000   // ns ->  ms
-	maxRate = 10000
-	restSpaceRate = 6000
+	nsToMs = 1000000   // ns ->  us
+	maxRate = 100      //100 *  100 %
+	restSpaceRate = 60 //100 *  60 %
 	addDelayRate = maxRate - restSpaceRate
 	spaceBenchmark = meta.MaxBlockOffset // 1 volume
-	addDelayBenchmark = 1 // 1ms   <1ms means no load
+	addDelayBenchmark = 1 // 1ms   <1ms means no load, adScore==0
 )
 
 // 
 func NewDispatcher(dr *Directory) (d *Dispatcher) {
 	d = new(Dispatcher)
 	d.dr = dr
-	d.gidW = make(map[string]int)
-	d.gidWIndex = make(map[string]int)
+	d.gidW = make(map[int32]uint32)
+	d.gidWIndex = make(map[int32]int)
 	return
 }
 
 // Update when zk updates
 func (d *Dispatcher) Update() (err error) {
 	var (
-		gid,store,volume         string
+		store                    string
 		stores                   []string
 		storeMeta                *meta.Store
 		volumeState              *meta.VolumeState
 		writable,ok              bool
 		totalAdd,totalAddDelay   uint64
+		gid, vid                 int32
 		restSpace,minScore,score uint32
 	)
 	for gid, stores = range d.dr.gidStores {
@@ -55,13 +56,13 @@ func (d *Dispatcher) Update() (err error) {
 		if writable {
 			for _, store = range stores {
 				totalAdd = totalAddDelay = restSpace = minScore = 0
-				for _, volume = range d.dr.idVolumes[store] {
-					volumeState = d.dr.vidVolume[volume]
+				for _, vid = range d.dr.idVolumes[store] {
+					volumeState = d.dr.vidVolume[vid]
 					totalAdd = totalAdd + volumeState.TotalAddProcessed
 					restSpace = restSpace + volumeState.FreeSpace
 					totalAddDelay = totalAddDelay + volumeState.TotalAddDelay
 				}
-				score = d.calScore(totalAdd, restSpace, totalAddDelay)
+				score = d.calScore(uint32(totalAdd), restSpace, uint32(totalAddDelay))
 				if score < minScore {
 					minScore = score
 				}
@@ -72,15 +73,26 @@ func (d *Dispatcher) Update() (err error) {
 	return
 }
 
-// cal_score algorithm of calculating score      bug: 0ms   todo
-func (d *Dispatcher) calScore(totalAdd, totalAddDelay uint64, restSpace uint32) int {
-	return int((restSpace / uint32(spaceBenchmark)) * restSpaceRate + ((addDelayMaxScore / (((uint32(totalAddDelay) / nanoToMs) / uint32(totalAdd)) / addDelayBenchmark)) * addDelayRate)
+// cal_score algorithm of calculating score
+func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace uint32) uint32 {
+	//score = rsScore + (-adScore)   when adScore==0 means ignored
+	var (
+		rsScore, adScore   uint32
+	)
+	rsScore = (restSpace / spaceBenchmark) * restSpaceRate
+	if totalAdd == 0 {
+		adScore = 0 // ignored
+	}
+	adScore = (((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark) * addDelayRate
+	//rsScore < adScore todo
+	return rsScore - adScore
 }
 
 // WStores get suitable stores for writing
-func (d *Dispatcher) WStores() (stores []string, vid string, err error) {
+func (d *Dispatcher) WStores() (stores []string, vid int32, err error) {
 	var (
-		store,gid     string
+		store     string
+		gid       int32
 	)
 	//get gid
 	stores = d.dr.gidStores[gid]
@@ -93,9 +105,9 @@ func (d *Dispatcher) WStores() (stores []string, vid string, err error) {
 }
 
 // RStores get suitable stores for reading
-func (d *Dispatcher) RStores(vid string) (stores []string, err error) {
+func (d *Dispatcher) RStores(vid int32) (stores []string, err error) {
 	var (
-		store,gid    string
+		store        string
 		storeMeta    *meta.Store
 		ok           bool
 	)
@@ -115,9 +127,9 @@ func (d *Dispatcher) RStores(vid string) (stores []string, err error) {
 }
 
 // DStores get suitable stores for delete 
-func (d *Dispatcher) DStores(vid string) (stores []string, err error) {
+func (d *Dispatcher) DStores(vid int32) (stores []string, err error) {
 	var (
-		store,gid    string
+		store        string
 		storeMeta    *meta.Store
 		ok           bool
 	)

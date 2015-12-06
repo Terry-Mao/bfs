@@ -10,6 +10,8 @@ const (
 	configSfZookeeperTimeout        = time.Second * 1 // 1s
 	configSfZookeeperPath           = "/bfs_sf"
 	configSfWorkId                  = 72
+	configLiseten                   = "localhost:6065"
+	configMaxNum                    = 16
 )
 
 var (
@@ -27,6 +29,9 @@ type Config struct {
 	HbaseMaxActive int           `goconf:"hbase:max.active"`
 	HbaseMaxIdle   int           `goconf:"hbase:max.idle"`
 	HbaseTimeout   time.Duration `goconf:"hbase:timeout:time"`
+	// http
+	MaxNum         int           `goconf:"http:port"`
+	Listen         string        `goconf:"http:listen"`
 }
 
 // NewConfig new a config.
@@ -56,5 +61,11 @@ func (c *Config) setDefault() {
 	}
 	if c.SfWorkId == 0 {
 		c.SfWorkId = configSfWorkId
+	}
+	if c.MaxNum == 0 || c.MaxNum > configMaxNum {
+		c.MaxNum = configMaxNum
+	}
+	if c.Listen == "" {
+		c.Listen = configLiseten
 	}
 }

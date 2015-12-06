@@ -3,18 +3,19 @@ import (
 	"github.com/Terry-Mao/bfs/directory/hbase"
 	"github.com/Terry-Mao/bfs/directory/snowflake"
 	log "github.com/golang/glog"
+	"strconv"
 )
 
 // Directory
 // id means store serverid; vid means volume id; gid means group id
 type Directory struct {
 	idStore          map[string]*meta.Store // store status
-	idVolumes        map[string][]string    // init from getStoreVolume
-	idGroup          map[string]string      // for http read
+	idVolumes        map[string][]int32    // init from getStoreVolume
+	idGroup          map[string]int32      // for http read
 
-	vidVolume        map[string]*meta.Volume
-	vidStores        map[string][]string    // init from getStoreVolume    for  http Read
-	gidStores        map[string][]string
+	vidVolume        map[int32]*meta.Volume
+	vidStores        map[int32][]string    // init from getStoreVolume    for  http Read
+	gidStores        map[int32][]string
 
 	genkey           *Genkey                // snowflake client for gen key
 	hbase            *HBaseClient           // hbase client
@@ -23,8 +24,6 @@ type Directory struct {
 	config           *Config
 	zk               *Zookeeper
 }
-
-// 
 
 // NewDirectory
 func NewDirectory(config *Config, zk *Zookeeper) (d *Directory, err error) {
@@ -47,8 +46,8 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 	var (
 		storeMeta              *meta.Store
 		idStore                map[string]*meta.Store
-		idVolumes              map[string][]string
-		rack, store            string
+		idVolumes              map[string][]int32
+		rack, store, volume    string
 		racks, stores, volumes []string
 		data                   []byte
 	)
@@ -56,8 +55,8 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 	if racks, ev, err = d.zk.WatchRacks(); err != nil {
 		return
 	}
-	idVolumes = make(map[string][]string)
 	idStore = make(map[string]*meta.Store)
+	idVolumes = make(map[string][]int32)
 	for _, rack = range racks {
 		if stores, err = d.zk.Stores(rack); err != nil {
 			return
@@ -74,12 +73,15 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 			if volumes, err = d.zk.StoreVolumes(rack, store); err != nil {
 				return
 			}
-			idVolumes[storeMeta.Id] = volumes
+			idVolumes[storeMeta.Id] = make([]int32)
+			for _, volume = range volumes {
+				idVolumes[storeMeta.Id] = append(idVolumes[storeMeta.Id], int32(strconv.Atoi(volume)))
+			}
 			idStore[storeMeta.Id] = storeMeta
 		}
 	}
-	d.idVolumes = idVolumes
 	d.idStore = idStore
+	d.idVolumes = idVolumes
 	return
 }
 
@@ -87,17 +89,18 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 func (d *Directory) syncVolumes() (err error) {
 	var (
 		volumeState    *meta.VolumeState
-		vidVolume      map[string]*meta.VolumeState
+		vidVolume      map[int32]*meta.VolumeState
+		vidStores      map[int32][]string
 		volume,store   string
+		vid            int32
 		volumes,stores []string
-		vidStores      map[string][]string
 		data           []byte
 	)
 	if volumes, err = d.zk.Volumes(); err != nil {
 		return
 	}
-	vidVolume = make(map[string]*meta.VolumeState)
-	vidStores = make(map[string][]string)
+	vidVolume = make(map[int32]*meta.VolumeState)
+	vidStores = make(map[int32][]string)
 	for _, volume = range volumes {
 		if data, err = d.zk.Volume(volume); err != nil {
 			return
@@ -107,11 +110,12 @@ func (d *Directory) syncVolumes() (err error) {
 			log.Errorf("json.Unmarshal() error(%v)", err)
 			return
 		}
-		vidVolume[volume] = volumeState
+		vid = int32(strconv.Atoi(volume))
+		vidVolume[vid] = volumeState
 		if stores, err = d.zk.VolumeStores(volume); err != nil {
 			return
 		}
-		vidStores[volume] = stores
+		vidStores[vid] = stores
 	}
 	d.vidVolume = vidVolume
 	d.vidStores = vidStores
@@ -121,22 +125,26 @@ func (d *Directory) syncVolumes() (err error) {
 // Groups get all groups and set a watcher
 func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
 	var (
-		gidStores,idGroup map[int][]string
+		gidStores         map[int32][]string
+		idGroup           map[string][]int32
 		group,store       string
+		gid               int32
 		groups,stores     []string
 		data              []byte
 	)
 	if groups, ev, err = d.zk.WatchGroups()(); err != nil {
 		return
 	}
-	groupsMeta = make(map[int][]string)
+	gidStores = make(map[int32][]string)
+	idGroup = make(map[string][]int32)
 	for _, group = range groups {
 		if stores, err = d.zk.GroupStores(group); err != nil {
 			return
 		}
-		gidStores[group] = stores
+		gid = int32(strconv.Atoi(group))
+		gidStores[gid] = stores
 		for _,store = range stores {
-			idGroup[store] = group
+			idGroup[store] = gid
 		}
 	}
 	d.gidStores = gidStores
@@ -187,21 +195,21 @@ func (d *Directory) cookie() (cookie int32) {
 // Rstores get readable stores for http get
 func (d *Directory) Rstores(key int64, cookie int32) (hosts []string, vid int32, ret int, err error) {
 	var (
-		m   *meta.Meta
+		f   *meta.File
 	)
 	ret = http.StatusOK
-	if m ,err = d.hbase.Get(key); err != nil {
+	if f ,err = d.hbase.Get(key); err != nil {
 		return
 	}
-	if m == nil {
+	if f == nil {
 		ret = http.StatusNotFound
 		return
 	}
-	if m.Cookie != cookie {
+	if f.Cookie != cookie {
 		ret = http.StatusBadRequest
 		return
 	}
-	vid = m.Vid
+	vid = f.Vid
 	if hosts, err = d.dispatcher.RStores(vid); err != nil {
 		return
 	}
@@ -214,7 +222,7 @@ func (d *Directory) Rstores(key int64, cookie int32) (hosts []string, vid int32,
 // Wstores get writable stores for http upload
 func (d *Directory) Wstores(numKeys int) (keys []int64, vid, cookie int32, hosts []string, ret int, err error) {
 	var (
-		m    *meta.Meta
+		f    *meta.File
 		i    int
 		key  int64
 	)
@@ -240,24 +248,24 @@ func (d *Directory) Wstores(numKeys int) (keys []int64, vid, cookie int32, hosts
 // Dstores get delable stores for http del
 func (d *Directory) Dstores(key int64, cookie int32) (hosts []string, vid int32, ret int, err error) {
 	var (
-		m    *meta.Meta
+		f    *meta.File
 	)
 	ret = http.StatusOK
-	if m, err = d.hbase.Get(key); err != nil {
+	if f, err = d.hbase.Get(key); err != nil {
 		return
 	}
-	if m == nil {
+	if f == nil {
 		ret = http.StatusNotFound
 		return
 	}
-	if m.Cookie != cookie {
+	if f.Cookie != cookie {
 		ret = http.StatusBadRequest
 		return
 	}
 	if err = d.hbase.Del(key); err != nil {
 		return
 	}
-	vid = m.Vid
+	vid = f.Vid
 	if hosts, err = d.dispatcher.DStores(vid); err != nil {
 		return
 	}
