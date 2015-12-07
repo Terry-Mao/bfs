@@ -9,6 +9,7 @@ import (
 type Dispatcher struct {
 	gidScore  map[int32]uint32   // for write  gid:score
 	gidWIndex map[int32]int      // volume index  directory:idVolumes[store][index] =>volume id
+	gids      []int32
 	dr        *Directory
 }
 
@@ -37,8 +38,10 @@ func (d *Dispatcher) Update() (err error) {
 		writable,ok              bool
 		totalAdd,totalAddDelay   uint64
 		gid, vid                 int32
+		gids                     []int32
 		restSpace,minScore,score uint32
 	)
+	gids = make([]int32)
 	for gid, stores = range d.dr.gidStores {
 		writable = true
 		for _, store = range stores {
@@ -65,8 +68,10 @@ func (d *Dispatcher) Update() (err error) {
 				}
 			}
 			d.gidScore[gid] = minScore
+			gids = append(gids, gid)
 		}
 	}
+	d.gids = gids
 	return
 }
 
