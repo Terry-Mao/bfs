@@ -129,7 +129,7 @@ func (h *HBaseClient) Put(f *meta.File) (err error) {
 	return
 }
 
-// Del
+// Del delete the key
 func (h *HBaseClient) Del(key int64) (err error) {
 	var (
 		i     int

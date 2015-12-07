@@ -6,6 +6,10 @@ import (
 	"strconv"
 )
 
+const (
+	retrySleep = time.Second * 1
+)
+
 // Directory
 // id means store serverid; vid means volume id; gid means group id
 type Directory struct {
@@ -30,14 +34,14 @@ func NewDirectory(config *Config, zk *Zookeeper) (d *Directory, err error) {
 	d = &Directory{}
 	d.config = config
 	d.zk = zk
-	if d.genkey, err = NewGenkey(config.SfZookeeperAddrs, config.SfZookeeperPath, config.SfZookeeperTimeout, config.SfWorkId); err != nil {
-		return nil, err
+	if d.genkey, err = NewGenkey(config.SnowflakeZkAddrs, config.SnowflakeZkPath, config.SnowflakeZkTimeout, config.SnowflakeWorkId); err != nil {
+		return
 	}
 	if err = hbase.Init(config.HbaseAddr, config.HbaseTimeout, config.HbaseMaxIdle, config.HbaseMaxActive); err != nil {
-		return nil, err
+		return
 	}
 	d.hbase = hbase.NewHBaseClient()
-	dispatcher = NewDispatcher(d)
+	d.dispatcher = NewDispatcher(d)
 	return
 }
 
@@ -154,33 +158,40 @@ func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
 // SyncZookeeper Synchronous zookeeper data to memory
 func (d *Directory) SyncZookeeper() {
 	var (
-		storeChanges     <-chan zk.Event
-		groupChanges     <-chan zk.Event
+		sev     <-chan zk.Event
+		gev     <-chan zk.Event
 		err              error
 	)
 	for {
-		if storeChanges, err = d.syncStores(); err != nil {
-			log.Errorf("Stores() called error(%v)", err)
-			time.Sleep(1 * time.Second)
+		if sev, err = d.syncStores(); err != nil {
+			log.Errorf("syncStores() called error(%v)", err)
+			time.Sleep(retrySleep)
 			continue
 		}
-		if groupChanges, err = d.syncGroups(); err != nil {
-			log.Errorf("Groups() called error(%v)", err)
-			time.Sleep(! * time.Second)
+		if gev, err = d.syncGroups(); err != nil {
+			log.Errorf("syncGroups() called error(%v)", err)
+			time.Sleep(retrySleep)
+			continue
+		}
+		if err = d.syncVolumes(); err != nil {
+			log.Errorf("syncVolumes() called error(%v)", err)
+			time.Sleep(retrySleep)
 			continue
 		}
 		d.dispatcher.Update()
 	selectBack:
 		select {
-		case <-storeChanges:
+		case <-sev:
 			log.Infof("stores status change or new store")
 			break
-		case <-groupChanges:
+		case <-gev:
 			log.Infof("new group")
 			break
 		case <-time.After(d.config.PullInterval):
 			if err = d.syncVolumes(); err != nil {
 				log.Errorf("syncVolumes() called error(%v)", err)
+			} else {
+				d.dispatcher.Update()
 			}
 			goto selectBack
 		}
@@ -227,7 +238,7 @@ func (d *Directory) Wstores(numKeys int) (keys []int64, vid, cookie int32, hosts
 		key  int64
 	)
 	ret = http.StatusOK
-	if numKeys > d.config.configBatchMaxNum {
+	if numKeys > d.config.maxnum {
 		ret = http.StatusBadRequest
 		return
 	}
