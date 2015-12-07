@@ -7,22 +7,22 @@ import (
 // Dispatcher
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gidW      map[string]uint32   // for write  gid:score
-	gidWIndex map[string]int   // volume index  directory:idVolumes[store][index] =>volume id
+	gidScore  map[int32]uint32   // for write  gid:score
+	gidWIndex map[int32]int      // volume index  directory:idVolumes[store][index] =>volume id
 	dr        *Directory
 }
 
 const (
-	nsToMs = 1000000   // ns ->  us
+	nsToMs = 1000000                     // ns ->  us
 	spaceBenchmark = meta.MaxBlockOffset // 1 volume
-	addDelayBenchmark = 1 // 1ms   <1ms means no load, adScore==0
+	addDelayBenchmark = 1                // 1ms   <1ms means no load, adScore==0
 )
 
-// 
+// NewDispatcher
 func NewDispatcher(dr *Directory) (d *Dispatcher) {
 	d = new(Dispatcher)
 	d.dr = dr
-	d.gidW = make(map[int32]uint32)
+	d.gidScore = make(map[int32]uint32)
 	d.gidWIndex = make(map[int32]int)
 	return
 }
@@ -64,7 +64,7 @@ func (d *Dispatcher) Update() (err error) {
 					minScore = score
 				}
 			}
-			d.gidW[gid] = minScore
+			d.gidScore[gid] = minScore
 		}
 	}
 	return
@@ -76,11 +76,11 @@ func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace uint32) uint32 
 	var (
 		rsScore, adScore   uint32
 	)
-	rsScore = restSpace / spaceBenchmark
+	rsScore = uint32(restSpace / spaceBenchmark)
 	if totalAdd == 0 {
 		adScore = 0 // ignored
 	}
-	adScore = ((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark
+	adScore = uint32(((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark)
 	//rsScore < adScore todo
 	return rsScore - adScore
 }

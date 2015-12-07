@@ -9,7 +9,7 @@ import (
 )
 
 // StartApi start api http listen.
-func StartApi(addr string, d *Directory, c *Config) {
+func StartApi(addr string, d *Directory) {
 	go func() {
 		var (
 			err      error
@@ -87,7 +87,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpWriter(r, wr, time.Now(), res, &ret)
-	if num, err = strconv.ParseInt(params.Get("num"), 10, 32); err != nil || num > h.d.config.MaxNum {
+	if num, err = strconv.ParseInt(params.Get("num"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("key"), err)
 		ret = http.StatusBadRequest
 		return
