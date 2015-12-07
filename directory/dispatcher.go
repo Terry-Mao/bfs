@@ -7,9 +7,9 @@ import (
 // Dispatcher
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gidScore  map[int32]uint32   // for write  gid:score
-	gidWIndex map[int32]int      // volume index  directory:idVolumes[store][index] =>volume id
-	gids      []int32
+	gidScore  map[int]int   // for write  gid:score
+	gidWIndex map[int]int      // volume index  directory:idVolumes[store][index] =>volume id
+	gids      []int
 	dr        *Directory
 }
 
@@ -23,8 +23,8 @@ const (
 func NewDispatcher(dr *Directory) (d *Dispatcher) {
 	d = new(Dispatcher)
 	d.dr = dr
-	d.gidScore = make(map[int32]uint32)
-	d.gidWIndex = make(map[int32]int)
+	d.gidScore = make(map[int]int)
+	d.gidWIndex = make(map[int]int)
 	return
 }
 
@@ -37,11 +37,11 @@ func (d *Dispatcher) Update() (err error) {
 		volumeState              *meta.VolumeState
 		writable,ok              bool
 		totalAdd,totalAddDelay   uint64
-		gid, vid                 int32
-		gids                     []int32
-		restSpace,minScore,score uint32
+		vid                      int32
+		gids                     []int
+		restSpace,minScore,score,gid,sum int
 	)
-	gids = make([]int32)
+	gids = make([]int)
 	for gid, stores = range d.dr.gidStores {
 		writable = true
 		for _, store = range stores {
@@ -62,7 +62,7 @@ func (d *Dispatcher) Update() (err error) {
 					restSpace = restSpace + volumeState.FreeSpace
 					totalAddDelay = totalAddDelay + volumeState.TotalAddDelay
 				}
-				score = d.calScore(uint32(totalAdd), restSpace, uint32(totalAddDelay))
+				score = d.calScore(int(totalAdd), restSpace, int(totalAddDelay))
 				if score < minScore {
 					minScore = score
 				}
@@ -71,21 +71,26 @@ func (d *Dispatcher) Update() (err error) {
 			gids = append(gids, gid)
 		}
 	}
+	sort.Ints(gids)
 	d.gids = gids
+	for _, gid = range gids {
+		sum += d.gidScore[gid]
+		d.gidScore[gid] = sum
+	}
 	return
 }
 
 // cal_score algorithm of calculating score
-func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace uint32) uint32 {
+func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace int) int {
 	//score = rsScore + (-adScore)   when adScore==0 means ignored
 	var (
-		rsScore, adScore   uint32
+		rsScore, adScore   int
 	)
-	rsScore = uint32(restSpace / spaceBenchmark)
+	rsScore = int(restSpace / spaceBenchmark)
 	if totalAdd == 0 {
 		adScore = 0 // ignored
 	}
-	adScore = uint32(((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark)
+	adScore = int(((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark)
 	//rsScore < adScore todo
 	return rsScore - adScore
 }
@@ -93,10 +98,20 @@ func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace uint32) uint32 
 // WStores get suitable stores for writing
 func (d *Dispatcher) WStores() (stores []string, vid int32, err error) {
 	var (
-		store     string
-		gid       int32
+		store                string
+		gid                  int
+		maxScore,randomScore,score int
+		r                    *Rand
 	)
-	//get gid
+	r = rand.New(rand.NewSource(time.Now().UnixNano()))
+	maxScore = d.gidScore[len(d.gids) - 1]
+	randomScore = r.Intn(maxScore)
+	for gid,score = range d.gidScore {
+		if randomScore < score {
+			break
+		}
+	} // need to do  cache
+
 	stores = d.dr.gidStores[gid]
 	if len(stores) > 0 {
 		store = stores[0]

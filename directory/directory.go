@@ -15,11 +15,11 @@ const (
 type Directory struct {
 	idStore          map[string]*meta.Store // store status
 	idVolumes        map[string][]int32    // init from getStoreVolume
-	idGroup          map[string]int32      // for http read
+	idGroup          map[string]int      // for http read
 
 	vidVolume        map[int32]*meta.Volume
 	vidStores        map[int32][]string    // init from getStoreVolume    for  http Read
-	gidStores        map[int32][]string
+	gidStores        map[int][]string
 
 	genkey           *Genkey                // snowflake client for gen key
 	hbase            *HBaseClient           // hbase client
@@ -129,23 +129,23 @@ func (d *Directory) syncVolumes() (err error) {
 // Groups get all groups and set a watcher
 func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
 	var (
-		gidStores         map[int32][]string
-		idGroup           map[string][]int32
+		gidStores         map[int][]string
+		idGroup           map[string][]int
 		group,store       string
-		gid               int32
+		gid               int
 		groups,stores     []string
 		data              []byte
 	)
 	if groups, ev, err = d.zk.WatchGroups()(); err != nil {
 		return
 	}
-	gidStores = make(map[int32][]string)
-	idGroup = make(map[string][]int32)
+	gidStores = make(map[int][]string)
+	idGroup = make(map[string][]int)
 	for _, group = range groups {
 		if stores, err = d.zk.GroupStores(group); err != nil {
 			return
 		}
-		gid = int32(strconv.Atoi(group))
+		gid = strconv.Atoi(group)
 		gidStores[gid] = stores
 		for _,store = range stores {
 			idGroup[store] = gid
