@@ -1,4 +1,4 @@
-package meta
+package filemeta
 
 var (
 	HbaseTable = []byte("bfsmeta")

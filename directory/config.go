@@ -15,6 +15,7 @@ const (
 	configZkStoreRoot               = "/rack"
 	configZkVolumeRoot              = "/volume"
 	configZkGroupRoot               = "/group"
+	configPullInterval              = time.Second * 10
 	// hbase
 	configHbaseAddr                 = "localhost:9090"
 	configHbaseMaxActive            = 50
@@ -35,13 +36,14 @@ type Config struct {
 	SnowflakeZkAddrs          []string      `goconf:"snowflake:sfzkaddrs:,"`
 	SnowflakeZkTimeout        time.Duration `goconf:"snowflake:sfzktimeout"`
 	SnowflakeZkPath           string        `goconf:"snowflake:sfzkpath"`
-	SnowflakeWorkId           int           `goconf:"snowflake:workid"`
+	SnowflakeWorkId           int64         `goconf:"snowflake:workid"`
 	// bfs zookeeper
 	ZkAddrs        []string      `goconf:"zookeeper:addrs:,"`
 	ZkTimeout      time.Duration `goconf:"zookeeper:timeout:,"`
 	ZkStoreRoot    string        `goconf:"zookeeper:storeroot"`
 	ZkVolumeRoot   string        `goconf:"zookeeper:volumeroot"`
 	ZkGroupRoot    string        `goconf:"zookeeper:grouproot"`
+	PullInterval   time.Duration `goconf:"zookeeper:pullinterval"`
 	// hbase
 	HbaseAddr      string        `goconf:"hbase:addr"`
 	HbaseMaxActive int           `goconf:"hbase:max.active"`
@@ -49,7 +51,7 @@ type Config struct {
 	HbaseTimeout   time.Duration `goconf:"hbase:timeout:time"`
 	// http
 	MaxNum         int           `goconf:"http:maxnum"`
-	ApiListen      string        `goconf:"http:apilisten"`
+	ApiListen      string        `goconf:"http:apilisten"`	
 }
 
 // NewConfig new a config.
@@ -94,6 +96,9 @@ func (c *Config) setDefault() {
 	}
 	if c.ZkGroupRoot == "" {
 		c.ZkGroupRoot = configZkGroupRoot
+	}
+	if c.PullInterval < 1*time.Second {
+		c.PullInterval = configPullInterval
 	}
 	if c.HbaseAddr == "" {
 		c.HbaseAddr = configHbaseAddr

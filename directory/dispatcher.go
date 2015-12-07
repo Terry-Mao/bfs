@@ -1,7 +1,12 @@
 package main
 import (
 	"github.com/Terry-Mao/bfs/libs/meta"
+	log "github.com/golang/glog"
+	"sort"
+	"math/rand"
 	"errors"
+	"time"
+	"fmt"
 )
 
 // Dispatcher
@@ -37,11 +42,12 @@ func (d *Dispatcher) Update() (err error) {
 		volumeState              *meta.VolumeState
 		writable,ok              bool
 		totalAdd,totalAddDelay   uint64
+		restSpace,minScore,score int
+		gid,sum                  int
 		vid                      int32
 		gids                     []int
-		restSpace,minScore,score,gid,sum int
 	)
-	gids = make([]int)
+	gids = []int{}
 	for gid, stores = range d.dr.gidStores {
 		writable = true
 		for _, store = range stores {
@@ -55,11 +61,11 @@ func (d *Dispatcher) Update() (err error) {
 		}
 		if writable {
 			for _, store = range stores {
-				totalAdd = totalAddDelay = restSpace = minScore = 0
+				totalAdd ,totalAddDelay ,restSpace ,minScore = 0, 0, 0, 0
 				for _, vid = range d.dr.idVolumes[store] {
 					volumeState = d.dr.vidVolume[vid]
 					totalAdd = totalAdd + volumeState.TotalAddProcessed
-					restSpace = restSpace + volumeState.FreeSpace
+					restSpace = restSpace + int(volumeState.FreeSpace)
 					totalAddDelay = totalAddDelay + volumeState.TotalAddDelay
 				}
 				score = d.calScore(int(totalAdd), restSpace, int(totalAddDelay))
@@ -81,16 +87,16 @@ func (d *Dispatcher) Update() (err error) {
 }
 
 // cal_score algorithm of calculating score
-func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace int) int {
+func (d *Dispatcher) calScore(totalAdd, totalAddDelay ,restSpace int) int {
 	//score = rsScore + (-adScore)   when adScore==0 means ignored
 	var (
 		rsScore, adScore   int
 	)
-	rsScore = int(restSpace / spaceBenchmark)
+	rsScore = (restSpace / int(spaceBenchmark))
 	if totalAdd == 0 {
 		adScore = 0 // ignored
 	}
-	adScore = int(((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark)
+	adScore = ((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark
 	//rsScore < adScore todo
 	return rsScore - adScore
 }
@@ -101,7 +107,7 @@ func (d *Dispatcher) WStores() (stores []string, vid int32, err error) {
 		store                string
 		gid                  int
 		maxScore,randomScore,score int
-		r                    *Rand
+		r                    *rand.Rand
 	)
 	r = rand.New(rand.NewSource(time.Now().UnixNano()))
 	maxScore = d.gidScore[len(d.gids) - 1]
@@ -115,8 +121,8 @@ func (d *Dispatcher) WStores() (stores []string, vid int32, err error) {
 	stores = d.dr.gidStores[gid]
 	if len(stores) > 0 {
 		store = stores[0]
-		vid = (d.gidWIndex[gid] + 1) % len(d.dr.idVolumes[store])
-		d.gidWIndex[gid] = vid
+		vid = (int32(d.gidWIndex[gid]) + 1) % int32(len(d.dr.idVolumes[store]))
+		d.gidWIndex[gid] = int(vid)
 	}
 	return
 }
@@ -125,19 +131,21 @@ func (d *Dispatcher) WStores() (stores []string, vid int32, err error) {
 func (d *Dispatcher) RStores(vid int32) (stores []string, err error) {
 	var (
 		store        string
+		s            []string
 		storeMeta    *meta.Store
 		ok           bool
 	)
-	if stores, ok = d.dr.vidStores[vid]; !ok {
+	stores = []string{}
+	if s, ok = d.dr.vidStores[vid]; !ok {
 		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
 	}
-	for _, store = range stores {
+	for _, store = range s {
 		if storeMeta, ok = d.dr.idStore[store]; !ok {
 			log.Errorf("idStore cannot match store: %s", store)
 			continue
 		}
-		if storeMeta.Status == meta.StoreStatusFail {
-			delete(stores, store)
+		if storeMeta.Status != meta.StoreStatusFail {
+			stores = append(stores, store)
 		}
 	}
 	return

@@ -1,4 +1,4 @@
-package genkey
+package snowflake
 
 import (
 	log "github.com/golang/glog"
@@ -34,7 +34,7 @@ func NewGenkey(zservers []string, zpath string, ztimeout time.Duration, workerId
 // Getkey get key for upload file
 func (g *Genkey) Getkey() (key int64, err error) {
 	select {
-	case key <-g.keys:
+	case key = <-g.keys:
 		return
 	case <-time.After(genKeyTimeout):
 		err = errors.New("getKey timeout")
@@ -55,7 +55,7 @@ func (g *Genkey) preGenerate() {
 			time.Sleep(errorSleep)
 			continue
 		}
-		for _, key := range keys {
+		for _, key = range keys {
 			g.keys <- key
 		}
 	}

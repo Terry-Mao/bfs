@@ -3,8 +3,6 @@ package main
 import (
 	"path"
 	"time"
-	"encoding/json"
-	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
 )

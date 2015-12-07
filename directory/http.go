@@ -21,8 +21,8 @@ func HttpWriter(r *http.Request, wr http.ResponseWriter, start time.Time, result
 		err      error
 		byteJson []byte
 	)
-	if ret != http.StatusOK {
-		http.Error(wr, http.StatusText(ret), ret)
+	if *ret != http.StatusOK {
+		http.Error(wr, http.StatusText(*ret), *ret)
 		return
 	}
 	if byteJson, err = json.Marshal(result); err != nil {
@@ -34,5 +34,5 @@ func HttpWriter(r *http.Request, wr http.ResponseWriter, start time.Time, result
 		return
 	}
 	log.Infof("%s path:%s(params:%s,time:%f,ret:%v)", r.Method,
-		r.URL.Path, r.Form.Encode(), time.Now().Sub(start).Seconds(), ret)
+		r.URL.Path, r.Form.Encode(), time.Now().Sub(start).Seconds(), *ret)
 }

@@ -1,9 +1,16 @@
 package main
+
 import (
 	"github.com/Terry-Mao/bfs/directory/hbase"
+	"github.com/Terry-Mao/bfs/directory/hbase/filemeta"
+	"github.com/Terry-Mao/bfs/libs/meta"
 	"github.com/Terry-Mao/bfs/directory/snowflake"
 	log "github.com/golang/glog"
+	"github.com/samuel/go-zookeeper/zk"
+	"encoding/json"
+	"net/http"
 	"strconv"
+	"time"
 )
 
 const (
@@ -17,12 +24,12 @@ type Directory struct {
 	idVolumes        map[string][]int32    // init from getStoreVolume
 	idGroup          map[string]int      // for http read
 
-	vidVolume        map[int32]*meta.Volume
+	vidVolume        map[int32]*meta.VolumeState
 	vidStores        map[int32][]string    // init from getStoreVolume    for  http Read
 	gidStores        map[int][]string
 
-	genkey           *Genkey                // snowflake client for gen key
-	hbase            *HBaseClient           // hbase client
+	genkey           *snowflake.Genkey                // snowflake client for gen key
+	hbase            *hbase.HBaseClient           // hbase client
 	dispatcher       *Dispatcher            // dispatch for write or read reqs
 
 	config           *Config
@@ -34,7 +41,7 @@ func NewDirectory(config *Config, zk *Zookeeper) (d *Directory, err error) {
 	d = &Directory{}
 	d.config = config
 	d.zk = zk
-	if d.genkey, err = NewGenkey(config.SnowflakeZkAddrs, config.SnowflakeZkPath, config.SnowflakeZkTimeout, config.SnowflakeWorkId); err != nil {
+	if d.genkey, err = snowflake.NewGenkey(config.SnowflakeZkAddrs, config.SnowflakeZkPath, config.SnowflakeZkTimeout, config.SnowflakeWorkId); err != nil {
 		return
 	}
 	if err = hbase.Init(config.HbaseAddr, config.HbaseTimeout, config.HbaseMaxIdle, config.HbaseMaxActive); err != nil {
@@ -54,6 +61,7 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 		rack, store, volume    string
 		racks, stores, volumes []string
 		data                   []byte
+		vid                    int
 	)
 
 	if racks, ev, err = d.zk.WatchRacks(); err != nil {
@@ -77,9 +85,13 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 			if volumes, err = d.zk.StoreVolumes(rack, store); err != nil {
 				return
 			}
-			idVolumes[storeMeta.Id] = make([]int32)
+			idVolumes[storeMeta.Id] = []int32{}
 			for _, volume = range volumes {
-				idVolumes[storeMeta.Id] = append(idVolumes[storeMeta.Id], int32(strconv.Atoi(volume)))
+				if vid, err = strconv.Atoi(volume); err != nil {
+					log.Errorf("wrong volume:%s", volume)
+					continue
+				}
+				idVolumes[storeMeta.Id] = append(idVolumes[storeMeta.Id], int32(vid))
 			}
 			idStore[storeMeta.Id] = storeMeta
 		}
@@ -95,8 +107,8 @@ func (d *Directory) syncVolumes() (err error) {
 		volumeState    *meta.VolumeState
 		vidVolume      map[int32]*meta.VolumeState
 		vidStores      map[int32][]string
-		volume,store   string
-		vid            int32
+		volume         string
+		vid            int
 		volumes,stores []string
 		data           []byte
 	)
@@ -114,12 +126,15 @@ func (d *Directory) syncVolumes() (err error) {
 			log.Errorf("json.Unmarshal() error(%v)", err)
 			return
 		}
-		vid = int32(strconv.Atoi(volume))
-		vidVolume[vid] = volumeState
+		if vid, err = strconv.Atoi(volume); err != nil {
+			log.Errorf("wrong volume:%s", volume)
+			continue
+		}
+		vidVolume[int32(vid)] = volumeState
 		if stores, err = d.zk.VolumeStores(volume); err != nil {
 			return
 		}
-		vidStores[vid] = stores
+		vidStores[int32(vid)] = stores
 	}
 	d.vidVolume = vidVolume
 	d.vidStores = vidStores
@@ -130,22 +145,24 @@ func (d *Directory) syncVolumes() (err error) {
 func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
 	var (
 		gidStores         map[int][]string
-		idGroup           map[string][]int
+		idGroup           map[string]int
 		group,store       string
 		gid               int
 		groups,stores     []string
-		data              []byte
 	)
-	if groups, ev, err = d.zk.WatchGroups()(); err != nil {
+	if groups, ev, err = d.zk.WatchGroups(); err != nil {
 		return
 	}
 	gidStores = make(map[int][]string)
-	idGroup = make(map[string][]int)
+	idGroup = make(map[string]int)
 	for _, group = range groups {
 		if stores, err = d.zk.GroupStores(group); err != nil {
 			return
 		}
-		gid = strconv.Atoi(group)
+		if gid, err = strconv.Atoi(group); err != nil {
+			log.Errorf("wrong group:%s", group)
+			continue
+		}
 		gidStores[gid] = stores
 		for _,store = range stores {
 			idGroup[store] = gid
@@ -153,6 +170,7 @@ func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
 	}
 	d.gidStores = gidStores
 	d.idGroup = idGroup
+	return
 }
 
 // SyncZookeeper Synchronous zookeeper data to memory
@@ -206,7 +224,7 @@ func (d *Directory) cookie() (cookie int32) {
 // Rstores get readable stores for http get
 func (d *Directory) Rstores(key int64, cookie int32) (hosts []string, vid int32, ret int, err error) {
 	var (
-		f   *meta.File
+		f   *filemeta.File
 	)
 	ret = http.StatusOK
 	if f ,err = d.hbase.Get(key); err != nil {
@@ -233,12 +251,11 @@ func (d *Directory) Rstores(key int64, cookie int32) (hosts []string, vid int32,
 // Wstores get writable stores for http upload
 func (d *Directory) Wstores(numKeys int) (keys []int64, vid, cookie int32, hosts []string, ret int, err error) {
 	var (
-		f    *meta.File
 		i    int
 		key  int64
 	)
 	ret = http.StatusOK
-	if numKeys > d.config.maxnum {
+	if numKeys > d.config.MaxNum {
 		ret = http.StatusBadRequest
 		return
 	}
@@ -259,7 +276,7 @@ func (d *Directory) Wstores(numKeys int) (keys []int64, vid, cookie int32, hosts
 // Dstores get delable stores for http del
 func (d *Directory) Dstores(key int64, cookie int32) (hosts []string, vid int32, ret int, err error) {
 	var (
-		f    *meta.File
+		f    *filemeta.File
 	)
 	ret = http.StatusOK
 	if f, err = d.hbase.Get(key); err != nil {
