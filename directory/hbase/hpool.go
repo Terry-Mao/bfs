@@ -2,7 +2,7 @@ package hbase
 
 import (
 	"time"
-	"directory/hbase/hbasethrift"
+	"github.com/Terry-Mao/bfs/directory/hbase/hbasethrift"
 	"git.apache.org/thrift.git/lib/go/thrift"
 	log "github.com/golang/glog"
 )

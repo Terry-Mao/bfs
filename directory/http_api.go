@@ -3,7 +3,6 @@ package main
 import (
 	log "github.com/golang/glog"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 )
@@ -34,9 +33,10 @@ type httpGetHandler struct {
 func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err              error
-		key              int64
-		vid, cookie      int32
+		key, cookie      int64
+		vid              int32
 		stores           []string
+		ret              int
 		res              Response
 		params           = r.URL.Query()
 	)
@@ -56,7 +56,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	if stores, vid, ret, err = h.d.Rstores(key, cookie); err != nil {
+	if stores, vid, ret, err = h.d.Rstores(key, int32(cookie)); err != nil {
 		log.Errorf("Rstores() error(%v", err)
 		ret = http.StatusInternalServerError
 		return
@@ -75,7 +75,8 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err              error
 		keys             []int64
-		vid, cookie,num  int32
+		vid, cookie      int32
+		num              int64
 		stores           []string
 		ret              int
 		res              Response
@@ -92,7 +93,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	if keys, vid, cookie, stores, ret, err = h.d.Wstores(num); err != nil {
+	if keys, vid, cookie, stores, ret, err = h.d.Wstores(int(num)); err != nil {
 		log.Errorf("Wstores() error(%v)", err)
 		ret = http.StatusInternalServerError
 		return
@@ -112,8 +113,8 @@ type httpDelHandler struct {
 func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err              error
-		keys             []int64
-		vid, cookie,num  int32
+		vid              int32
+		cookie, key      int64
 		stores           []string
 		ret              int
 		res              Response
@@ -135,7 +136,7 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	if stores, vid, ret, err = h.d.Dstores(key, cookie); err != nil {
+	if stores, vid, ret, err = h.d.Dstores(key, int32(cookie)); err != nil {
 		log.Errorf("Dstores() error(%v", err)
 		ret = http.StatusInternalServerError
 		return
