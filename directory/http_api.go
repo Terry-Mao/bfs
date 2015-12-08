@@ -38,7 +38,6 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		stores           []string
 		ret              int
 		res              Response
-		params           = r.URL.Query()
 	)
 	if r.Method != "GET" {
 		ret = http.StatusMethodNotAllowed
@@ -46,13 +45,13 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpWriter(r, wr, time.Now(), res, &ret)
-	if key, err = strconv.ParseInt(params.Get("key"), 10, 64); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("key"), err)
+	if key, err = strconv.ParseInt(r.FormValue("key"), 10, 64); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest
 		return
 	}
-	if cookie, err = strconv.ParseInt(params.Get("cookie"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("cookie"), err)
+	if cookie, err = strconv.ParseInt(r.FormValue("cookie"), 10, 32); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("cookie"), err)
 		ret = http.StatusBadRequest
 		return
 	}
@@ -80,7 +79,6 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		stores           []string
 		ret              int
 		res              Response
-		params           = r.URL.Query()
 	)
 	if r.Method != "POST" {
 		ret = http.StatusMethodNotAllowed
@@ -88,8 +86,8 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpWriter(r, wr, time.Now(), res, &ret)
-	if num, err = strconv.ParseInt(params.Get("num"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("key"), err)
+	if num, err = strconv.ParseInt(r.FormValue("num"), 10, 32); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest
 		return
 	}
@@ -118,7 +116,6 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		stores           []string
 		ret              int
 		res              Response
-		params           = r.URL.Query()
 	)
 	if r.Method != "POST" {
 		ret = http.StatusMethodNotAllowed
@@ -126,13 +123,13 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpWriter(r, wr, time.Now(), res, &ret)
-	if key, err = strconv.ParseInt(params.Get("key"), 10, 64); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("key"), err)
+	if key, err = strconv.ParseInt(r.FormValue("key"), 10, 64); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest
 		return
 	}
-	if cookie, err = strconv.ParseInt(params.Get("cookie"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("cookie"), err)
+	if cookie, err = strconv.ParseInt(r.FormValue("cookie"), 10, 32); err != nil {
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("cookie"), err)
 		ret = http.StatusBadRequest
 		return
 	}
