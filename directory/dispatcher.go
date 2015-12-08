@@ -68,7 +68,7 @@ func (d *Dispatcher) Update() (err error) {
 					restSpace = restSpace + int(volumeState.FreeSpace)
 					totalAddDelay = totalAddDelay + volumeState.TotalAddDelay
 				}
-				score = d.calScore(int(totalAdd), restSpace, int(totalAddDelay))
+				score = d.calScore(int(totalAdd), int(totalAddDelay), restSpace)
 				if score < minScore {
 					minScore = score
 				}
@@ -93,10 +93,9 @@ func (d *Dispatcher) calScore(totalAdd, totalAddDelay ,restSpace int) int {
 		rsScore, adScore   int
 	)
 	rsScore = (restSpace / int(spaceBenchmark))
-	if totalAdd == 0 {
-		adScore = 0 // ignored
+	if totalAdd != 0 {
+		adScore = ((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark
 	}
-	adScore = ((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark
 	//rsScore < adScore todo
 	return rsScore - adScore
 }

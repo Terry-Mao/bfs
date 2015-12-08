@@ -13,7 +13,6 @@ const (
 	configZookeeperVolumeRoot       = "/volume"
 	configGetInterval               = time.Second * 3
 	configHeadInterval              = time.Second * 60
-	configMaxUsedSpacePercent       = 0.95
 )
 
 var (
@@ -29,7 +28,6 @@ type Config struct {
 	ZookeeperVolumeRoot       string        `goconf:"zookeeper:volumeroot"`
 	GetInterval               time.Duration `goconf:"store:get_interval:time"`
 	HeadInterval              time.Duration `goconf:"store:head_interval:time"`
-	MaxUsedSpacePercent       float32       `goconf:"store:max_used_space_percent"`
 }
 
 // NewConfig new a config.
@@ -68,8 +66,5 @@ func (c *Config) setDefault() {
 	}
 	if c.HeadInterval == 0 {
 		c.HeadInterval = configHeadInterval
-	}
-	if c.MaxUsedSpacePercent == 0 {
-		c.MaxUsedSpacePercent = configMaxUsedSpacePercent
 	}
 }

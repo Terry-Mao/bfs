@@ -7,11 +7,11 @@ import (
 
 const (
 	// snowflake zookeeper
-	configSnowflakeZkTimeout        = time.Second * 1 // 1s
+	configSnowflakeZkTimeout        = time.Second * 15 // 1s
 	configSnowflakeZkPath           = "/bfs_sf"
 	configSnowflakeWorkId           = 72
 	// zookeeper
-	configZkTimeout                 = time.Second * 1 // 1s
+	configZkTimeout                 = time.Second * 15 // 1s
 	configZkStoreRoot               = "/rack"
 	configZkVolumeRoot              = "/volume"
 	configZkGroupRoot               = "/group"
