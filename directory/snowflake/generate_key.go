@@ -8,7 +8,7 @@ import (
 
 const (
 	maxSize        = 1000
-	errorSleep     = 100 * time.Millisecond
+	errorSleep     = 1 * time.Second
 	genKeyTimeout  = 2 * time.Second
 )
 
@@ -51,7 +51,7 @@ func (g *Genkey) preGenerate() {
 	)
 	for {
 		if keys, err = g.client.Ids(100); err != nil {
-			log.Errorf("preGenerate() error(%v)  need check!!", err)
+			log.Errorf("preGenerate() error(%v)  retry", err)
 			time.Sleep(errorSleep)
 			continue
 		}

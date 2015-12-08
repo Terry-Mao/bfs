@@ -49,6 +49,7 @@ func NewDirectory(config *Config, zk *Zookeeper) (d *Directory, err error) {
 	}
 	d.hbase = hbase.NewHBaseClient()
 	d.dispatcher = NewDispatcher(d)
+	go d.SyncZookeeper()
 	return
 }
 
@@ -196,7 +197,11 @@ func (d *Directory) SyncZookeeper() {
 			time.Sleep(retrySleep)
 			continue
 		}
-		d.dispatcher.Update()
+		if err = d.dispatcher.Update(); err != nil {
+			log.Errorf("Update() called error(%v)", err)
+			time.Sleep(retrySleep)
+			continue
+		}
 	selectBack:
 		select {
 		case <-sev:
@@ -209,7 +214,9 @@ func (d *Directory) SyncZookeeper() {
 			if err = d.syncVolumes(); err != nil {
 				log.Errorf("syncVolumes() called error(%v)", err)
 			} else {
-				d.dispatcher.Update()
+				if err = d.dispatcher.Update(); err != nil {
+					log.Errorf("Update() called error(%v)", err)
+				}
 			}
 			goto selectBack
 		}

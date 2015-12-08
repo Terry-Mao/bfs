@@ -177,6 +177,7 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err erro
 			break
 		}
 		status = store.Status
+		store.Status = meta.StoreStatusHealth
 		for i = 0; i < retryCount; i++ {
 			if volumes, err = store.Info(); err == nil {
 				break

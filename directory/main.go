@@ -40,7 +40,6 @@ func main() {
 		log.Errorf("pitchfork NewDirectory() failed, Quit now")
 		return
 	}
-	go d.SyncZookeeper()
 	log.Infof("init http api...")
 	StartApi(c.ApiListen, d)
 	StartSignal()

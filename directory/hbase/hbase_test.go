@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 	"fmt"
+    "github.com/Terry-Mao/bfs/directory/hbase/filemeta"
 )
 
 
@@ -17,11 +18,11 @@ func TestHbase(t *testing.T) {
     }
 
     h := NewHBaseClient()
-    m := &meta.Meta{}
+    m := &filemeta.File{}
     m.Key = 445
     m.Vid = 55
     m.Cookie=5
-    n := &meta.Meta{}
+    n := &filemeta.File{}
     if err = h.Put(m); err != nil {
             fmt.Println("error: %v", err)
     }

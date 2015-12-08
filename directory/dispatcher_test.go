@@ -7,12 +7,13 @@ import (
 )
 
 
-func TestDirectory(t *testing.T) {
+func TestDispatcher(t *testing.T) {
     var (
             err        error
             config     *Config
             zk         *Zookeeper
             d          *Directory
+            ds         *Dispatcher
     )
     if config, err = NewConfig("./directory.conf"); err != nil {
         t.Errorf("NewConfig() error(%v)", err)
@@ -27,16 +28,9 @@ func TestDirectory(t *testing.T) {
         t.Errorf("NewDirectory() error(%v)", err)
         t.FailNow()
     }
-    if _, err = d.syncStores(); err != nil {
-        t.Errorf("syncStores() error(%v)", err)
-        t.FailNow()
-    }
-    if _, err = d.syncGroups(); err != nil {
-        t.Errorf("syncGroups() error(%v)", err)
-        t.FailNow()
-    }
-    if err = d.syncVolumes(); err != nil {
-        t.Errorf("syncVolumes() error(%v)", err)
+    ds = NewDispatcher(d)
+    if err = ds.Update(); err != nil {
+        t.Errorf("Update() error(%v)", err)
         t.FailNow()
     }
 }
