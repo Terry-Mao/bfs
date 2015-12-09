@@ -9,7 +9,7 @@ const (
 	// snowflake zookeeper
 	configSnowflakeZkTimeout = time.Second * 15 // 1s
 	configSnowflakeZkPath    = "/bfs_sf"
-	configSnowflakeWorkId    = 72
+	configSnowflakeWorkId    = 0
 	// zookeeper
 	configZkTimeout    = time.Second * 15 // 1s
 	configZkStoreRoot  = "/rack"

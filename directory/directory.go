@@ -229,10 +229,11 @@ func (d *Directory) cookie() (cookie int32) {
 }
 
 // Rstores get readable stores for http get
-func (d *Directory) Rstores(key int64, cookie int32) (hosts []string, vid int32, ret int, err error) {
+func (d *Directory) Rstores(key int64, cookie int32) (res *Response, ret int, err error) {
 	var (
 		f *filemeta.File
 	)
+	res = new(Response)
 	ret = http.StatusOK
 	if f, err = d.hbase.Get(key); err != nil {
 		return
@@ -245,29 +246,31 @@ func (d *Directory) Rstores(key int64, cookie int32) (hosts []string, vid int32,
 		ret = http.StatusBadRequest
 		return
 	}
-	vid = f.Vid
-	if hosts, err = d.dispatcher.RStores(vid); err != nil {
+	res.Vid = f.Vid
+	if res.Stores, err = d.dispatcher.RStores(res.Vid); err != nil {
 		return
 	}
-	if len(hosts) == 0 {
+	if len(res.Stores) == 0 {
 		ret = http.StatusInternalServerError
 	}
 	return
 }
 
 // Wstores get writable stores for http upload
-func (d *Directory) Wstores(numKeys int) (keys []int64, vid, cookie int32, hosts []string, ret int, err error) {
+func (d *Directory) Wstores(numKeys int) (res *Response, ret int, err error) {
 	var (
 		i   int
-		key int64
+		key  int64
+		keys []int64
 		f   filemeta.File
 	)
+	res = new(Response)
 	ret = http.StatusOK
 	if numKeys > d.config.MaxNum {
 		ret = http.StatusBadRequest
 		return
 	}
-	if hosts, vid, err = d.dispatcher.WStores(); err != nil {
+	if res.Stores, res.Vid, err = d.dispatcher.WStores(); err != nil {
 		return
 	}
 	keys = make([]int64, numKeys)
@@ -277,20 +280,21 @@ func (d *Directory) Wstores(numKeys int) (keys []int64, vid, cookie int32, hosts
 		}
 		keys[i] = key
 	}
-	cookie = d.cookie()
+	res.Keys = keys
+	res.Cookie = d.cookie()
 	for _, key = range keys {
 		f.Key = key
-		f.Vid = vid
-		f.Cookie = cookie
+		f.Vid = res.Vid
+		f.Cookie = res.Cookie
 		if err = d.hbase.Put(&f); err != nil {
-			return
+			return //puted keys will be ignored
 		}
 	}
 	return
 }
 
 // Dstores get delable stores for http del
-func (d *Directory) Dstores(key int64, cookie int32) (hosts []string, vid int32, ret int, err error) {
+func (d *Directory) Dstores(key int64, cookie int32) (res *Response, ret int, err error) {
 	var (
 		f *filemeta.File
 	)
@@ -309,9 +313,12 @@ func (d *Directory) Dstores(key int64, cookie int32) (hosts []string, vid int32,
 	if err = d.hbase.Del(key); err != nil {
 		return
 	}
-	vid = f.Vid
-	if hosts, err = d.dispatcher.DStores(vid); err != nil {
+	res.Vid = f.Vid
+	if res.Stores, err = d.dispatcher.DStores(res.Vid); err != nil {
 		return
+	}
+	if len(res.Stores) == 0 {
+		ret = http.StatusInternalServerError
 	}
 	return
 }

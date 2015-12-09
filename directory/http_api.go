@@ -34,10 +34,8 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err         error
 		key, cookie int64
-		vid         int32
-		stores      []string
 		ret         int
-		res         Response
+		res         *Response
 		params      = r.URL.Query()
 	)
 	if r.Method != "GET" {
@@ -45,7 +43,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), &res, &ret)
+	defer HttpWriter(r, wr, time.Now(), res, &ret)
 	if key, err = strconv.ParseInt(params.Get("key"), 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest
@@ -56,13 +54,10 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	if stores, vid, ret, err = h.d.Rstores(key, int32(cookie)); err != nil {
-		log.Errorf("Rstores() error(%v", err)
+	if res, ret, err = h.d.Rstores(key, int32(cookie)); err != nil {
+		log.Errorf("Rstores() error(%v)", err)
 		ret = http.StatusInternalServerError
-		return
 	}
-	res.Vid = vid
-	res.Stores = stores
 	return
 }
 
@@ -74,33 +69,25 @@ type httpUploadHandler struct {
 func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err         error
-		keys        []int64
-		vid, cookie int32
 		num         int64
-		stores      []string
 		ret         int
-		res         Response
+		res         *Response
 	)
 	if r.Method != "POST" {
 		ret = http.StatusMethodNotAllowed
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), &res, &ret)
+	defer HttpWriter(r, wr, time.Now(), res, &ret)
 	if num, err = strconv.ParseInt(r.FormValue("num"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest
 		return
 	}
-	if keys, vid, cookie, stores, ret, err = h.d.Wstores(int(num)); err != nil {
+	if res, ret, err = h.d.Wstores(int(num)); err != nil {
 		log.Errorf("Wstores() error(%v)", err)
 		ret = http.StatusInternalServerError
-		return
 	}
-	res.Keys = keys
-	res.Vid = vid
-	res.Cookie = cookie
-	res.Stores = stores
 	return
 }
 
@@ -112,18 +99,16 @@ type httpDelHandler struct {
 func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err         error
-		vid         int32
 		cookie, key int64
-		stores      []string
 		ret         int
-		res         Response
+		res         *Response
 	)
 	if r.Method != "POST" {
 		ret = http.StatusMethodNotAllowed
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), &res, &ret)
+	defer HttpWriter(r, wr, time.Now(), res, &ret)
 	if key, err = strconv.ParseInt(r.FormValue("key"), 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest
@@ -134,12 +119,9 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	if stores, vid, ret, err = h.d.Dstores(key, int32(cookie)); err != nil {
-		log.Errorf("Dstores() error(%v", err)
+	if res, ret, err = h.d.Dstores(key, int32(cookie)); err != nil {
+		log.Errorf("Dstores() error(%v)", err)
 		ret = http.StatusInternalServerError
-		return
 	}
-	res.Vid = vid
-	res.Stores = stores
 	return
 }
