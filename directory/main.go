@@ -2,8 +2,8 @@ package main
 
 import (
 	"flag"
-	"runtime"
 	log "github.com/golang/glog"
+	"runtime"
 )
 
 var (
@@ -16,10 +16,10 @@ func init() {
 
 func main() {
 	var (
-		c      *Config
-		zk     *Zookeeper
-		d      *Directory
-		err    error
+		c   *Config
+		zk  *Zookeeper
+		d   *Directory
+		err error
 	)
 	flag.Parse()
 	defer log.Flush()
@@ -31,7 +31,7 @@ func main() {
 	}
 	log.Infof("init zookeeper...")
 	if zk, err = NewZookeeper(c.ZkAddrs, c.ZkTimeout, c.ZkStoreRoot, c.ZkVolumeRoot,
-					 c.ZkGroupRoot); err != nil {
+		c.ZkGroupRoot); err != nil {
 		log.Errorf("NewZookeeper() failed, Quit now")
 		return
 	}

@@ -73,6 +73,10 @@ func (s *Store) Info() (vs []*Volume, err error) {
 		return
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		err = errors.ErrInternal
+		return
+	}
 	if body, err = ioutil.ReadAll(resp.Body); err != nil {
 		log.Errorf("ioutil.ReadAll() error(%v)", err)
 		return

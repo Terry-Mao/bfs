@@ -7,16 +7,16 @@ import (
 	"time"
 )
 
-// Response response for http upload
+// Response response for http req
 type Response struct {
-	Keys    []int64  `json:"keys,omitempty"`
-	Vid     int32    `json:"vid,omitempty"`
-	Cookie  int32    `json:"cookie,omitempty"`
-	Stores  []string `json:"stores,omitempty"`
+	Keys   []int64  `json:"keys,omitempty"`
+	Vid    int32    `json:"vid,omitempty"`
+	Cookie int32    `json:"cookie,omitempty"`
+	Stores []string `json:"stores,omitempty"`
 }
 
 // HttpWriter
-func HttpWriter(r *http.Request, wr http.ResponseWriter, start time.Time, result interface{}, ret *int) {
+func HttpWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res *Response, ret *int) {
 	var (
 		err      error
 		byteJson []byte
@@ -25,8 +25,8 @@ func HttpWriter(r *http.Request, wr http.ResponseWriter, start time.Time, result
 		http.Error(wr, http.StatusText(*ret), *ret)
 		return
 	}
-	if byteJson, err = json.Marshal(result); err != nil {
-		log.Errorf("json.Marshal(\"%v\") failed (%v)", result, err)
+	if byteJson, err = json.Marshal(res); err != nil {
+		log.Errorf("json.Marshal(\"%v\") failed (%v)", res, err)
 		return
 	}
 	wr.Header().Set("Content-Type", "application/json;charset=utf-8")

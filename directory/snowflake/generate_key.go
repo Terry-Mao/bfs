@@ -49,6 +49,7 @@ func (g *Genkey) preGenerate() {
 		keys  []int64
 		err   error
 	)
+	time.Sleep(errorSleep)
 	for {
 		if keys, err = g.client.Ids(100); err != nil {
 			log.Errorf("preGenerate() error(%v)  retry", err)

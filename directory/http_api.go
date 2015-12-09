@@ -16,7 +16,7 @@ func StartApi(addr string, d *Directory) {
 		)
 		serveMux.Handle("/get", httpGetHandler{d: d})
 		serveMux.Handle("/upload", httpUploadHandler{d: d})
-		serveMux.Handle("/del", httpUploadHandler{d: d})
+		serveMux.Handle("/del", httpDelHandler{d: d})
 		if err = http.ListenAndServe(addr, serveMux); err != nil {
 			log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
 			return
@@ -27,30 +27,31 @@ func StartApi(addr string, d *Directory) {
 
 // httpGetHandler http upload a file.
 type httpGetHandler struct {
-	d   *Directory
+	d *Directory
 }
 
 func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		err              error
-		key, cookie      int64
-		vid              int32
-		stores           []string
-		ret              int
-		res              Response
+		err         error
+		key, cookie int64
+		vid         int32
+		stores      []string
+		ret         int
+		res         Response
+		params      = r.URL.Query()
 	)
 	if r.Method != "GET" {
 		ret = http.StatusMethodNotAllowed
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), res, &ret)
-	if key, err = strconv.ParseInt(r.FormValue("key"), 10, 64); err != nil {
+	defer HttpWriter(r, wr, time.Now(), &res, &ret)
+	if key, err = strconv.ParseInt(params.Get("key"), 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest
 		return
 	}
-	if cookie, err = strconv.ParseInt(r.FormValue("cookie"), 10, 32); err != nil {
+	if cookie, err = strconv.ParseInt(params.Get("cookie"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("cookie"), err)
 		ret = http.StatusBadRequest
 		return
@@ -72,20 +73,20 @@ type httpUploadHandler struct {
 
 func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		err              error
-		keys             []int64
-		vid, cookie      int32
-		num              int64
-		stores           []string
-		ret              int
-		res              Response
+		err         error
+		keys        []int64
+		vid, cookie int32
+		num         int64
+		stores      []string
+		ret         int
+		res         Response
 	)
 	if r.Method != "POST" {
 		ret = http.StatusMethodNotAllowed
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), res, &ret)
+	defer HttpWriter(r, wr, time.Now(), &res, &ret)
 	if num, err = strconv.ParseInt(r.FormValue("num"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest
@@ -110,19 +111,19 @@ type httpDelHandler struct {
 
 func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		err              error
-		vid              int32
-		cookie, key      int64
-		stores           []string
-		ret              int
-		res              Response
+		err         error
+		vid         int32
+		cookie, key int64
+		stores      []string
+		ret         int
+		res         Response
 	)
 	if r.Method != "POST" {
 		ret = http.StatusMethodNotAllowed
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), res, &ret)
+	defer HttpWriter(r, wr, time.Now(), &res, &ret)
 	if key, err = strconv.ParseInt(r.FormValue("key"), 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest

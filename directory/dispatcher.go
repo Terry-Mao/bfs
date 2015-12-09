@@ -1,28 +1,29 @@
 package main
+
 import (
+	"errors"
+	"fmt"
 	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
-	"sort"
 	"math/rand"
-	"errors"
+	"sort"
 	"time"
-	"fmt"
 )
 
 // Dispatcher
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gidScore  map[int]int   // for write  gid:score
-	gidWIndex map[int]int      // volume index  directory:idVolumes[store][index] =>volume id
+	gidScore  map[int]int // for write  gid:score
+	gidWIndex map[int]int // volume index  directory:idVolumes[store][index] =>volume id
 	gids      []int
 	dr        *Directory
 }
 
 const (
-	baseScore = 100
-	nsToMs = 1000000                     // ns ->  us
-	spaceBenchmark = meta.MaxBlockOffset // 1 volume
-	addDelayBenchmark = 1                // 1ms   <1ms means no load, adScore==0
+	baseScore         = 100
+	nsToMs            = 1000000             // ns ->  us
+	spaceBenchmark    = meta.MaxBlockOffset // 1 volume
+	addDelayBenchmark = 1                   // 1ms   <1ms means no load, adScore==0
 )
 
 // NewDispatcher
@@ -37,16 +38,16 @@ func NewDispatcher(dr *Directory) (d *Dispatcher) {
 // Update when zk updates
 func (d *Dispatcher) Update() (err error) {
 	var (
-		store                    string
-		stores                   []string
-		storeMeta                *meta.Store
-		volumeState              *meta.VolumeState
-		writable,ok              bool
-		totalAdd,totalAddDelay   uint64
-		restSpace,minScore,score int
-		gid,sum                  int
-		vid                      int32
-		gids                     []int
+		store                      string
+		stores                     []string
+		storeMeta                  *meta.Store
+		volumeState                *meta.VolumeState
+		writable, ok               bool
+		totalAdd, totalAddDelay    uint64
+		restSpace, minScore, score int
+		gid, sum                   int
+		vid                        int32
+		gids                       []int
 	)
 	gids = []int{}
 	for gid, stores = range d.dr.gidStores {
@@ -62,7 +63,7 @@ func (d *Dispatcher) Update() (err error) {
 		}
 		if writable {
 			for _, store = range stores {
-				totalAdd ,totalAddDelay ,restSpace ,minScore = 0, 0, 0, 0
+				totalAdd, totalAddDelay, restSpace, minScore = 0, 0, 0, 0
 				for _, vid = range d.dr.idVolumes[store] {
 					volumeState = d.dr.vidVolume[vid]
 					totalAdd = totalAdd + volumeState.TotalAddProcessed
@@ -88,10 +89,10 @@ func (d *Dispatcher) Update() (err error) {
 }
 
 // cal_score algorithm of calculating score
-func (d *Dispatcher) calScore(totalAdd, totalAddDelay ,restSpace int) int {
+func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace int) int {
 	//score = rsScore + (-adScore)   when adScore==0 means ignored
 	var (
-		rsScore, adScore   int
+		rsScore, adScore int
 	)
 	rsScore = (restSpace / int(spaceBenchmark))
 	if totalAdd != 0 {
@@ -102,17 +103,20 @@ func (d *Dispatcher) calScore(totalAdd, totalAddDelay ,restSpace int) int {
 }
 
 // WStores get suitable stores for writing
-func (d *Dispatcher) WStores() (stores []string, vid int32, err error) {
+func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
 	var (
-		store                string
-		gid                  int
-		maxScore,randomScore,score int
-		r                    *rand.Rand
+		store                        string
+		stores                       []string
+		storeMeta                    *meta.Store
+		gid                          int
+		maxScore, randomScore, score int
+		r                            *rand.Rand
+		ok                           bool
 	)
 	r = rand.New(rand.NewSource(time.Now().UnixNano()))
-	maxScore = d.gidScore[len(d.gids) - 1]
+	maxScore = d.gidScore[d.gids[len(d.gids)-1]]
 	randomScore = r.Intn(maxScore)
-	for gid,score = range d.gidScore {
+	for gid, score = range d.gidScore {
 		if randomScore < score {
 			break
 		}
@@ -124,40 +128,49 @@ func (d *Dispatcher) WStores() (stores []string, vid int32, err error) {
 		vid = (int32(d.gidWIndex[gid]) + 1) % int32(len(d.dr.idVolumes[store]))
 		d.gidWIndex[gid] = int(vid)
 	}
+	for _, store = range stores {
+		if storeMeta, ok = d.dr.idStore[store]; !ok {
+			log.Errorf("idStore cannot match store: %s", store)
+			return nil, 0, errors.New(fmt.Sprintf("bad store : %s", store))
+		}
+		hosts = append(hosts, storeMeta.Stat)
+	}
 	return
 }
 
 // RStores get suitable stores for reading
-func (d *Dispatcher) RStores(vid int32) (stores []string, err error) {
+func (d *Dispatcher) RStores(vid int32) (hosts []string, err error) {
 	var (
-		store        string
-		s            []string
-		storeMeta    *meta.Store
-		ok           bool
+		store     string
+		stores    []string
+		storeMeta *meta.Store
+		ok        bool
 	)
-	stores = []string{}
-	if s, ok = d.dr.vidStores[vid]; !ok {
+	hosts = []string{}
+	if stores, ok = d.dr.vidStores[vid]; !ok {
 		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
 	}
-	for _, store = range s {
+	for _, store = range stores {
 		if storeMeta, ok = d.dr.idStore[store]; !ok {
 			log.Errorf("idStore cannot match store: %s", store)
 			continue
 		}
 		if storeMeta.Status != meta.StoreStatusFail {
-			stores = append(stores, store)
+			hosts = append(hosts, storeMeta.Stat)
 		}
 	}
 	return
 }
 
-// DStores get suitable stores for delete 
-func (d *Dispatcher) DStores(vid int32) (stores []string, err error) {
+// DStores get suitable stores for delete
+func (d *Dispatcher) DStores(vid int32) (hosts []string, err error) {
 	var (
-		store        string
-		storeMeta    *meta.Store
-		ok           bool
+		store     string
+		stores    []string
+		storeMeta *meta.Store
+		ok        bool
 	)
+	hosts = []string{}
 	if stores, ok = d.dr.vidStores[vid]; !ok {
 		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
 	}
@@ -169,6 +182,7 @@ func (d *Dispatcher) DStores(vid int32) (stores []string, err error) {
 		if storeMeta.Status == meta.StoreStatusFail {
 			return nil, errors.New(fmt.Sprintf("bad store : %s", store))
 		}
+		hosts = append(hosts, storeMeta.Stat)
 	}
 	return
 }
