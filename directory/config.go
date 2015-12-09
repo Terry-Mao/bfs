@@ -1,57 +1,57 @@
 package main
 
 import (
-    "time"
-    "github.com/Terry-Mao/goconf"
+	"github.com/Terry-Mao/goconf"
+	"time"
 )
 
 const (
 	// snowflake zookeeper
-	configSnowflakeZkTimeout        = time.Second * 15 // 1s
-	configSnowflakeZkPath           = "/bfs_sf"
-	configSnowflakeWorkId           = 72
+	configSnowflakeZkTimeout = time.Second * 15 // 1s
+	configSnowflakeZkPath    = "/bfs_sf"
+	configSnowflakeWorkId    = 72
 	// zookeeper
-	configZkTimeout                 = time.Second * 15 // 1s
-	configZkStoreRoot               = "/rack"
-	configZkVolumeRoot              = "/volume"
-	configZkGroupRoot               = "/group"
-	configPullInterval              = time.Second * 10
+	configZkTimeout    = time.Second * 15 // 1s
+	configZkStoreRoot  = "/rack"
+	configZkVolumeRoot = "/volume"
+	configZkGroupRoot  = "/group"
+	configPullInterval = time.Second * 10
 	// hbase
-	configHbaseAddr                 = "localhost:9090"
-	configHbaseMaxActive            = 50
-	configHbaseMaxIdle              = 10
-	configHbaseTimeout              = time.Second * 5
+	configHbaseAddr      = "localhost:9090"
+	configHbaseMaxActive = 50
+	configHbaseMaxIdle   = 10
+	configHbaseTimeout   = time.Second * 5
 	// http
-	configApiListen                 = "localhost:6065"
-	configMaxNum                    = 16
+	configApiListen = "localhost:6065"
+	configMaxNum    = 16
 )
 
 var (
 	configSnowflakeZkAddrs = []string{"localhost:2181"}
-	configZkAddrs = []string{"localhost:2181"}
+	configZkAddrs          = []string{"localhost:2181"}
 )
 
 type Config struct {
 	// snowflake zookeeper
-	SnowflakeZkAddrs          []string      `goconf:"snowflake:sfzkaddrs:,"`
-	SnowflakeZkTimeout        time.Duration `goconf:"snowflake:sfzktimeout"`
-	SnowflakeZkPath           string        `goconf:"snowflake:sfzkpath"`
-	SnowflakeWorkId           int64         `goconf:"snowflake:workid"`
+	SnowflakeZkAddrs   []string      `goconf:"snowflake:sfzkaddrs:,"`
+	SnowflakeZkTimeout time.Duration `goconf:"snowflake:sfzktimeout"`
+	SnowflakeZkPath    string        `goconf:"snowflake:sfzkpath"`
+	SnowflakeWorkId    int64         `goconf:"snowflake:workid"`
 	// bfs zookeeper
-	ZkAddrs        []string      `goconf:"zookeeper:addrs:,"`
-	ZkTimeout      time.Duration `goconf:"zookeeper:timeout:,"`
-	ZkStoreRoot    string        `goconf:"zookeeper:storeroot"`
-	ZkVolumeRoot   string        `goconf:"zookeeper:volumeroot"`
-	ZkGroupRoot    string        `goconf:"zookeeper:grouproot"`
-	PullInterval   time.Duration `goconf:"zookeeper:pullinterval"`
+	ZkAddrs      []string      `goconf:"zookeeper:addrs:,"`
+	ZkTimeout    time.Duration `goconf:"zookeeper:timeout:,"`
+	ZkStoreRoot  string        `goconf:"zookeeper:storeroot"`
+	ZkVolumeRoot string        `goconf:"zookeeper:volumeroot"`
+	ZkGroupRoot  string        `goconf:"zookeeper:grouproot"`
+	PullInterval time.Duration `goconf:"zookeeper:pullinterval"`
 	// hbase
 	HbaseAddr      string        `goconf:"hbase:addr"`
 	HbaseMaxActive int           `goconf:"hbase:max.active"`
 	HbaseMaxIdle   int           `goconf:"hbase:max.idle"`
 	HbaseTimeout   time.Duration `goconf:"hbase:timeout:time"`
 	// http
-	MaxNum         int           `goconf:"http:maxnum"`
-	ApiListen      string        `goconf:"http:apilisten"`	
+	MaxNum    int    `goconf:"http:maxnum"`
+	ApiListen string `goconf:"http:apilisten"`
 }
 
 // NewConfig new a config.

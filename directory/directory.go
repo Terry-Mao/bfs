@@ -1,13 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/Terry-Mao/bfs/directory/hbase"
 	"github.com/Terry-Mao/bfs/directory/hbase/filemeta"
-	"github.com/Terry-Mao/bfs/libs/meta"
 	"github.com/Terry-Mao/bfs/directory/snowflake"
+	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -20,20 +20,20 @@ const (
 // Directory
 // id means store serverid; vid means volume id; gid means group id
 type Directory struct {
-	idStore          map[string]*meta.Store // store status
-	idVolumes        map[string][]int32    // init from getStoreVolume
-	idGroup          map[string]int      // for http read
+	idStore   map[string]*meta.Store // store status
+	idVolumes map[string][]int32     // init from getStoreVolume
+	idGroup   map[string]int         // for http read
 
-	vidVolume        map[int32]*meta.VolumeState
-	vidStores        map[int32][]string    // init from getStoreVolume    for  http Read
-	gidStores        map[int][]string
+	vidVolume map[int32]*meta.VolumeState
+	vidStores map[int32][]string // init from getStoreVolume    for  http Read
+	gidStores map[int][]string
 
-	genkey           *snowflake.Genkey                // snowflake client for gen key
-	hbase            *hbase.HBaseClient           // hbase client
-	dispatcher       *Dispatcher            // dispatch for write or read reqs
+	genkey     *snowflake.Genkey  // snowflake client for gen key
+	hbase      *hbase.HBaseClient // hbase client
+	dispatcher *Dispatcher        // dispatch for write or read reqs
 
-	config           *Config
-	zk               *Zookeeper
+	config *Config
+	zk     *Zookeeper
 }
 
 // NewDirectory
@@ -105,13 +105,13 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 // Volumes get all volumes in zk
 func (d *Directory) syncVolumes() (err error) {
 	var (
-		volumeState    *meta.VolumeState
-		vidVolume      map[int32]*meta.VolumeState
-		vidStores      map[int32][]string
-		volume         string
-		vid            int
-		volumes,stores []string
-		data           []byte
+		volumeState     *meta.VolumeState
+		vidVolume       map[int32]*meta.VolumeState
+		vidStores       map[int32][]string
+		volume          string
+		vid             int
+		volumes, stores []string
+		data            []byte
 	)
 	if volumes, err = d.zk.Volumes(); err != nil {
 		return
@@ -145,11 +145,11 @@ func (d *Directory) syncVolumes() (err error) {
 // Groups get all groups and set a watcher
 func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
 	var (
-		gidStores         map[int][]string
-		idGroup           map[string]int
-		group,store       string
-		gid               int
-		groups,stores     []string
+		gidStores      map[int][]string
+		idGroup        map[string]int
+		group, store   string
+		gid            int
+		groups, stores []string
 	)
 	if groups, ev, err = d.zk.WatchGroups(); err != nil {
 		return
@@ -165,7 +165,7 @@ func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
 			continue
 		}
 		gidStores[gid] = stores
-		for _,store = range stores {
+		for _, store = range stores {
 			idGroup[store] = gid
 		}
 	}
@@ -177,9 +177,9 @@ func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
 // SyncZookeeper Synchronous zookeeper data to memory
 func (d *Directory) SyncZookeeper() {
 	var (
-		sev     <-chan zk.Event
-		gev     <-chan zk.Event
-		err              error
+		sev <-chan zk.Event
+		gev <-chan zk.Event
+		err error
 	)
 	for {
 		if sev, err = d.syncStores(); err != nil {
@@ -231,10 +231,10 @@ func (d *Directory) cookie() (cookie int32) {
 // Rstores get readable stores for http get
 func (d *Directory) Rstores(key int64, cookie int32) (hosts []string, vid int32, ret int, err error) {
 	var (
-		f   *filemeta.File
+		f *filemeta.File
 	)
 	ret = http.StatusOK
-	if f ,err = d.hbase.Get(key); err != nil {
+	if f, err = d.hbase.Get(key); err != nil {
 		return
 	}
 	if f == nil {
@@ -258,8 +258,9 @@ func (d *Directory) Rstores(key int64, cookie int32) (hosts []string, vid int32,
 // Wstores get writable stores for http upload
 func (d *Directory) Wstores(numKeys int) (keys []int64, vid, cookie int32, hosts []string, ret int, err error) {
 	var (
-		i    int
-		key  int64
+		i   int
+		key int64
+		f   filemeta.File
 	)
 	ret = http.StatusOK
 	if numKeys > d.config.MaxNum {
@@ -270,20 +271,28 @@ func (d *Directory) Wstores(numKeys int) (keys []int64, vid, cookie int32, hosts
 		return
 	}
 	keys = make([]int64, numKeys)
-	for i=0; i<numKeys; i++ {
+	for i = 0; i < numKeys; i++ {
 		if key, err = d.genkey.Getkey(); err != nil {
 			return
 		}
 		keys[i] = key
 	}
 	cookie = d.cookie()
+	for _, key = range keys {
+		f.Key = key
+		f.Vid = vid
+		f.Cookie = cookie
+		if err = d.hbase.Put(&f); err != nil {
+			return
+		}
+	}
 	return
 }
 
 // Dstores get delable stores for http del
 func (d *Directory) Dstores(key int64, cookie int32) (hosts []string, vid int32, ret int, err error) {
 	var (
-		f    *filemeta.File
+		f *filemeta.File
 	)
 	ret = http.StatusOK
 	if f, err = d.hbase.Get(key); err != nil {
