@@ -273,6 +273,10 @@ func (d *Directory) Wstores(numKeys int) (res *Response, ret int, err error) {
 	if res.Stores, res.Vid, err = d.dispatcher.WStores(); err != nil {
 		return
 	}
+	if len(res.Stores) == 0 {
+		ret = http.StatusInternalServerError
+		return
+	}
 	keys = make([]int64, numKeys)
 	for i = 0; i < numKeys; i++ {
 		if key, err = d.genkey.Getkey(); err != nil {
@@ -298,6 +302,7 @@ func (d *Directory) Dstores(key int64, cookie int32) (res *Response, ret int, er
 	var (
 		f *filemeta.File
 	)
+	res = new(Response)
 	ret = http.StatusOK
 	if f, err = d.hbase.Get(key); err != nil {
 		return
