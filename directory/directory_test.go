@@ -3,7 +3,6 @@ package main
 import (
 	"testing"
 	"time"
-	//	"fmt"
 )
 
 func TestDirectory(t *testing.T) {
@@ -15,7 +14,7 @@ func TestDirectory(t *testing.T) {
 	)
 	if config, err = NewConfig("./directory.conf"); err != nil {
 		t.Errorf("NewConfig() error(%v)", err)
-		return
+		t.FailNow()
 	}
 
 	if zk, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack", "/volume", "/group"); err != nil {
