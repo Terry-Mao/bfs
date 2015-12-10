@@ -60,6 +60,7 @@ func TestIndex(t *testing.T) {
 	}
 	i.Signal()
 	time.Sleep(1 * time.Second)
+	i.Flush()
 	// test recovery
 	if err = i.Recovery(func(ix *Index) error {
 		needles[ix.Key] = needle.NewCache(ix.Offset, ix.Size)

@@ -55,9 +55,11 @@ const (
 type Indexer struct {
 	wg     sync.WaitGroup
 	f      *os.File
-	bw     *bufio.Writer
 	signal chan int
 	ring   *Ring
+	// buffer
+	buf []byte
+	bn  int
 	//
 	File    string  `json:"file"`
 	LastErr error   `json:"last_err"`
@@ -103,6 +105,8 @@ func NewIndexer(file string, options Options) (i *Indexer, err error) {
 	i.syncOffset = 0
 	i.Options = options
 	i.ring = NewRing(options.RingBuffer)
+	i.bn = 0
+	i.buf = make([]byte, options.BufferSize)
 	if i.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		return nil, err
@@ -118,7 +122,6 @@ func NewIndexer(file string, options Options) (i *Indexer, err error) {
 			return nil, err
 		}
 	}
-	i.bw = bufio.NewWriterSize(i.f, options.BufferSize)
 	i.wg.Add(1)
 	i.signal = make(chan int, 1)
 	go i.merge()
@@ -163,39 +166,42 @@ func (i *Indexer) Write(key int64, offset uint32, size int32) (err error) {
 	if i.LastErr != nil {
 		return i.LastErr
 	}
-	if err = binary.BigEndian.WriteInt64(i.bw, key); err != nil {
-		i.LastErr = err
-		return
+	if i.bn+indexSize >= i.Options.BufferSize {
+		// buffer full
+		if err = i.flush(true); err != nil {
+			return
+		}
 	}
-	if err = binary.BigEndian.WriteUint32(i.bw, offset); err != nil {
-		i.LastErr = err
-		return
-	}
-	if err = binary.BigEndian.WriteInt32(i.bw, size); err == nil {
-		i.Offset += indexSize
-		i.write++
-	} else {
-		i.LastErr = err
-	}
+	binary.BigEndian.PutInt64(i.buf[i.bn:], key)
+	i.bn += keySize
+	binary.BigEndian.PutUint32(i.buf[i.bn:], offset)
+	i.bn += offsetSize
+	binary.BigEndian.PutInt32(i.buf[i.bn:], size)
+	i.bn += sizeSize
+	err = i.flush(false)
 	return
 }
 
-// sync sync the in-memory data flush to disk.
-func (i *Indexer) sync() (err error) {
+// flush the in-memory data flush to disk.
+func (i *Indexer) flush(force bool) (err error) {
 	var (
 		fd     uintptr
 		offset int64
 		size   int64
 	)
-	// append N times call flush then clean the os page cache
-	// page cache no used here...
-	// after upload a photo, we cache in our own cache server.
-	offset = i.syncOffset
-	size = i.Offset - i.syncOffset
-	if i.write < i.Options.MergeAtWrite {
+	if i.write++; !force && i.write < i.Options.SyncAtWrite {
 		return
 	}
+	if _, err = i.f.Write(i.buf[:i.bn]); err != nil {
+		i.LastErr = err
+		log.Errorf("index: %s Write() error(%v)", i.File, err)
+		return
+	}
+	i.bn = 0
 	i.write = 0
+	i.Offset += int64(i.bn)
+	offset = i.syncOffset
+	size = i.Offset - i.syncOffset
 	fd = i.f.Fd()
 	if i.Options.Syncfilerange {
 		if err = myos.Syncfilerange(fd, offset, size, myos.SYNC_FILE_RANGE_WRITE); err != nil {
@@ -224,12 +230,7 @@ func (i *Indexer) Flush() (err error) {
 	if i.LastErr != nil {
 		return i.LastErr
 	}
-	if err = i.bw.Flush(); err != nil {
-		i.LastErr = err
-		log.Errorf("index: %s Flush() error(%v)", i.File, err)
-		return
-	}
-	err = i.sync()
+	err = i.flush(true)
 	return
 }
 
@@ -269,13 +270,13 @@ func (i *Indexer) merge() {
 		if err = i.mergeRing(); err != nil {
 			break
 		}
-		if err = i.Flush(); err != nil {
+		if err = i.flush(false); err != nil {
 			break
 		}
 	}
 	i.mergeRing()
 	i.write = 0
-	i.Flush()
+	i.flush(true)
 	i.wg.Done()
 	log.Warningf("index: %s write job exit", i.File)
 	return
@@ -359,7 +360,8 @@ func (i *Indexer) Open() (err error) {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", i.File, err)
 		return
 	}
-	i.bw.Reset(i.f)
+	// reset buf
+	i.bn = 0
 	i.closed = false
 	i.LastErr = nil
 	i.wg.Add(1)
@@ -375,7 +377,7 @@ func (i *Indexer) Close() {
 		i.wg.Wait()
 	}
 	if i.f != nil {
-		if err = i.Flush(); err != nil {
+		if err = i.flush(true); err != nil {
 			log.Errorf("index: %s Flush() error(%v)", i.File, err)
 		}
 		if err = i.f.Sync(); err != nil {

@@ -167,7 +167,7 @@ func (b *SuperBlock) Write(data []byte) (err error) {
 		return
 	}
 	if _, err = b.w.Write(data); err == nil {
-		err = b.flush()
+		err = b.flush(false)
 	} else {
 		b.LastErr = err
 		return
@@ -177,13 +177,13 @@ func (b *SuperBlock) Write(data []byte) (err error) {
 }
 
 // flush flush writer buffer.
-func (b *SuperBlock) flush() (err error) {
+func (b *SuperBlock) flush(force bool) (err error) {
 	var (
 		fd     uintptr
 		offset int64
 		size   int64
 	)
-	if b.write++; b.write < b.Options.SyncAtWrite {
+	if b.write++; !force && b.write < b.Options.SyncAtWrite {
 		return
 	}
 	b.write = 0
@@ -389,7 +389,7 @@ func (b *SuperBlock) Open() (err error) {
 func (b *SuperBlock) Close() {
 	var err error
 	if b.w != nil {
-		if err = b.flush(); err != nil {
+		if err = b.flush(true); err != nil {
 			log.Errorf("block: %s flush error(%v)", b.File, err)
 		}
 		if err = b.w.Sync(); err != nil {

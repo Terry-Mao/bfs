@@ -110,7 +110,7 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	if err = b.flush(); err != nil {
+	if err = b.flush(true); err != nil {
 		t.Errorf("Flush() error(%v)", err)
 		t.FailNow()
 	}
