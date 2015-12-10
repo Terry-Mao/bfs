@@ -6,7 +6,6 @@ import (
 	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"math/rand"
-	"sort"
 	"time"
 )
 
@@ -46,7 +45,7 @@ func (d *Dispatcher) Update() (err error) {
 		writable, ok               bool
 		totalAdd, totalAddDelay    uint64
 		restSpace, minScore, score int
-		gid, sum                   int
+		gid, i                     int
 		vid                        int32
 		gids                       []int
 	)
@@ -77,15 +76,12 @@ func (d *Dispatcher) Update() (err error) {
 				}
 			}
 			d.gidScore[gid] = minScore
-			gids = append(gids, gid)
+			for i=0; i< minScore; i++ {
+				gids = append(gids, gid)
+			}
 		}
 	}
-	sort.Ints(gids)
 	d.gids = gids
-	for _, gid = range gids {
-		sum += d.gidScore[gid]
-		d.gidScore[gid] = sum
-	}
 	return
 }
 
@@ -96,12 +92,12 @@ func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace int) (score int
 	)
 	rsScore = (restSpace / int(spaceBenchmark))
 	if rsScore > maxScore {
-		rsScore = maxScore // more than 32T will be 32T and set score maxScore
+		rsScore = maxScore // more than 32T will be 32T and set score maxScore; less than 32G will be set 0 score;
 	}
 	if totalAdd != 0 {
 		adScore = (((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark) * baseAddDelay
 		if adScore > maxScore {
-			adScore = maxScore // more than 1s will be 1s and set score -maxScore
+			adScore = maxScore // more than 1s will be 1s and set score -maxScore; less than 100ms will be set -0 score;
 		}
 	}
 	score = rsScore - adScore
@@ -115,19 +111,11 @@ func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
 		stores                       []string
 		storeMeta                    *meta.Store
 		gid                          int
-		maxScore, randomScore, score int
 		r                            *rand.Rand
 		ok                           bool
 	)
 	r = rand.New(rand.NewSource(time.Now().UnixNano()))
-	maxScore = d.gidScore[d.gids[len(d.gids)-1]]
-	randomScore = r.Intn(maxScore)
-	for gid, score = range d.gidScore {
-		if randomScore < score {
-			break
-		}
-	} // need to do  cache
-
+	gid = d.gids[r.Intn(len(d.gids))]
 	stores = d.dr.gidStores[gid]
 	if len(stores) > 0 {
 		store = stores[0]
