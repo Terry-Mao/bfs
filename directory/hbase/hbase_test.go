@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 	"fmt"
+    "crypto/rand"
+    mrand "math/rand"
     "github.com/Terry-Mao/bfs/directory/hbase/filemeta"
 )
 
@@ -14,7 +16,7 @@ func TestHbase(t *testing.T) {
     )
     if err = Init("172.16.13.90:9090", 5*time.Second, 10, 10); err != nil {
             t.Errorf("Init failed")
-            return
+            t.FailNow()
     }
 
     h := NewHBaseClient()
@@ -32,10 +34,6 @@ func TestHbase(t *testing.T) {
             t.FailNow()
     }
     fmt.Println("Get success", n)
-    if err = h.Put(m); err != nil {
-            t.Errorf("error: %v", err)
-            t.FailNow()
-    }
     if err = h.Del(m.Key); err != nil {
             t.Errorf("error:%v", err)
             t.FailNow()
