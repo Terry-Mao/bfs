@@ -10,6 +10,10 @@ import (
 	"testing"
 )
 
+const (
+	_16kb = 16*1024 - needle.HeaderSize - needle.FooterSize
+)
+
 func TestVolume(t *testing.T) {
 	var (
 		ts    int32
@@ -93,7 +97,7 @@ func BenchmarkVolumeAdd(b *testing.B) {
 		err   error
 		file  = "./test/testb1"
 		ifile = "./test/testb1.idx"
-		data  = make([]byte, 16351) // 16kb
+		data  = make([]byte, _16kb) // 16kb
 	)
 	os.Remove(file)
 	os.Remove(ifile)
@@ -139,7 +143,7 @@ func BenchmarkVolumeWrite(b *testing.B) {
 		err   error
 		file  = "./test/testb2"
 		ifile = "./test/testb2.idx"
-		data  = make([]byte, 16351) // 16kb
+		data  = make([]byte, _16kb) // 16kb
 	)
 	os.Remove(file)
 	os.Remove(ifile)
@@ -164,7 +168,7 @@ func BenchmarkVolumeWrite(b *testing.B) {
 			err1 error
 			n    *needle.Needle
 			ns   = make([]needle.Needle, 9)
-			buf  = make([]byte, 16351*10) // 16kb
+			buf  = make([]byte, 163840) // 16kb
 		)
 		for i = 0; i < 9; i++ {
 			t = mrand.Int63()
@@ -180,7 +184,7 @@ func BenchmarkVolumeWrite(b *testing.B) {
 				n.Key = t
 				binary.BigEndian.PutInt64(buf[n.TotalSize+needle.KeyOffset:], n.Key)
 			}
-			if err1 = v.Write(ns, buf); err1 != nil {
+			if err1 = v.Write(ns, buf[:ts]); err1 != nil {
 				b.Errorf("Add() error(%v)", err1)
 				v.Unlock()
 				b.FailNow()
