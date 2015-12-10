@@ -1,23 +1,21 @@
 package main
 
 import (
-	"path"
-	"time"
-	"encoding/json"
-	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
+	"path"
+	"time"
 )
 
 type Zookeeper struct {
-	c                 *zk.Conn
-	storeRootPath     string
-	volumeRootPath    string
-	groupRootPath     string
+	c              *zk.Conn
+	storeRootPath  string
+	volumeRootPath string
+	groupRootPath  string
 }
 
 // NewZookeeper new a connection to zookeeper.
-func NewZookeeper(addrs []string, timeout time.Duration, storeRootPath,volumeRootPath,groupRootPath string) (z *Zookeeper, err error) {
+func NewZookeeper(addrs []string, timeout time.Duration, storeRootPath, volumeRootPath, groupRootPath string) (z *Zookeeper, err error) {
 	var (
 		s <-chan zk.Event
 	)
