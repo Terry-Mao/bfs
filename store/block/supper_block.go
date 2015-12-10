@@ -172,7 +172,6 @@ func (b *SuperBlock) Write(data []byte) (err error) {
 		b.LastErr = err
 		return
 	}
-	b.write++
 	b.Offset += incrOffset
 	return
 }
@@ -184,9 +183,10 @@ func (b *SuperBlock) flush() (err error) {
 		offset int64
 		size   int64
 	)
-	if b.LastErr != nil {
-		return b.LastErr
+	if b.write++; b.write < b.Options.SyncAtWrite {
+		return
 	}
+	b.write = 0
 	offset = needle.BlockOffset(b.syncOffset)
 	size = needle.BlockOffset(b.Offset - b.syncOffset)
 	fd = b.w.Fd()
@@ -203,10 +203,6 @@ func (b *SuperBlock) flush() (err error) {
 			return
 		}
 	}
-	if b.write < b.Options.AdviseAtWrite {
-		return
-	}
-	b.write = 0
 	if err = myos.Fadvise(fd, offset, size, myos.POSIX_FADV_DONTNEED); err == nil {
 		b.syncOffset = b.Offset
 	} else {

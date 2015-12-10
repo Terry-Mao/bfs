@@ -135,8 +135,6 @@ func BenchmarkVolumeAdd(b *testing.B) {
 
 func BenchmarkVolumeWrite(b *testing.B) {
 	var (
-		i     int
-		ts    int32
 		v     *Volume
 		err   error
 		file  = "./test/testb2"
@@ -160,23 +158,27 @@ func BenchmarkVolumeWrite(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		var (
+			i, j int
+			ts   int32
 			t    int64
 			err1 error
 			n    *needle.Needle
 			ns   = make([]needle.Needle, 9)
-			buf  = make([]byte, 16351*2) // 16kb
+			buf  = make([]byte, 16351*10) // 16kb
 		)
 		for i = 0; i < 9; i++ {
 			t = mrand.Int63()
+			n = &ns[i]
 			n.Init(t, 1, data)
 			n.Write(buf[ts:])
 			ts += n.TotalSize
 		}
 		for pb.Next() {
-			for i = 0; i < 9; i++ {
+			for j = 0; j < 9; j++ {
 				t = mrand.Int63()
+				n = &ns[j]
 				n.Key = t
-				binary.BigEndian.PutInt64(buf[ns[i].TotalSize+needle.KeyOffset:], n.Key)
+				binary.BigEndian.PutInt64(buf[n.TotalSize+needle.KeyOffset:], n.Key)
 			}
 			if err1 = v.Write(ns, buf); err1 != nil {
 				b.Errorf("Add() error(%v)", err1)

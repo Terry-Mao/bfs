@@ -12,6 +12,7 @@ func init() {
 	testConf.ServerId = "1"
 	testConf.Rack = "test"
 	testConf.SuperBlockSyncfilerange = true
+	testConf.SuperBlockSync = 1000
 	testConf.setDefault()
 }
 

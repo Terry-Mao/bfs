@@ -79,7 +79,7 @@ func NewVolume(id int32, bfile, ifile string, c *Config) (v *Volume, err error) 
 	v.CheckNeedles = make([]CheckNeedle, c.VolumeCheckSize)
 	if v.Block, err = block.NewSuperBlock(bfile, block.Options{
 		BufferSize:    c.NeedleMaxSize * c.BatchMaxNum,
-		AdviseAtWrite: c.SuperBlockAdvise,
+		SyncAtWrite:   c.SuperBlockSync,
 		Syncfilerange: c.SuperBlockSyncfilerange,
 	}); err != nil {
 		return nil, err
@@ -308,7 +308,7 @@ func (v *Volume) Write(ns []needle.Needle, buf []byte) (err error) {
 	offset = v.Block.Offset
 	if err = v.Block.Write(buf); err == nil {
 		for i = 0; i < len(ns); i++ {
-			n = &(ns[i])
+			n = &ns[i]
 			if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err != nil {
 				break
 			}

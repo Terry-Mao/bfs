@@ -28,7 +28,7 @@ func TestSuperBlock(t *testing.T) {
 	// test new block file
 	if b, err = NewSuperBlock(file, Options{
 		BufferSize:    4 * 1024 * 1024,
-		AdviseAtWrite: 1024,
+		SyncAtWrite:   1024,
 		Syncfilerange: true,
 	}); err != nil {
 		t.Errorf("NewSuperBlock(\"%s\") error(%v)", file, err)
@@ -38,7 +38,7 @@ func TestSuperBlock(t *testing.T) {
 	// test parse block file
 	if b, err = NewSuperBlock(file, Options{
 		BufferSize:    4 * 1024 * 1024,
-		AdviseAtWrite: 1024,
+		SyncAtWrite:   1024,
 		Syncfilerange: true,
 	}); err != nil {
 		t.Errorf("NewSuperBlock(\"%s\") error(%v)", file, err)
