@@ -90,7 +90,7 @@ func NewStore(zk *Zookeeper, c *Config) (s *Store, err error) {
 
 // init init the store.
 func (s *Store) init() (err error) {
-	if err = s.parseFreeVolumeIndex(); err != nil {
+	if err = s.parseFreeVolumeIndex(); err == nil {
 		err = s.parseVolumeIndex()
 	}
 	return
@@ -247,7 +247,7 @@ func (s *Store) saveFreeVolumeIndex() (err error) {
 		return
 	}
 	for _, v = range s.FreeVolumes {
-		if n, err = s.fvf.Write(v.Meta()); err != nil {
+		if n, err = s.fvf.WriteString(fmt.Sprintf("%s\n", string(v.Meta()))); err != nil {
 			return
 		}
 		tn += n

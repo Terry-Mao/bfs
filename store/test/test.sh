@@ -17,7 +17,7 @@ for i in {1..10}; do curl -F 'file=@"./'$i'.jpg"' -F "vid=2" -F "key=$i" -F "coo
 curl -d "key=13&vid=1" http://localhost:6062/del
 
 # dels
-curl -d "vid=2" -d "keys=1" -d "keys=2" -d "keys=3" http://localhost:6063/dels
+curl -d "vid=2" -d "keys=1" -d "keys=2" -d "keys=3" http://localhost:6062/dels
 
 # get
-curl http://localhost:6062/get?key=5&cookie=5&vid=2
+curl "http://localhost:6062/get?key=5&cookie=5&vid=2"
