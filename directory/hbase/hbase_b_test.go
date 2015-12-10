@@ -3,7 +3,6 @@ package hbase
 import (
     "testing"
     "time"
-//    mrand "math/rand"
     "github.com/Terry-Mao/bfs/directory/hbase/filemeta"
 )
 
