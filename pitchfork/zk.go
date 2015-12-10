@@ -55,12 +55,7 @@ func (z *Zookeeper) NewNode(fpath string) (node string, err error) {
 
 // setRoot update root.
 func (z *Zookeeper) setRoot() (err error) {
-	var stat *zk.Stat
-	if _, stat, err = z.c.Get(z.storeRootPath); err != nil {
-		log.Errorf("zk.Get(\"%s\") error(%v)", z.storeRootPath, err)
-		return
-	}
-	if _, err = z.c.Set(z.storeRootPath, []byte(""), stat.Version); err != nil {
+	if _, err = z.c.Set(z.storeRootPath, []byte(""), -1); err != nil {
 		log.Errorf("zk.Set(\"%s\") error(%v)", z.storeRootPath, err)
 	}
 	return
@@ -70,11 +65,10 @@ func (z *Zookeeper) setRoot() (err error) {
 func (z *Zookeeper) SetStore(s *meta.Store) (err error) {
 	var (
 		data  []byte
-		stat  *zk.Stat
 		store = &meta.Store{}
 		spath = path.Join(z.storeRootPath, s.Rack, s.Id)
 	)
-	if data, stat, err = z.c.Get(spath); err != nil {
+	if data, _, err = z.c.Get(spath); err != nil {
 		log.Errorf("zk.Get(\"%s\") error(%v)", spath, err)
 		return
 	}
@@ -89,7 +83,7 @@ func (z *Zookeeper) SetStore(s *meta.Store) (err error) {
 		log.Errorf("json.Marshal() error(%v)", err)
 		return err
 	}
-	if _, err = z.c.Set(spath, data, stat.Version); err != nil {
+	if _, err = z.c.Set(spath, data, -1); err != nil {
 		log.Errorf("zk.Set(\"%s\") error(%v)", spath, err)
 		return
 	}
@@ -135,7 +129,6 @@ func (z *Zookeeper) Store(rack, store string) (data []byte, err error) {
 func (z *Zookeeper) SetVolumeState(volume  *meta.Volume) (err error) {
 	var (
 		d       []byte
-		s       *zk.Stat
 		spath   string
 		vstate = &meta.VolumeState{
 			TotalAddProcessed: volume.Stats.TotalAddProcessed,
@@ -144,15 +137,11 @@ func (z *Zookeeper) SetVolumeState(volume  *meta.Volume) (err error) {
 	)
 	vstate.FreeSpace = volume.Block.FreeSpace()
 	spath = path.Join(z.volumeRootPath, fmt.Sprintf("%d", volume.Id))
-	if _, s, err = z.c.Get(spath); err != nil {
-		log.Errorf("zk.Get(\"%s\") error(%v)", spath, err)
-		return
-	}
 	if d, err = json.Marshal(vstate); err != nil {
 		log.Errorf("json.Marshal() error(%v)", err)
 		return
 	}
-	if _, err = z.c.Set(spath, d, s.Version); err != nil {
+	if _, err = z.c.Set(spath, d, -1); err != nil {
 		log.Errorf("zk.Set(\"%s\") error(%v)", spath, err)
 	}
 	return
