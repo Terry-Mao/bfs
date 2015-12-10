@@ -20,10 +20,11 @@ type Dispatcher struct {
 }
 
 const (
-	baseScore         = 100
+	maxScore          = 1000
 	nsToMs            = 1000000             // ns ->  us
 	spaceBenchmark    = meta.MaxBlockOffset // 1 volume
-	addDelayBenchmark = 1                   // 1ms   <1ms means no load, adScore==0
+	addDelayBenchmark = 100                 // 100ms   <100ms means no load, -Score==0
+	baseAddDelay      = 100                 // 1s score:   -(1000/baseAddDelay)*addDelayBenchmark == -1000
 )
 
 // NewDispatcher
@@ -89,17 +90,22 @@ func (d *Dispatcher) Update() (err error) {
 }
 
 // cal_score algorithm of calculating score
-func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace int) int {
-	//score = rsScore + (-adScore)   when adScore==0 means ignored
+func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace int) (score int) {
 	var (
 		rsScore, adScore int
 	)
 	rsScore = (restSpace / int(spaceBenchmark))
-	if totalAdd != 0 {
-		adScore = ((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark
+	if rsScore > maxScore {
+		rsScore = maxScore // more than 32T will be 32T and set score maxScore
 	}
-	//rsScore < adScore todo
-	return baseScore + rsScore - adScore
+	if totalAdd != 0 {
+		adScore = (((totalAddDelay / nsToMs) / totalAdd) / addDelayBenchmark) * baseAddDelay
+		if adScore > maxScore {
+			adScore = maxScore // more than 1s will be 1s and set score -maxScore
+		}
+	}
+	score = rsScore - adScore
+	return
 }
 
 // WStores get suitable stores for writing
