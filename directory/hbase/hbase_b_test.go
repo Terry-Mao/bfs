@@ -36,7 +36,7 @@ func BenchmarkHbasePut(b *testing.B) {
     })
 }
 
-/*
+
 func BenchmarkHbaseGet(b *testing.B) {
     var (
         err   error
@@ -59,5 +59,3 @@ func BenchmarkHbaseGet(b *testing.B) {
         }
     })
 }
-
-*/

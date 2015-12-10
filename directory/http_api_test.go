@@ -100,3 +100,32 @@ func TestHTTPAPI(t *testing.T) {
 	}
 	fmt.Println("del vid", res.Vid)
 }
+
+func BenchmarkHttpUpload(b *testing.B) {
+    var (
+        err   error
+        h     = NewHBaseClient()
+        m     = &filemeta.File{}
+        t     int64
+    )
+    ch := make(chan int64, 1000000)
+    if err = Init("172.16.13.90:9090", 5*time.Second, 200, 200); err != nil {
+            b.Errorf("Init failed")
+            b.FailNow()
+    }
+    for j := 0; j<1000000; j++ {
+        k := int64(time.Now().UnixNano())
+        ch <- k
+    }
+    b.ResetTimer()
+    b.SetParallelism(8)
+    b.RunParallel(func(pb *testing.PB) {
+        for pb.Next() {
+            t = <- ch
+            m.Key = t
+            if err = h.Put(m); err != nil {
+                continue
+            }
+        }
+    })
+}
