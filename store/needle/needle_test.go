@@ -1,7 +1,6 @@
 package needle
 
 import (
-	"bufio"
 	"bytes"
 	"testing"
 )
@@ -108,16 +107,14 @@ func TestNeedle(t *testing.T) {
 		n    = &Needle{}
 		data = []byte("test")
 		buf  = make([]byte, 40)
-		bbuf = bytes.NewBuffer(buf)
-		bw   = bufio.NewWriter(bbuf)
 	)
-	n.Parse(1, 1, data)
-	n.Fill(buf)
+	n.Init(1, 1, data)
+	n.Write(buf)
 	if err = n.ParseHeader(buf[:HeaderSize]); err != nil {
 		t.Errorf("ParseHeader() error(%v)", err)
 		t.FailNow()
 	}
-	if err = n.ParseData(buf[HeaderSize:]); err != nil {
+	if err = n.ParseFooter(buf[HeaderSize:]); err != nil {
 		t.Errorf("ParseData() error(%v)", err)
 		t.FailNow()
 	}
@@ -125,20 +122,18 @@ func TestNeedle(t *testing.T) {
 		t.Error("Parse()")
 		t.FailNow()
 	}
-	if err = n.Write(bw); err != nil {
-		t.Errorf("Write() error(%v)", err)
-		t.FailNow()
-	}
-	buf = bbuf.Bytes()
+	n.Init(2, 2, data)
+	n.WriteHeader(buf)
+	n.WriteFooter(buf[HeaderSize:], true)
 	if err = n.ParseHeader(buf[:HeaderSize]); err != nil {
 		t.Errorf("ParseHeader() error(%v)", err)
 		t.FailNow()
 	}
-	if err = n.ParseData(buf[HeaderSize:]); err != nil {
+	if err = n.ParseFooter(buf[HeaderSize:]); err != nil {
 		t.Errorf("ParseData() error(%v)", err)
 		t.FailNow()
 	}
-	if n.Cookie != 1 || n.Key != 1 || n.Size != 4 || !bytes.Equal(n.Data, data) || n.Flag != FlagOK || n.PaddingSize != 7 {
+	if n.Cookie != 2 || n.Key != 2 || n.Size != 4 || !bytes.Equal(n.Data, data) || n.Flag != FlagOK || n.PaddingSize != 7 {
 		t.Error("Parse() error")
 		t.FailNow()
 	}

@@ -181,21 +181,27 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	ns = h.s.Needle(1)
 	n = &(ns[0])
 	buf = h.s.Buffer(1)
-	rn, err = file.Read(buf)
+	// fill buf skip needle header offset
+	// --------------------
+	// header (data) footer
+	// --------------------
+	rn, err = file.Read(buf[needle.HeaderSize:])
 	file.Close()
 	if err != nil {
 		res["ret"] = errors.RetInternalErr
 		return
 	}
-	n.Parse(key, int32(cookie), buf[:rn])
+	n.Init(key, int32(cookie), buf[needle.HeaderSize:rn])
+	n.WriteHeader(buf)
+	n.WriteFooter(buf[needle.HeaderSize+rn:], false)
 	h.s.RLockVolume()
 	if v = h.s.Volumes[int32(vid)]; v != nil {
-		err = v.Add(n)
+		err = v.Add(n, buf)
 	} else {
 		err = errors.ErrVolumeNotExist
 	}
 	h.s.RUnlockVolume()
-	h.s.FreeBuffer(1, buf)
+	h.s.FreeBuffer(1, buf[:n.TotalSize])
 	h.s.FreeNeedle(1, ns)
 	if err != nil {
 		if uerr, ok = err.(errors.Error); ok {
@@ -275,6 +281,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	nb = int(size-1)/(h.c.NeedleMaxSize) + 1
 	buf = h.s.Buffer(nb)
 	ns = h.s.Needle(nn)
+	tn = needle.HeaderSize
 	for i, fh = range fhs {
 		if key, err = strconv.ParseInt(keys[i], 10, 64); err != nil {
 			log.Errorf("strconv.ParseInt(\"%s\") error(%v)", keys[i], err)
@@ -310,23 +317,15 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			break
 		}
 		n = &(ns[i])
-		n.Parse(key, int32(cookie), buf[tn:tn+rn])
-		tn += rn
+		n.Init(key, int32(cookie), buf[tn:tn+rn])
+		n.WriteHeader(buf[tn-needle.HeaderSize:])
+		n.WriteFooter(buf[tn+rn:], false)
+		tn += rn + needle.FooterSize
 	}
 	if err == nil {
 		h.s.RLockVolume()
 		if v = h.s.Volumes[int32(vid)]; v != nil {
-			v.Lock()
-			for i = 0; i < nn; i++ {
-				n = &(ns[i])
-				if err = v.Write(n); err != nil {
-					break
-				}
-			}
-			if err == nil {
-				err = v.Flush()
-			}
-			v.Unlock()
+			err = v.Write(ns, buf)
 		} else {
 			err = errors.ErrVolumeNotExist
 		}

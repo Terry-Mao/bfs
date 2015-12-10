@@ -19,7 +19,7 @@ const (
 	configVolumeCheckSize     = 32
 	configVolumeCheckInterval = 10000
 	// block
-	configSuperBlockSync = 1024
+	configSuperBlockAdvise = 1024
 	// index
 	configIndexRingBuffer = 1024 * 10
 	configIndexMerge      = 1024
@@ -59,7 +59,7 @@ type Config struct {
 	VolumeCheckSize     int           `goconf:"volume:check_size"`
 	VolumeCheckInterval int           `goconf:"volume:check_interval"`
 	// block
-	SuperBlockSync          int  `goconf:"block:sync"`
+	SuperBlockAdvise        int  `goconf:"block:advise"`
 	SuperBlockSyncfilerange bool `goconf:"block:sync_file_range"`
 	// index
 	IndexRingBuffer    int           `goconf:"index:ring_buffer_size"`
@@ -138,8 +138,8 @@ func (c *Config) setDefault() {
 		c.VolumeCheckInterval = configVolumeCheckInterval
 	}
 	// block
-	if c.SuperBlockSync < 1 {
-		c.SuperBlockSync = configSuperBlockSync
+	if c.SuperBlockAdvise < 1 {
+		c.SuperBlockAdvise = configSuperBlockAdvise
 	}
 	if c.IndexRingBuffer < configIndexRingBuffer {
 		c.IndexRingBuffer = configIndexRingBuffer

@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"github.com/Terry-Mao/bfs/libs/encoding/binary"
 	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/store/needle"
 	mrand "math/rand"
@@ -11,6 +12,7 @@ import (
 
 func TestVolume(t *testing.T) {
 	var (
+		ts    int32
 		v     *Volume
 		err   error
 		data  = []byte("test")
@@ -18,6 +20,7 @@ func TestVolume(t *testing.T) {
 		bfile = "./test/test1"
 		ifile = "./test/test1.idx"
 		n     = &needle.Needle{}
+		ns    = make([]needle.Needle, 3)
 	)
 	os.Remove(bfile)
 	os.Remove(ifile)
@@ -34,42 +37,42 @@ func TestVolume(t *testing.T) {
 		t.FailNow()
 	}
 	defer v.Close()
-	n.Parse(1, 1, data)
-	if err = v.Add(n); err != nil {
+	n.Init(1, 1, data)
+	n.Write(buf)
+	if err = v.Add(n, buf[:n.TotalSize]); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	if err = v.Add(n); err != nil {
+	if err = v.Add(n, buf[:n.TotalSize]); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	n.Parse(2, 2, data)
-	if err = v.Add(n); err != nil {
+	n.Init(2, 2, data)
+	n.Write(buf)
+	if err = v.Add(n, buf[:n.TotalSize]); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	n.Parse(3, 3, data)
-	if err = v.Add(n); err != nil {
+	n.Init(3, 3, data)
+	n.Write(buf)
+	if err = v.Add(n, buf[:n.TotalSize]); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	n.Parse(4, 4, data)
-	if err = v.Write(n); err != nil {
+	n = &(ns[0])
+	n.Init(4, 4, data)
+	n.Write(buf)
+	ts += n.TotalSize
+	n = &(ns[1])
+	n.Init(5, 5, data)
+	n.Write(buf[ts:])
+	ts += n.TotalSize
+	n = &(ns[2])
+	n.Init(6, 6, data)
+	n.Write(buf[ts:])
+	ts += n.TotalSize
+	if err = v.Write(ns, buf[:ts]); err != nil {
 		t.Errorf("Write() error(%v)", err)
-		t.FailNow()
-	}
-	n.Parse(5, 5, data)
-	if err = v.Write(n); err != nil {
-		t.Errorf("Write() error(%v)", err)
-		t.FailNow()
-	}
-	n.Parse(6, 6, data)
-	if err = v.Write(n); err != nil {
-		t.Errorf("Write() error(%v)", err)
-		t.FailNow()
-	}
-	if err = v.Flush(); err != nil {
-		t.Errorf("Flush() error(%v)", err)
 		t.FailNow()
 	}
 	if err = v.Del(3); err != nil {
@@ -110,13 +113,16 @@ func BenchmarkVolumeAdd(b *testing.B) {
 		var (
 			t    int64
 			err1 error
+			buf  = make([]byte, 16351*2)
 			n    = &needle.Needle{}
 		)
-		n.Parse(1, 1, data)
+		n.Init(1, 1, data)
+		n.Write(buf)
 		for pb.Next() {
 			t = mrand.Int63()
 			n.Key = t
-			if err1 = v.Add(n); err1 != nil {
+			binary.BigEndian.PutInt64(buf[needle.KeyOffset:], n.Key)
+			if err1 = v.Add(n, buf[:n.TotalSize]); err1 != nil {
 				b.Errorf("Add() error(%v)", err1)
 				b.FailNow()
 			}
@@ -130,6 +136,7 @@ func BenchmarkVolumeAdd(b *testing.B) {
 func BenchmarkVolumeWrite(b *testing.B) {
 	var (
 		i     int
+		ts    int32
 		v     *Volume
 		err   error
 		file  = "./test/testb2"
@@ -155,27 +162,28 @@ func BenchmarkVolumeWrite(b *testing.B) {
 		var (
 			t    int64
 			err1 error
-			n    = &needle.Needle{}
+			n    *needle.Needle
+			ns   = make([]needle.Needle, 9)
+			buf  = make([]byte, 16351*2) // 16kb
 		)
-		n.Parse(t, 1, data)
+		for i = 0; i < 9; i++ {
+			t = mrand.Int63()
+			n.Init(t, 1, data)
+			n.Write(buf[ts:])
+			ts += n.TotalSize
+		}
 		for pb.Next() {
-			v.Lock()
 			for i = 0; i < 9; i++ {
 				t = mrand.Int63()
 				n.Key = t
-				if err1 = v.Write(n); err1 != nil {
-					b.Errorf("Add() error(%v)", err1)
-					v.Unlock()
-					b.FailNow()
-				}
+				binary.BigEndian.PutInt64(buf[ns[i].TotalSize+needle.KeyOffset:], n.Key)
 			}
-			if err1 = v.Flush(); err1 != nil {
-				b.Errorf("Flush() error(%v)", err1)
+			if err1 = v.Write(ns, buf); err1 != nil {
+				b.Errorf("Add() error(%v)", err1)
 				v.Unlock()
 				b.FailNow()
 			}
-			v.Unlock()
-			b.SetBytes(int64(n.TotalSize) * 9)
+			b.SetBytes(int64(ts))
 		}
 	})
 	os.Remove(file)
@@ -184,13 +192,14 @@ func BenchmarkVolumeWrite(b *testing.B) {
 
 func BenchmarkVolumeGet(b *testing.B) {
 	var (
-		i     int
+		i     int64
 		t     int64
 		v     *Volume
 		err   error
 		file  = "./test/testb3"
 		ifile = "./test/testb3.idx"
-		data  = make([]byte, 16777183) // 16kb
+		buf   = make([]byte, 16777183*2) // 32kb
+		data  = make([]byte, 16777183)   // 16kb
 		n     = &needle.Needle{}
 	)
 	defer os.Remove(file)
@@ -204,11 +213,12 @@ func BenchmarkVolumeGet(b *testing.B) {
 		b.FailNow()
 	}
 	defer v.Close()
-	n.Parse(1, 1, data)
+	n.Init(1, 1, data)
+	n.Write(buf)
 	for i = 0; i < 1000000; i++ {
-		t = int64(i)
-		n.Key = t
-		if err = v.Add(n); err != nil {
+		n.Key = i
+		binary.BigEndian.PutInt64(buf[needle.KeyOffset:], n.Key)
+		if err = v.Add(n, buf[:n.TotalSize]); err != nil {
 			b.Errorf("Add() error(%v)", err)
 			b.FailNow()
 		}

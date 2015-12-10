@@ -12,8 +12,8 @@ func TestSuperBlock(t *testing.T) {
 	var (
 		b                  *SuperBlock
 		offset, v2, v3, v4 uint32
-		buf                []byte
 		err                error
+		buf                = make([]byte, 40)
 		n                  = &needle.Needle{}
 		needles            = make(map[int64]int64)
 		data               = []byte("test")
@@ -28,7 +28,7 @@ func TestSuperBlock(t *testing.T) {
 	// test new block file
 	if b, err = NewSuperBlock(file, Options{
 		BufferSize:    4 * 1024 * 1024,
-		SyncAtWrite:   1024,
+		AdviseAtWrite: 1024,
 		Syncfilerange: true,
 	}); err != nil {
 		t.Errorf("NewSuperBlock(\"%s\") error(%v)", file, err)
@@ -38,7 +38,7 @@ func TestSuperBlock(t *testing.T) {
 	// test parse block file
 	if b, err = NewSuperBlock(file, Options{
 		BufferSize:    4 * 1024 * 1024,
-		SyncAtWrite:   1024,
+		AdviseAtWrite: 1024,
 		Syncfilerange: true,
 	}); err != nil {
 		t.Errorf("NewSuperBlock(\"%s\") error(%v)", file, err)
@@ -51,10 +51,11 @@ func TestSuperBlock(t *testing.T) {
 		t.FailNow()
 	}
 	defer b.Close()
-	// test add
-	n.Parse(1, 1, data)
-	if err = b.Add(n); err != nil {
-		t.Errorf("Add() error(%v)", err)
+	// test write
+	n.Init(1, 1, data)
+	n.Write(buf)
+	if err = b.Write(buf); err != nil {
+		t.Errorf("Write() error(%v)", err)
 		t.FailNow()
 	}
 	if err = compareTestOffset(b, n, needle.NeedleOffset(int64(headerSize))); err != nil {
@@ -64,7 +65,6 @@ func TestSuperBlock(t *testing.T) {
 	offset = b.Offset
 	v2 = b.Offset
 	// test get
-	buf = make([]byte, 40)
 	if err = b.Get(1, buf); err != nil {
 		t.Errorf("Get() error(%v)", err)
 		t.FailNow()
@@ -73,9 +73,10 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("compareTestNeedle() error(%v)", err)
 		t.FailNow()
 	}
-	// test add
-	n.Parse(2, 2, data)
-	if err = b.Add(n); err != nil {
+	// test write
+	n.Init(2, 2, data)
+	n.Write(buf)
+	if err = b.Write(buf); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
@@ -94,20 +95,22 @@ func TestSuperBlock(t *testing.T) {
 		t.FailNow()
 	}
 	// test write
-	n.Parse(3, 3, data)
-	if err = b.Write(n); err != nil {
+	n.Init(3, 3, data)
+	n.Write(buf)
+	if err = b.Write(buf); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
 	offset = b.Offset
 	v4 = b.Offset
 	// test write
-	n.Parse(4, 4, data)
-	if err = b.Write(n); err != nil {
+	n.Init(4, 4, data)
+	n.Write(buf)
+	if err = b.Write(buf); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	if err = b.Flush(); err != nil {
+	if err = b.flush(); err != nil {
 		t.Errorf("Flush() error(%v)", err)
 		t.FailNow()
 	}
@@ -220,8 +223,8 @@ func TestSuperBlock(t *testing.T) {
 		t.FailNow()
 	}
 	// test repair
-	n.Parse(3, 3, data)
-	n.Fill(buf)
+	n.Init(3, 3, data)
+	n.Write(buf)
 	if err = b.Repair(v3, buf); err != nil {
 		t.Errorf("b.Repair(3) error(%v)", err)
 		t.FailNow()
@@ -269,7 +272,7 @@ func compareTestNeedle(t *testing.T, key int64, cookie int32, flag byte, n *need
 		t.Errorf("ParseNeedleHeader() error(%v)", err)
 		return
 	}
-	if err = n.ParseData(buf[needle.HeaderSize:]); err != nil {
+	if err = n.ParseFooter(buf[needle.HeaderSize:]); err != nil {
 		err = fmt.Errorf("ParseNeedleData() error(%v)", err)
 		t.Error(err)
 		return

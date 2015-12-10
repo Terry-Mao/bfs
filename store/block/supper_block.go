@@ -52,8 +52,6 @@ var (
 type SuperBlock struct {
 	r       *os.File
 	w       *os.File
-	bw      *bufio.Writer
-	buf     []byte
 	File    string  `json:"file"`
 	Offset  uint32  `json:"offset"`
 	LastErr error   `json:"last_err"`
@@ -77,7 +75,6 @@ func NewSuperBlock(file string, options Options) (b *SuperBlock, err error) {
 	b.write = 0
 	b.syncOffset = 0
 	b.Padding = needle.PaddingSize
-	b.buf = make([]byte, options.BufferSize)
 	if b.w, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		b.Close()
@@ -88,7 +85,6 @@ func NewSuperBlock(file string, options Options) (b *SuperBlock, err error) {
 		b.Close()
 		return nil, err
 	}
-	b.bw = bufio.NewWriterSize(b.w, options.BufferSize)
 	if err = b.init(); err != nil {
 		log.Errorf("block: %s init() error(%v)", file, err)
 		b.Close()
@@ -145,11 +141,12 @@ func (b *SuperBlock) writeMeta() (err error) {
 
 // parseMeta parse block meta info.
 func (b *SuperBlock) parseMeta() (err error) {
-	if _, err = b.r.Read(b.buf[:headerSize]); err != nil {
+	var buf = make([]byte, b.Options.BufferSize)
+	if _, err = b.r.Read(buf[:headerSize]); err != nil {
 		return
 	}
-	b.magic = b.buf[magicOffset : magicOffset+magicSize]
-	b.Ver = b.buf[verOffset : verOffset+verSize][0]
+	b.magic = buf[magicOffset : magicOffset+magicSize]
+	b.Ver = buf[verOffset : verOffset+verSize][0]
 	if !bytes.Equal(b.magic, magic) {
 		return errors.ErrSuperBlockMagic
 	}
@@ -159,44 +156,19 @@ func (b *SuperBlock) parseMeta() (err error) {
 	return
 }
 
-// avvailable check block has enough space.
-func (b *SuperBlock) available(incrOffset uint32) (err error) {
+// Write write needle to the block.
+func (b *SuperBlock) Write(data []byte) (err error) {
+	if b.LastErr != nil {
+		return b.LastErr
+	}
+	var incrOffset = needle.NeedleOffset(int64(len(data)))
 	if maxOffset-incrOffset < b.Offset {
 		err = errors.ErrSuperBlockNoSpace
-	}
-	return
-}
-
-// Add append a photo to the block.
-func (b *SuperBlock) Add(n *needle.Needle) (err error) {
-	if b.LastErr != nil {
-		return b.LastErr
-	}
-	var incrOffset = needle.NeedleOffset(int64(n.TotalSize))
-	if err = b.available(incrOffset); err != nil {
 		return
 	}
-	if err = n.Write(b.bw); err != nil {
-		b.LastErr = err
-		return
-	}
-	b.write++
-	if err = b.Flush(); err == nil {
-		b.Offset += incrOffset
-	}
-	return
-}
-
-// Write start add needles to the block, must called after start a transaction.
-func (b *SuperBlock) Write(n *needle.Needle) (err error) {
-	if b.LastErr != nil {
-		return b.LastErr
-	}
-	var incrOffset = needle.NeedleOffset(int64(n.TotalSize))
-	if err = b.available(incrOffset); err != nil {
-		return
-	}
-	if err = n.Write(b.bw); err != nil {
+	if _, err = b.w.Write(data); err == nil {
+		err = b.flush()
+	} else {
 		b.LastErr = err
 		return
 	}
@@ -205,55 +177,40 @@ func (b *SuperBlock) Write(n *needle.Needle) (err error) {
 	return
 }
 
-// sync sync the in-memory data flush to disk.
-func (b *SuperBlock) sync() (err error) {
+// flush flush writer buffer.
+func (b *SuperBlock) flush() (err error) {
 	var (
 		fd     uintptr
 		offset int64
 		size   int64
 	)
-	// append N times call flush then clean the os page cache
-	// page cache no used here...
-	// after upload a photo, we cache in our own cache server.
+	if b.LastErr != nil {
+		return b.LastErr
+	}
 	offset = needle.BlockOffset(b.syncOffset)
 	size = needle.BlockOffset(b.Offset - b.syncOffset)
-	if b.write < b.Options.SyncAtWrite {
-		return
-	}
-	b.write = 0
 	fd = b.w.Fd()
 	if b.Options.Syncfilerange {
 		if err = myos.Syncfilerange(fd, offset, size, myos.SYNC_FILE_RANGE_WRITE); err != nil {
-			b.LastErr = err
 			log.Errorf("block: %s Syncfilerange() error(%v)", b.File, err)
+			b.LastErr = err
 			return
 		}
 	} else {
 		if err = myos.Fdatasync(fd); err != nil {
-			b.LastErr = err
 			log.Errorf("block: %s Fdatasync() error(%v)", b.File, err)
+			b.LastErr = err
 			return
 		}
 	}
+	if b.write < b.Options.AdviseAtWrite {
+		return
+	}
+	b.write = 0
 	if err = myos.Fadvise(fd, offset, size, myos.POSIX_FADV_DONTNEED); err == nil {
 		b.syncOffset = b.Offset
 	} else {
 		log.Errorf("block: %s Fadvise() error(%v)", b.File, err)
-		b.LastErr = err
-	}
-	return
-}
-
-// Flush flush writer buffer.
-func (b *SuperBlock) Flush() (err error) {
-	if b.LastErr != nil {
-		return b.LastErr
-	}
-	// write may be less than request, we call flush in a loop
-	if err = b.bw.Flush(); err == nil {
-		err = b.sync()
-	} else {
-		log.Errorf("block: %s Flush() error(%v)", b.File, err)
 		b.LastErr = err
 	}
 	return
@@ -333,7 +290,7 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 		if data, err = rd.Peek(n.DataSize); err != nil {
 			break
 		}
-		if err = n.ParseData(data); err != nil {
+		if err = n.ParseFooter(data); err != nil {
 			break
 		}
 		if _, err = rd.Discard(n.DataSize); err != nil {
@@ -418,7 +375,6 @@ func (b *SuperBlock) Open() (err error) {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
 		return
 	}
-	b.bw.Reset(b.w)
 	if b.r, err = os.OpenFile(b.File, os.O_RDONLY|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", b.File, err)
 		b.Close()
@@ -437,7 +393,7 @@ func (b *SuperBlock) Open() (err error) {
 func (b *SuperBlock) Close() {
 	var err error
 	if b.w != nil {
-		if err = b.Flush(); err != nil {
+		if err = b.flush(); err != nil {
 			log.Errorf("block: %s flush error(%v)", b.File, err)
 		}
 		if err = b.w.Sync(); err != nil {

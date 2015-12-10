@@ -1,7 +1,6 @@
 package needle
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"github.com/Terry-Mao/bfs/libs/encoding/binary"
@@ -65,7 +64,8 @@ const (
 	// flags
 	FlagOK     = byte(0)
 	FlagDel    = byte(1)
-	FlagOffset = magicSize + cookieSize + keySize
+	KeyOffset  = magicSize + cookieSize
+	FlagOffset = KeyOffset + keySize
 	// display
 	displayData = 16
 )
@@ -106,28 +106,52 @@ type Needle struct {
 	PaddingSize int32
 	TotalSize   int32 // total needle write size
 	// used in peek
-	DataSize int // data-part size
+	DataSize   int // data-part size
+	IncrOffset uint32
 }
 
-// ParseNeedleHeader parse a needle header part.
+// Init parse needle from data.
+func (n *Needle) Init(key int64, cookie int32, data []byte) {
+	var dataSize = int32(len(data))
+	n.TotalSize = int32(HeaderSize + dataSize + FooterSize)
+	n.PaddingSize = align(n.TotalSize) - n.TotalSize
+	n.TotalSize += n.PaddingSize
+	n.IncrOffset = NeedleOffset(int64(n.TotalSize))
+	n.HeaderMagic = headerMagic
+	n.Key = key
+	n.Cookie = cookie
+	n.Size = dataSize
+	n.Data = data
+	n.FooterMagic = footerMagic
+	n.Checksum = crc32.Update(0, crc32Table, data)
+	n.Padding = padding[n.PaddingSize]
+	return
+}
+
+// ParseHeader parse a needle header part.
 func (n *Needle) ParseHeader(buf []byte) (err error) {
 	var bn int
 	n.HeaderMagic = buf[:magicSize]
+	// magic
 	if !bytes.Equal(n.HeaderMagic, headerMagic) {
 		err = errors.ErrNeedleHeaderMagic
 		return
 	}
 	bn += magicSize
+	// cookie
 	n.Cookie = binary.BigEndian.Int32(buf[bn:])
 	bn += cookieSize
+	// key
 	n.Key = binary.BigEndian.Int64(buf[bn:])
 	bn += keySize
+	// flag
 	n.Flag = buf[bn]
 	if n.Flag != FlagOK && n.Flag != FlagDel {
 		err = errors.ErrNeedleFlag
 		return
 	}
 	bn += flagSize
+	// size
 	n.Size = binary.BigEndian.Int32(buf[bn:])
 	n.TotalSize = HeaderSize + n.Size + FooterSize
 	n.PaddingSize = align(n.TotalSize) - n.TotalSize
@@ -136,8 +160,8 @@ func (n *Needle) ParseHeader(buf []byte) (err error) {
 	return
 }
 
-// ParseNeedleData parse a needle data part.
-func (n *Needle) ParseData(buf []byte) (err error) {
+// ParseFooter parse a needle footer part.
+func (n *Needle) ParseFooter(buf []byte) (err error) {
 	var (
 		bn       int32
 		checksum uint32
@@ -151,6 +175,7 @@ func (n *Needle) ParseData(buf []byte) (err error) {
 	}
 	bn += magicSize
 	checksum = crc32.Update(0, crc32Table, n.Data)
+	// checksum
 	n.Checksum = binary.BigEndian.Uint32(buf[bn : bn+checksumSize])
 	if n.Checksum != checksum {
 		err = errors.ErrNeedleChecksum
@@ -164,88 +189,46 @@ func (n *Needle) ParseData(buf []byte) (err error) {
 	return
 }
 
-func (n *Needle) String() string {
-	var dn = displayData
-	if len(n.Data) < dn {
-		dn = len(n.Data)
-	}
-	return fmt.Sprintf(`
------------------------------
-HeaderMagic:    %v
-Cookie:         %d
-Key:            %d
-Flag:           %d
-Size:           %d
-
-Data:           %v...
-FooterMagic:    %v
-Checksum:       %d
-Padding:        %v
------------------------------
-`, n.HeaderMagic, n.Cookie, n.Key, n.Flag, n.Size, n.Data[:dn], n.FooterMagic,
-		n.Checksum, n.Padding)
-}
-
-// Parse parse needle from data.
-func (n *Needle) Parse(key int64, cookie int32, data []byte) {
-	var dataSize = int32(len(data))
-	n.TotalSize = int32(HeaderSize + dataSize + FooterSize)
-	n.PaddingSize = align(n.TotalSize) - n.TotalSize
-	n.TotalSize += n.PaddingSize
-	n.HeaderMagic = headerMagic
-	n.Key = key
-	n.Cookie = cookie
-	n.Size = dataSize
-	n.Data = data
-	n.FooterMagic = footerMagic
-	n.Checksum = crc32.Update(0, crc32Table, data)
-	n.Padding = padding[n.PaddingSize]
-	return
-}
-
-// Write write needle into bufio.
-func (n *Needle) Write(w *bufio.Writer) (err error) {
-	// header
+// Write write needle header into buf bytes.
+func (n *Needle) WriteHeader(buf []byte) {
+	var bn int
+	// --- header ---
 	// magic
-	if _, err = w.Write(n.HeaderMagic); err != nil {
-		return
-	}
+	bn += copy(buf, n.HeaderMagic)
 	// cookie
-	if err = binary.BigEndian.WriteInt32(w, n.Cookie); err != nil {
-		return
-	}
+	binary.BigEndian.PutInt32(buf[bn:], n.Cookie)
+	bn += cookieSize
 	// key
-	if err = binary.BigEndian.WriteInt64(w, n.Key); err != nil {
-		return
-	}
+	binary.BigEndian.PutInt64(buf[bn:], n.Key)
+	bn += keySize
 	// flag
-	if err = w.WriteByte(FlagOK); err != nil {
-		return
-	}
+	buf[bn] = FlagOK
+	bn += flagSize
 	// size
-	if err = binary.BigEndian.WriteInt32(w, n.Size); err != nil {
-		return
-	}
+	binary.BigEndian.PutInt32(buf[bn:], n.Size)
+	bn += sizeSize
+}
+
+// WriteFooter write needle header into buf bytes.
+func (n *Needle) WriteFooter(buf []byte, data bool) {
+	var bn int
+	// --- footer ---
 	// data
-	if _, err = w.Write(n.Data); err != nil {
-		return
+	if data {
+		bn += copy(buf, n.Data)
 	}
-	// footer
 	// magic
-	if _, err = w.Write(n.FooterMagic); err != nil {
-		return
-	}
+	bn += copy(buf[bn:], n.FooterMagic)
 	// checksum
-	if err = binary.BigEndian.WriteUint32(w, n.Checksum); err != nil {
-		return
-	}
+	binary.BigEndian.PutUint32(buf[bn:], n.Checksum)
+	bn += checksumSize
 	// padding
-	_, err = w.Write(n.Padding)
+	copy(buf[bn:], n.Padding)
 	return
 }
 
-// Fill fill buffer with needle data.
-func (n *Needle) Fill(buf []byte) {
+// Write write needle into buf bytes.
+func (n *Needle) Write(buf []byte) {
 	var bn int
 	// --- header ---
 	// magic
@@ -272,7 +255,28 @@ func (n *Needle) Fill(buf []byte) {
 	bn += checksumSize
 	// padding
 	copy(buf[bn:], n.Padding)
-	return
+}
+
+func (n *Needle) String() string {
+	var dn = displayData
+	if len(n.Data) < dn {
+		dn = len(n.Data)
+	}
+	return fmt.Sprintf(`
+-----------------------------
+HeaderMagic:    %v
+Cookie:         %d
+Key:            %d
+Flag:           %d
+Size:           %d
+
+Data:           %v...
+FooterMagic:    %v
+Checksum:       %d
+Padding:        %v
+-----------------------------
+`, n.HeaderMagic, n.Cookie, n.Key, n.Flag, n.Size, n.Data[:dn], n.FooterMagic,
+		n.Checksum, n.Padding)
 }
 
 // NeedleOffset convert offset to needle offset.
