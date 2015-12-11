@@ -42,6 +42,10 @@ func main() {
 	}
 	log.Infof("init http api...")
 	StartApi(c.ApiListen, d)
+	if c.PprofEnable {
+		log.Infof("init http pprof...")
+		StartPprof(c.PprofListen)
+	}
 	StartSignal()
 	return
 }
