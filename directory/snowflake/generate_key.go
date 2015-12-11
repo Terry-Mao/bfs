@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	maxSize       = 1000
+	maxSize       = 10000
 	errorSleep    = 1 * time.Second
 	genKeyTimeout = 2 * time.Second
 )
