@@ -80,7 +80,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	}
 	defer HttpWriter(r, wr, time.Now(), &res, &ret)
 	if num, err = strconv.ParseInt(r.FormValue("num"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("num"), err)
 		ret = http.StatusBadRequest
 		return
 	}
