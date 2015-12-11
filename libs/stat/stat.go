@@ -11,9 +11,6 @@ const (
 type Stats struct {
 	// qps & tps
 	TotalCommandsProcessed  uint64 `json:"total_commands_processed"`
-	TotalAddProcessed       uint64 `json:"total_add_processed"`
-	AddTPS                  uint64 `json:"add_tps"`
-	lastTotalAddProcessed   uint64 `json:"-"`
 	TotalWriteProcessed     uint64 `json:"total_write_processed"`
 	WriteTPS                uint64 `json:"write_tps"`
 	lastTotalWriteProcessed uint64 `json:"-"`
@@ -62,8 +59,6 @@ type Stats struct {
 // Calc calc the commands qps/tps.
 func (s *Stats) Calc() {
 	// qps & tps
-	s.AddTPS = s.TotalAddProcessed - s.lastTotalAddProcessed
-	s.lastTotalAddProcessed = s.TotalAddProcessed
 	s.WriteTPS = s.TotalWriteProcessed - s.lastTotalWriteProcessed
 	s.lastTotalWriteProcessed = s.TotalWriteProcessed
 	s.DelTPS = s.TotalDelProcessed - s.lastTotalDelProcessed
@@ -72,8 +67,8 @@ func (s *Stats) Calc() {
 	s.lastTotalGetProcessed = s.TotalGetProcessed
 	s.FlushTPS = s.TotalFlushProcessed - s.lastTotalFlushProcessed
 	s.lastTotalFlushProcessed = s.TotalFlushProcessed
-	s.TotalCommandsProcessed = s.TotalAddProcessed + s.TotalWriteProcessed +
-		s.TotalDelProcessed + s.TotalGetProcessed + s.TotalFlushProcessed +
+	s.TotalCommandsProcessed = s.TotalWriteProcessed + s.TotalDelProcessed +
+		s.TotalGetProcessed + s.TotalFlushProcessed +
 		s.TotalCompactProcessed
 	// bytes
 	s.ReadFlow = s.TotalReadBytes - s.lastTotalReadBytes
@@ -104,7 +99,6 @@ func (s *Stats) Calc() {
 // Merge merge other stats.
 func (s *Stats) Merge(s1 *Stats) {
 	// qps & tps
-	s.TotalAddProcessed += s1.TotalAddProcessed
 	s.TotalWriteProcessed += s1.TotalWriteProcessed
 	s.TotalDelProcessed += s1.TotalDelProcessed
 	s.TotalGetProcessed += s1.TotalGetProcessed
@@ -125,7 +119,6 @@ func (s *Stats) Merge(s1 *Stats) {
 // Reset reset the stat.
 func (s *Stats) Reset() {
 	// qps & tps
-	s.TotalAddProcessed = 0
 	s.TotalWriteProcessed = 0
 	s.TotalDelProcessed = 0
 	s.TotalGetProcessed = 0

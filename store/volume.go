@@ -54,6 +54,7 @@ type Volume struct {
 	compactKeys   []int64
 	// status
 	closed bool
+	Debug  bool
 	// check
 	CheckNeedles  []CheckNeedle `json:"check_needles"`
 	checkMaxIdx   int
@@ -67,6 +68,7 @@ func NewVolume(id int32, bfile, ifile string, c *Config) (v *Volume, err error) 
 	v = &Volume{}
 	v.Id = id
 	v.conf = c
+	v.Debug = c.DebugVolume
 	v.closed = false
 	v.Stats = &stat.Stats{}
 	v.needles = make(map[int64]int64, c.VolumeNeedleCache)
@@ -265,6 +267,12 @@ func (v *Volume) Add(n *needle.Needle, buf []byte) (err error) {
 		nc              int64
 		offset, ooffset uint32
 	)
+	if v.Debug {
+		if n.TotalSize != int32(len(buf)) {
+			err = errors.ErrNeedleSize
+			return
+		}
+	}
 	v.lock.Lock()
 	offset = v.Block.Offset
 	if err = v.Block.Write(buf); err == nil {
@@ -302,8 +310,19 @@ func (v *Volume) Write(ns []needle.Needle, buf []byte) (err error) {
 		nc              int64
 		ncs             []int64
 		offset, ooffset uint32
+		ts              int32
 		n               *needle.Needle
 	)
+	if v.Debug {
+		for i = 0; i < len(ns); i++ {
+			n = &ns[i]
+			ts += n.TotalSize
+		}
+		if int(ts) != len(buf) {
+			err = errors.ErrNeedleSize
+			return
+		}
+	}
 	v.lock.Lock()
 	offset = v.Block.Offset
 	if err = v.Block.Write(buf); err == nil {

@@ -43,6 +43,8 @@ var (
 )
 
 type Config struct {
+	// debug
+	DebugVolume bool `goconf:"debug:volume"`
 	// store
 	StoreVolumeCache int    `goconf:"store:volume_cache_size"`
 	ServerId         string `goconf:"store:server_id"`
