@@ -35,7 +35,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		err         error
 		key, cookie int64
 		ret         int
-		res         *Response
+		res         Response
 		params      = r.URL.Query()
 	)
 	if r.Method != "GET" {
@@ -43,7 +43,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), res, &ret)
+	defer HttpWriter(r, wr, time.Now(), &res, &ret)
 	if key, err = strconv.ParseInt(params.Get("key"), 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest
@@ -68,19 +68,19 @@ type httpUploadHandler struct {
 
 func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		err         error
-		num         int64
-		ret         int
-		res         *Response
+		err error
+		num int64
+		ret int
+		res Response
 	)
 	if r.Method != "POST" {
 		ret = http.StatusMethodNotAllowed
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), res, &ret)
+	defer HttpWriter(r, wr, time.Now(), &res, &ret)
 	if num, err = strconv.ParseInt(r.FormValue("num"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
+		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("num"), err)
 		ret = http.StatusBadRequest
 		return
 	}
@@ -101,14 +101,14 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		err         error
 		cookie, key int64
 		ret         int
-		res         *Response
+		res         Response
 	)
 	if r.Method != "POST" {
 		ret = http.StatusMethodNotAllowed
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), res, &ret)
+	defer HttpWriter(r, wr, time.Now(), &res, &ret)
 	if key, err = strconv.ParseInt(r.FormValue("key"), 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest

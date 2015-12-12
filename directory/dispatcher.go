@@ -76,7 +76,7 @@ func (d *Dispatcher) Update() (err error) {
 				}
 			}
 			d.gidScore[gid] = minScore
-			for i=0; i< minScore; i++ {
+			for i = 0; i < minScore; i++ {
 				gids = append(gids, gid)
 			}
 		}
@@ -107,12 +107,12 @@ func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace int) (score int
 // WStores get suitable stores for writing
 func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
 	var (
-		store                        string
-		stores                       []string
-		storeMeta                    *meta.Store
-		gid                          int
-		r                            *rand.Rand
-		ok                           bool
+		store     string
+		stores    []string
+		storeMeta *meta.Store
+		gid       int
+		r         *rand.Rand
+		ok        bool
 	)
 	r = rand.New(rand.NewSource(time.Now().UnixNano()))
 	gid = d.gids[r.Intn(len(d.gids))]

@@ -229,11 +229,10 @@ func (d *Directory) cookie() (cookie int32) {
 }
 
 // Rstores get readable stores for http get
-func (d *Directory) Rstores(key int64, cookie int32) (res *Response, ret int, err error) {
+func (d *Directory) Rstores(key int64, cookie int32) (res Response, ret int, err error) {
 	var (
 		f *filemeta.File
 	)
-	res = new(Response)
 	ret = http.StatusOK
 	if f, err = d.hbase.Get(key); err != nil {
 		return
@@ -257,14 +256,13 @@ func (d *Directory) Rstores(key int64, cookie int32) (res *Response, ret int, er
 }
 
 // Wstores get writable stores for http upload
-func (d *Directory) Wstores(numKeys int) (res *Response, ret int, err error) {
+func (d *Directory) Wstores(numKeys int) (res Response, ret int, err error) {
 	var (
-		i   int
+		i    int
 		key  int64
 		keys []int64
-		f   filemeta.File
+		f    filemeta.File
 	)
-	res = new(Response)
 	ret = http.StatusOK
 	if numKeys > d.config.MaxNum {
 		ret = http.StatusBadRequest
@@ -298,11 +296,10 @@ func (d *Directory) Wstores(numKeys int) (res *Response, ret int, err error) {
 }
 
 // Dstores get delable stores for http del
-func (d *Directory) Dstores(key int64, cookie int32) (res *Response, ret int, err error) {
+func (d *Directory) Dstores(key int64, cookie int32) (res Response, ret int, err error) {
 	var (
 		f *filemeta.File
 	)
-	res = new(Response)
 	ret = http.StatusOK
 	if f, err = d.hbase.Get(key); err != nil {
 		return
