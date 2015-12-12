@@ -24,6 +24,8 @@ const (
 	// http
 	configApiListen = "localhost:6065"
 	configMaxNum    = 16
+	// pprof
+	configPprofListen = "localhost:6066"
 )
 
 var (
@@ -52,6 +54,9 @@ type Config struct {
 	// http
 	MaxNum    int    `goconf:"http:maxnum"`
 	ApiListen string `goconf:"http:apilisten"`
+	// pprof
+	PprofEnable bool   `goconf:"pprof:enable"`
+	PprofListen string `goconf:"pprof:listen"`
 }
 
 // NewConfig new a config.
@@ -117,5 +122,8 @@ func (c *Config) setDefault() {
 	}
 	if c.ApiListen == "" {
 		c.ApiListen = configApiListen
+	}
+	if len(c.PprofListen) == 0 {
+		c.PprofListen = configPprofListen
 	}
 }

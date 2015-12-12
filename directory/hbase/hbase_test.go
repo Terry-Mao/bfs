@@ -4,8 +4,6 @@ import (
 	"testing"
 	"time"
 	"fmt"
-    "crypto/rand"
-    mrand "math/rand"
     "github.com/Terry-Mao/bfs/directory/hbase/filemeta"
 )
 

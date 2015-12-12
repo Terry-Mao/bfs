@@ -3,7 +3,6 @@ package hbase
 import (
     "testing"
     "time"
-//    mrand "math/rand"
     "github.com/Terry-Mao/bfs/directory/hbase/filemeta"
 )
 
@@ -36,7 +35,7 @@ func BenchmarkHbasePut(b *testing.B) {
     })
 }
 
-/*
+
 func BenchmarkHbaseGet(b *testing.B) {
     var (
         err   error
@@ -59,5 +58,3 @@ func BenchmarkHbaseGet(b *testing.B) {
         }
     })
 }
-
-*/
