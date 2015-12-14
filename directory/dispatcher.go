@@ -119,7 +119,7 @@ func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
 	stores = d.dr.gidStores[gid]
 	if len(stores) > 0 {
 		store = stores[0]
-		vid = (int32(d.gidWIndex[gid]) + 1) % int32(len(d.dr.idVolumes[store]))
+		vid = int32(d.gidWIndex[gid]) % int32(len(d.dr.idVolumes[store])) + 1
 		d.gidWIndex[gid] = int(vid)
 	}
 	for _, store = range stores {
@@ -127,7 +127,7 @@ func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
 			log.Errorf("idStore cannot match store: %s", store)
 			return nil, 0, errors.New(fmt.Sprintf("bad store : %s", store))
 		}
-		hosts = append(hosts, storeMeta.Stat)
+		hosts = append(hosts, storeMeta.Api)
 	}
 	return
 }
@@ -150,7 +150,7 @@ func (d *Dispatcher) RStores(vid int32) (hosts []string, err error) {
 			continue
 		}
 		if storeMeta.Status != meta.StoreStatusFail {
-			hosts = append(hosts, storeMeta.Stat)
+			hosts = append(hosts, storeMeta.Api)
 		}
 	}
 	return
@@ -176,7 +176,7 @@ func (d *Dispatcher) DStores(vid int32) (hosts []string, err error) {
 		if storeMeta.Status == meta.StoreStatusFail {
 			return nil, errors.New(fmt.Sprintf("bad store : %s", store))
 		}
-		hosts = append(hosts, storeMeta.Stat)
+		hosts = append(hosts, storeMeta.Api)
 	}
 	return
 }
