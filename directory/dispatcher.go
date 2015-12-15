@@ -13,7 +13,6 @@ import (
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
 	gidScore  map[int]int // for write  gid:score
-	gidWIndex map[int]int // volume index  directory:idVolumes[store][index] =>volume id
 	gids      []int
 	dr        *Directory
 }
@@ -31,7 +30,6 @@ func NewDispatcher(dr *Directory) (d *Dispatcher) {
 	d = new(Dispatcher)
 	d.dr = dr
 	d.gidScore = make(map[int]int)
-	d.gidWIndex = make(map[int]int)
 	return
 }
 
@@ -66,9 +64,9 @@ func (d *Dispatcher) Update() (err error) {
 				totalAdd, totalAddDelay, restSpace, minScore = 0, 0, 0, 0
 				for _, vid = range d.dr.idVolumes[store] {
 					volumeState = d.dr.vidVolume[vid]
-					totalAdd = totalAdd + volumeState.TotalAddProcessed
+					totalAdd = totalAdd + volumeState.TotalWriteProcessed
 					restSpace = restSpace + int(volumeState.FreeSpace)
-					totalAddDelay = totalAddDelay + volumeState.TotalAddDelay
+					totalAddDelay = totalAddDelay + volumeState.TotalWriteDelay
 				}
 				score = d.calScore(int(totalAdd), int(totalAddDelay), restSpace)
 				if score < minScore || minScore == 0 {
@@ -112,15 +110,19 @@ func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
 		storeMeta *meta.Store
 		gid       int
 		r         *rand.Rand
+		index 	  int
 		ok        bool
 	)
 	r = rand.New(rand.NewSource(time.Now().UnixNano()))
+	if len(d.gids) == 0 {
+		return nil, 0 , errors.New(fmt.Sprintf("no available gid"))
+	}
 	gid = d.gids[r.Intn(len(d.gids))]
 	stores = d.dr.gidStores[gid]
 	if len(stores) > 0 {
 		store = stores[0]
-		vid = int32(d.gidWIndex[gid]) % int32(len(d.dr.idVolumes[store])) + 1
-		d.gidWIndex[gid] = int(vid)
+		index = r.Intn(len(d.dr.idVolumes[store]))
+		vid = int32(d.dr.idVolumes[store][index])
 	}
 	for _, store = range stores {
 		if storeMeta, ok = d.dr.idStore[store]; !ok {

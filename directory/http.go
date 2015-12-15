@@ -22,6 +22,7 @@ func HttpWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res *R
 		byteJson []byte
 	)
 	if *ret != http.StatusOK {
+		log.Errorf("HttpWriter ret error: %d", *ret)
 		http.Error(wr, http.StatusText(*ret), *ret)
 		return
 	}
@@ -31,6 +32,7 @@ func HttpWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res *R
 	}
 	wr.Header().Set("Content-Type", "application/json;charset=utf-8")
 	if _, err = wr.Write(byteJson); err != nil {
+		log.Errorf("HttpWriter Write error(%v)", err)
 		return
 	}
 	log.Infof("%s path:%s(params:%s,time:%f,ret:%v)", r.Method,

@@ -131,8 +131,8 @@ func (z *Zookeeper) SetVolumeState(volume  *meta.Volume) (err error) {
 		d       []byte
 		spath   string
 		vstate = &meta.VolumeState{
-			TotalAddProcessed: volume.Stats.TotalAddProcessed,
-			TotalAddDelay: volume.Stats.TotalAddDelay,
+			TotalWriteProcessed: volume.Stats.TotalWriteProcessed,
+			TotalWriteDelay: volume.Stats.TotalWriteDelay,
 		}
 	)
 	vstate.FreeSpace = volume.Block.FreeSpace()
