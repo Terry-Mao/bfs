@@ -15,7 +15,7 @@ type InfoVolume struct {
 
 // VolumeState  for zk /volume stat
 type VolumeState struct {
-	TotalAddProcessed uint64 `json:"total_add_processed"`
-	TotalAddDelay     uint64 `json:"total_add_delay"`
-	FreeSpace         uint32 `json:"free_space"`
+	TotalWriteProcessed uint64 `json:"total_write_processed"`
+	TotalWriteDelay     uint64 `json:"total_write_delay"`
+	FreeSpace           uint32 `json:"free_space"`
 }
