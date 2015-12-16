@@ -143,7 +143,7 @@ func (d *Directory) syncVolumes() (err error) {
 }
 
 // Groups get all groups and set a watcher
-func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
+func (d *Directory) syncGroups() (err error) {
 	var (
 		gidStores      map[int][]string
 		idGroup        map[string]int
@@ -151,7 +151,7 @@ func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
 		gid            int
 		groups, stores []string
 	)
-	if groups, ev, err = d.zk.WatchGroups(); err != nil {
+	if groups, err = d.zk.Groups(); err != nil {
 		return
 	}
 	gidStores = make(map[int][]string)
@@ -178,7 +178,6 @@ func (d *Directory) syncGroups() (ev <-chan zk.Event, err error) {
 func (d *Directory) SyncZookeeper() {
 	var (
 		sev <-chan zk.Event
-		gev <-chan zk.Event
 		err error
 	)
 	for {
@@ -187,7 +186,7 @@ func (d *Directory) SyncZookeeper() {
 			time.Sleep(retrySleep)
 			continue
 		}
-		if gev, err = d.syncGroups(); err != nil {
+		if err = d.syncGroups(); err != nil {
 			log.Errorf("syncGroups() called error(%v)", err)
 			time.Sleep(retrySleep)
 			continue
@@ -202,23 +201,13 @@ func (d *Directory) SyncZookeeper() {
 			time.Sleep(retrySleep)
 			continue
 		}
-	selectBack:
 		select {
 		case <-sev:
 			log.Infof("stores status change or new store")
 			break
-		case <-gev:
-			log.Infof("new group")
-			break
 		case <-time.After(d.config.PullInterval):
-			if err = d.syncVolumes(); err != nil {
-				log.Errorf("syncVolumes() called error(%v)", err)
-			} else {
-				if err = d.dispatcher.Update(); err != nil {
-					log.Errorf("Update() called error(%v)", err)
-				}
-			}
-			goto selectBack
+			log.Infof("pull from zk")
+			break
 		}
 	}
 }
