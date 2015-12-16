@@ -77,7 +77,7 @@ func (z *Zookeeper) StoreVolumes(rack, store string) (nodes []string, err error)
 // Volumes get all volumes
 func (z *Zookeeper) Volumes() (nodes []string, err error) {
 	if nodes, _, err = z.c.Children(z.volumeRootPath); err != nil {
-		log.Errorf("zk.Get(\"%s\") error(%v)", z.volumeRootPath, err)
+		log.Errorf("zk.Children(\"%s\") error(%v)", z.volumeRootPath, err)
 	}
 	return
 }
@@ -101,9 +101,9 @@ func (z *Zookeeper) VolumeStores(volume string) (nodes []string, err error) {
 }
 
 // Groups get all groups and watch
-func (z *Zookeeper) WatchGroups() (nodes []string, ev <-chan zk.Event, err error) {
-	if nodes, _, ev, err = z.c.ChildrenW(z.groupRootPath); err != nil {
-		log.Errorf("zk.ChildrenW(\"%s\") error(%v)", z.groupRootPath, err)
+func (z *Zookeeper) Groups() (nodes []string, err error) {
+	if nodes, _, err = z.c.Children(z.groupRootPath); err != nil {
+		log.Errorf("zk.Children(\"%s\") error(%v)", z.groupRootPath, err)
 	}
 	return
 }
@@ -112,7 +112,7 @@ func (z *Zookeeper) WatchGroups() (nodes []string, ev <-chan zk.Event, err error
 func (z *Zookeeper) GroupStores(group string) (nodes []string, err error) {
 	var spath = path.Join(z.groupRootPath, group)
 	if nodes, _, err = z.c.Children(spath); err != nil {
-		log.Errorf("zk.Get(\"%s\") error(%v)", spath, err)
+		log.Errorf("zk.Children(\"%s\") error(%v)", spath, err)
 	}
 	return
 }
