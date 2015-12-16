@@ -12,8 +12,7 @@ import (
 // Dispatcher
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gidScore  map[int]int // for write  gid:score
-	gids      []int
+	gids      []int   // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
 	dr        *Directory
 }
 
@@ -29,7 +28,6 @@ const (
 func NewDispatcher(dr *Directory) (d *Dispatcher) {
 	d = new(Dispatcher)
 	d.dr = dr
-	d.gidScore = make(map[int]int)
 	return
 }
 
@@ -73,7 +71,6 @@ func (d *Dispatcher) Update() (err error) {
 					minScore = score
 				}
 			}
-			d.gidScore[gid] = minScore
 			for i = 0; i < minScore; i++ {
 				gids = append(gids, gid)
 			}
