@@ -4,6 +4,7 @@ import (
 	"github.com/Terry-Mao/bfs/directory/hbase/hbasethrift"
 	"github.com/Terry-Mao/bfs/directory/hbase/filemeta"
 	"bytes"
+	"crypto/sha1"
 	"time"
 	"fmt"
 	"errors"
@@ -14,6 +15,8 @@ import (
 const (
 	retrySleep = time.Second * 1
 	retryCount = 3
+	// The size of a SHA1 checksum in bytes.
+	Size = 20
 )
 
 type HBaseClient struct {
@@ -27,21 +30,23 @@ func NewHBaseClient() *HBaseClient {
 // Get if f return nil means not found
 func (h *HBaseClient) Get(key int64) (f *filemeta.File, err error) {
 	var (
-		ks	= make([]byte, 8)
+		k	= make([]byte, 8)
+		ks  = [Size]byte{}
 		i     int
 		v     uint32
 		c     interface{}
 		r     *hbasethrift.TResult_
 		cv    *hbasethrift.TColumnValue
 	)
-	binary.BigEndian.PutUint64(ks, uint64(key))
+	binary.BigEndian.PutUint64(k, uint64(key))
+	ks = sha1.Sum(k)
 	if c, err = hbasePool.Get(); err != nil {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
 	defer hbasePool.Put(c, false)
 	for i = 0; i < retryCount; i++ {
-		if r, err = c.(hbasethrift.THBaseService).Get(filemeta.HbaseTable, &hbasethrift.TGet{Row: ks}); err == nil {
+		if r, err = c.(hbasethrift.THBaseService).Get(filemeta.HbaseTable, &hbasethrift.TGet{Row: ks[:]}); err == nil {
 			break
 		}
 		time.Sleep(retrySleep)
@@ -74,7 +79,8 @@ func (h *HBaseClient) Get(key int64) (f *filemeta.File, err error) {
 func (h *HBaseClient) Put(f *filemeta.File) (err error) {
 	var (
 		i     int
-		ks  = make([]byte, 8)
+		k   = make([]byte, 8)
+		ks  = [Size]byte{}
 		vs  = make([]byte, 4)
 		cs  = make([]byte, 4)
 		c     interface{}
@@ -83,7 +89,8 @@ func (h *HBaseClient) Put(f *filemeta.File) (err error) {
 	if nil == f {
 		return errors.New("filemeta.File is nil")
 	}
-	binary.BigEndian.PutUint64(ks, uint64(f.Key))
+	binary.BigEndian.PutUint64(k, uint64(f.Key))
+	ks = sha1.Sum(k)
 	binary.BigEndian.PutUint32(vs, uint32(f.Vid))
 	binary.BigEndian.PutUint32(cs, uint32(f.Cookie))
 	if c, err = hbasePool.Get(); err != nil {
@@ -92,7 +99,7 @@ func (h *HBaseClient) Put(f *filemeta.File) (err error) {
 	}
 	defer hbasePool.Put(c, false)
 	for i = 0; i < retryCount; i++ {
-		if exist, err = c.(hbasethrift.THBaseService).Exists(filemeta.HbaseTable, &hbasethrift.TGet{Row: ks}); err == nil {
+		if exist, err = c.(hbasethrift.THBaseService).Exists(filemeta.HbaseTable, &hbasethrift.TGet{Row: ks[:]}); err == nil {
 			break
 		}
 		time.Sleep(retrySleep)
@@ -106,7 +113,7 @@ func (h *HBaseClient) Put(f *filemeta.File) (err error) {
 	}
 	for i = 0; i < retryCount; i++ {
 		if err = c.(hbasethrift.THBaseService).Put(filemeta.HbaseTable, &hbasethrift.TPut{
-			Row: ks,
+			Row: ks[:],
 			ColumnValues: []*hbasethrift.TColumnValue{
 				&hbasethrift.TColumnValue{
 					Family:    filemeta.HbaseFamilyBasic,
@@ -134,10 +141,12 @@ func (h *HBaseClient) Put(f *filemeta.File) (err error) {
 func (h *HBaseClient) Del(key int64) (err error) {
 	var (
 		i     int
-		ks  = make([]byte, 8)
+		k   = make([]byte, 8)
+		ks  = [Size]byte{}
 		c     interface{}
 	)
-	binary.BigEndian.PutUint64(ks, uint64(key))
+	binary.BigEndian.PutUint64(k, uint64(key))
+	ks = sha1.Sum(k)
 	if c, err = hbasePool.Get(); err != nil {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
@@ -145,7 +154,7 @@ func (h *HBaseClient) Del(key int64) (err error) {
 	defer hbasePool.Put(c, false)
 	for i = 0; i < retryCount; i++ {
 		if err = c.(hbasethrift.THBaseService).DeleteSingle(filemeta.HbaseTable, &hbasethrift.TDelete{
-			Row: ks,
+			Row: ks[:],
 			Columns: []*hbasethrift.TColumn{
 				&hbasethrift.TColumn{
 					Family:    filemeta.HbaseFamilyBasic,
