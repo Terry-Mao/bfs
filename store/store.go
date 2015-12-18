@@ -45,12 +45,12 @@ type Store struct {
 	FreeId      int32
 	bp          []*sync.Pool      // buffer pool
 	np          []*sync.Pool      // needle pool
-	Volumes     map[int32]*Volume // TODO split volumes lock
+	Volumes     map[int32]*Volume // split volumes lock
 	FreeVolumes []*Volume
 	zk          *Zookeeper
 	conf        *Config
-	flock       sync.RWMutex // protect FreeId & saveIndex
-	vlock       sync.RWMutex // protect Volumes map
+	flock       sync.Mutex // protect FreeId & saveIndex
+	vlock       sync.Mutex // protect Volumes map
 }
 
 // NewStore
@@ -281,26 +281,6 @@ func (s *Store) saveVolumeIndex() (err error) {
 	return
 }
 
-// RLockVolume read lock
-func (s *Store) RLockVolume() {
-	s.vlock.RLock()
-}
-
-// RUnlockVolume read unlock
-func (s *Store) RUnlockVolume() {
-	s.vlock.RUnlock()
-}
-
-// RLockFreeVolume read lock
-func (s *Store) RLockFreeVolume() {
-	s.flock.RLock()
-}
-
-// RUnlockFreeVolume read unlock
-func (s *Store) RUnlockFreeVolume() {
-	s.flock.RUnlock()
-}
-
 // Needle get a needle from sync.Pool.
 func (s *Store) Needle(n int) (ns []needle.Needle) {
 	var i interface{}
@@ -390,6 +370,8 @@ func (s *Store) freeVolume(id int32) (v *Volume, err error) {
 		i                                        int
 		bfile, nbfile, ifile, nifile, bdir, idir string
 	)
+	s.flock.Lock()
+	defer s.flock.Unlock()
 	if len(s.FreeVolumes) == 0 {
 		err = errors.ErrStoreNoFreeVolume
 		return
@@ -428,28 +410,37 @@ func (s *Store) freeVolume(id int32) (v *Volume, err error) {
 	return
 }
 
+// addVolume atomic add volume by copy-on-write.
+func (s *Store) addVolume(id int32, nv *Volume) {
+	var (
+		vid     int32
+		v       *Volume
+		volumes = make(map[int32]*Volume, len(s.Volumes)+1)
+	)
+	for vid, v = range s.Volumes {
+		volumes[vid] = v
+	}
+	volumes[id] = nv
+	// goroutine safe replace
+	s.Volumes = volumes
+}
+
 // AddVolume add a new volume.
 func (s *Store) AddVolume(id int32) (v *Volume, err error) {
-	var nv *Volume
-	s.vlock.RLock()
-	if v = s.Volumes[id]; v != nil {
-		err = errors.ErrVolumeExist
+	var ov *Volume
+	// try check exists
+	if ov = s.Volumes[id]; ov != nil {
+		return nil, errors.ErrVolumeExist
 	}
-	s.vlock.RUnlock()
-	if err != nil {
-		return
-	}
-	s.flock.Lock()
-	nv, err = s.freeVolume(id)
-	s.flock.Unlock()
-	if err != nil {
+	// find a free volume
+	if v, err = s.freeVolume(id); err != nil {
 		return
 	}
 	s.vlock.Lock()
-	if v = s.Volumes[id]; v == nil {
-		s.Volumes[id] = nv
+	if ov = s.Volumes[id]; ov == nil {
+		s.addVolume(id, v)
 		if err = s.saveVolumeIndex(); err == nil {
-			err = s.zk.AddVolume(nv)
+			err = s.zk.AddVolume(v)
 		}
 	} else {
 		err = errors.ErrVolumeExist
@@ -458,13 +449,28 @@ func (s *Store) AddVolume(id int32) (v *Volume, err error) {
 	return
 }
 
+// delVolume atomic del volume by copy-on-write.
+func (s *Store) delVolume(id int32) {
+	var (
+		vid     int32
+		v       *Volume
+		volumes = make(map[int32]*Volume, len(s.Volumes)-1)
+	)
+	for vid, v = range s.Volumes {
+		volumes[vid] = v
+	}
+	delete(volumes, id)
+	// goroutine safe replace
+	s.Volumes = volumes
+}
+
 // DelVolume del the volume by volume id.
 func (s *Store) DelVolume(id int32) (err error) {
 	var v *Volume
 	s.vlock.Lock()
 	if v = s.Volumes[id]; v != nil {
 		if !v.Compact {
-			delete(s.Volumes, id)
+			s.delVolume(id)
 			if err = s.saveVolumeIndex(); err == nil {
 				err = s.zk.DelVolume(id)
 			}
@@ -481,15 +487,16 @@ func (s *Store) DelVolume(id int32) (err error) {
 	return
 }
 
-// BulkVolume copy a super block from another store server replace this server.
+// BulkVolume copy a super block from another store server add to this server.
 func (s *Store) BulkVolume(id int32, bfile, ifile string) (err error) {
 	var v, nv *Volume
+	// recovery new block
 	if nv, err = NewVolume(id, bfile, ifile, s.conf); err != nil {
 		return
 	}
 	s.vlock.Lock()
 	if v = s.Volumes[id]; v == nil {
-		s.Volumes[id] = nv
+		s.addVolume(id, nv)
 		if err = s.saveVolumeIndex(); err == nil {
 			err = s.zk.AddVolume(nv)
 		}
@@ -503,22 +510,16 @@ func (s *Store) BulkVolume(id int32, bfile, ifile string) (err error) {
 // CompactVolume compact a super block to another file.
 func (s *Store) CompactVolume(id int32) (err error) {
 	var v, nv *Volume
-	s.vlock.RLock()
+	// try check volume
 	if v = s.Volumes[id]; v != nil {
 		if v.Compact {
-			err = errors.ErrVolumeInCompact
+			return errors.ErrVolumeInCompact
 		}
 	} else {
-		err = errors.ErrVolumeExist
+		return errors.ErrVolumeExist
 	}
-	s.vlock.RUnlock()
-	if err != nil {
-		return
-	}
-	s.flock.Lock()
-	nv, err = s.freeVolume(id)
-	s.flock.Unlock()
-	if err != nil {
+	// find a free volume
+	if nv, err = s.freeVolume(id); err != nil {
 		return
 	}
 	// no lock here, Compact is no side-effect
@@ -529,9 +530,10 @@ func (s *Store) CompactVolume(id int32) (err error) {
 	s.vlock.Lock()
 	if v = s.Volumes[id]; v != nil {
 		if err = v.StopCompact(nv); err == nil {
-			s.Volumes[id] = nv
+			// WARN no need update volumes map, use same object, only update
+			// zookeeper the local index cause the block and index file changed.
 			if err = s.saveVolumeIndex(); err == nil {
-				err = s.zk.SetVolume(nv)
+				err = s.zk.SetVolume(v)
 			}
 		}
 	} else {
@@ -539,8 +541,9 @@ func (s *Store) CompactVolume(id int32) (err error) {
 	}
 	s.vlock.Unlock()
 	if err == nil {
-		v.Close()
-		v.Destroy()
+		// nv now has old block/index
+		nv.Close()
+		nv.Destroy()
 	}
 	return
 }

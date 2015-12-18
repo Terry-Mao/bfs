@@ -76,7 +76,6 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	buf = h.s.Buffer(1)
 	ns = h.s.Needle(1)
 	n = &(ns[0])
-	h.s.RLockVolume()
 	if v = h.s.Volumes[int32(vid)]; v != nil {
 		if err = v.Get(key, int32(cookie), buf, n); err != nil {
 			ret = http.StatusInternalServerError
@@ -85,7 +84,6 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusNotFound
 		err = errors.ErrVolumeNotExist
 	}
-	h.s.RUnlockVolume()
 	if err == nil {
 		if r.Method == "GET" {
 			if _, err = wr.Write(n.Data); err != nil {
@@ -194,13 +192,11 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	n.Init(key, int32(cookie), buf[needle.HeaderSize:needle.HeaderSize+rn])
 	n.WriteHeader(buf)
 	n.WriteFooter(buf[needle.HeaderSize+rn:], false)
-	h.s.RLockVolume()
 	if v = h.s.Volumes[int32(vid)]; v != nil {
 		err = v.Add(n, buf[:n.TotalSize])
 	} else {
 		err = errors.ErrVolumeNotExist
 	}
-	h.s.RUnlockVolume()
 	h.s.FreeBuffer(1, buf)
 	h.s.FreeNeedle(1, ns)
 	if err != nil {
@@ -323,13 +319,11 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		tn += int(n.TotalSize) // prev needle + header
 	}
 	if err == nil {
-		h.s.RLockVolume()
 		if v = h.s.Volumes[int32(vid)]; v != nil {
 			err = v.Write(ns, buf[:tn])
 		} else {
 			err = errors.ErrVolumeNotExist
 		}
-		h.s.RUnlockVolume()
 	}
 	h.s.FreeBuffer(nb, buf)
 	h.s.FreeNeedle(nn, ns)
@@ -374,13 +368,11 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetParamErr
 		return
 	}
-	h.s.RLockVolume()
 	if v = h.s.Volumes[int32(vid)]; v != nil {
 		err = v.Del(key)
 	} else {
 		err = errors.ErrVolumeNotExist
 	}
-	h.s.RUnlockVolume()
 	if err != nil {
 		if uerr, ok = err.(errors.Error); ok {
 			res["ret"] = int(uerr)
@@ -422,7 +414,6 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetDelMaxFile
 		return
 	}
-	h.s.RLockVolume()
 	if v = h.s.Volumes[int32(vid)]; v != nil {
 		for _, str = range keyStrs {
 			if key, err = strconv.ParseInt(str, 10, 64); err == nil {
@@ -435,7 +426,6 @@ func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	} else {
 		err = errors.ErrVolumeNotExist
 	}
-	h.s.RUnlockVolume()
 	if err != nil {
 		if uerr, ok = err.(errors.Error); ok {
 			res["ret"] = int(uerr)

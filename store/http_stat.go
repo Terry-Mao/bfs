@@ -27,28 +27,13 @@ func StartStat(addr string, s *Store) {
 			return
 		}
 		var (
-			v           *Volume
-			err         error
-			data        []byte
-			volumes     []*Volume
-			freeVolumes []*Volume
-			res         = map[string]interface{}{"ret": errors.RetOK}
+			err  error
+			data []byte
+			res  = map[string]interface{}{"ret": errors.RetOK}
 		)
-		s.RLockVolume()
-		volumes = make([]*Volume, 0, len(s.Volumes))
-		for _, v = range s.Volumes {
-			volumes = append(volumes, v)
-		}
-		s.RUnlockVolume()
-		s.RLockFreeVolume()
-		freeVolumes = make([]*Volume, 0, len(s.FreeVolumes))
-		for _, v = range s.FreeVolumes {
-			freeVolumes = append(freeVolumes, v)
-		}
-		s.RUnlockFreeVolume()
 		res["server"] = info
-		res["volumes"] = volumes
-		res["free_volumes"] = freeVolumes
+		res["volumes"] = s.Volumes
+		res["free_volumes"] = s.FreeVolumes
 		if data, err = json.Marshal(res); err == nil {
 			if _, err = wr.Write(data); err != nil {
 				log.Errorf("wr.Write() error(%v)", err)
@@ -76,12 +61,10 @@ func startStat(s *Store, info *stat.Info) {
 		stat1 = info.Stats
 		info.Stats = stat
 		stat1.Reset()
-		s.RLockVolume()
 		for _, v = range s.Volumes {
 			v.Stats.Calc()
 			stat1.Merge(v.Stats)
 		}
-		s.RUnlockVolume()
 		stat1.Calc()
 		info.Stats = stat1
 		time.Sleep(statDuration)

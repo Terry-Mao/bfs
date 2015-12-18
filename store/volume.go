@@ -491,6 +491,8 @@ func (v *Volume) StartCompact(nv *Volume) (err error) {
 
 // StopCompact try append left block space and deleted needles when
 // compacting, then reset compact flag, offset and compactKeys.
+// After stop compact, the nv will set to old volume, and old volume will
+// update inner block/index/needles pointer.
 // if nv is nil, only reset compact status.
 func (v *Volume) StopCompact(nv *Volume) (err error) {
 	var (
@@ -507,6 +509,9 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 				goto free
 			}
 		}
+		v.Block, nv.Block = nv.Block, v.Block
+		v.Indexer, nv.Indexer = nv.Indexer, v.Indexer
+		v.needles, nv.needles = nv.needles, v.needles
 		atomic.AddUint64(&v.Stats.TotalCompactDelay, uint64(time.Now().UnixNano()-now))
 	}
 free:

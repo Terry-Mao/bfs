@@ -21,6 +21,7 @@ const (
 	// block
 	configSuperBlockSync = 1024
 	// index
+	configIndexBufferio   = 4 * 1024
 	configIndexRingBuffer = 1024 * 10
 	configIndexMerge      = 1024
 	configIndexMergeTime  = time.Second * 10 // 10s
@@ -140,6 +141,9 @@ func (c *Config) setDefault() {
 		c.VolumeCheckInterval = configVolumeCheckInterval
 	}
 	// block
+	if c.IndexBufferio < 4*1024 {
+		c.IndexBufferio = configIndexBufferio
+	}
 	if c.SuperBlockSync < 1 {
 		c.SuperBlockSync = configSuperBlockSync
 	}
