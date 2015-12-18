@@ -14,6 +14,7 @@ import (
 type Dispatcher struct {
 	gids      []int   // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
 	dr        *Directory
+	r         *rand.Rand
 }
 
 const (
@@ -28,6 +29,7 @@ const (
 func NewDispatcher(dr *Directory) (d *Dispatcher) {
 	d = new(Dispatcher)
 	d.dr = dr
+	d.r = rand.New(rand.NewSource(time.Now().UnixNano()))
 	return
 }
 
@@ -106,19 +108,17 @@ func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
 		stores    []string
 		storeMeta *meta.Store
 		gid       int
-		r         *rand.Rand
 		index 	  int
 		ok        bool
 	)
-	r = rand.New(rand.NewSource(time.Now().UnixNano()))
 	if len(d.gids) == 0 {
 		return nil, 0 , errors.New(fmt.Sprintf("no available gid"))
 	}
-	gid = d.gids[r.Intn(len(d.gids))]
+	gid = d.gids[d.r.Intn(len(d.gids))]
 	stores = d.dr.gidStores[gid]
 	if len(stores) > 0 {
 		store = stores[0]
-		index = r.Intn(len(d.dr.idVolumes[store]))
+		index = d.r.Intn(len(d.dr.idVolumes[store]))
 		vid = int32(d.dr.idVolumes[store][index])
 	}
 	for _, store = range stores {
