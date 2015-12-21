@@ -115,7 +115,7 @@ def initFromStore(store_ip):
         STORE_INFO[VOLUME_KEY+IP_TO_STORE[store_ip]] = volumes_num
         return True
 
-    logger.error("initFromStore() called failed: status: %d, store_ip: %s", status, store_ip)
+    logger.error("initFromStore() called failed: store_ip: %s", store_ip)
     return False
 
 
