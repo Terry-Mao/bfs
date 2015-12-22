@@ -6,14 +6,16 @@ import (
 	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"math/rand"
+	"sync"
 	"time"
 )
 
 // Dispatcher
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gids      []int   // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
-	dr        *Directory
+	gids []int // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
+	dr   *Directory
+	rp   *sync.Pool // rand pool
 }
 
 const (
@@ -27,7 +29,11 @@ const (
 // NewDispatcher
 func NewDispatcher(dr *Directory) (d *Dispatcher) {
 	d = new(Dispatcher)
-	d.dr = dr
+	d.dr = dr	d.rp = &sync.Pool{
+		New: func() interface{} {
+			return rand.New(rand.NewSource(time.Now().UnixNano()))
+		},
+	}
 	return
 }
 
@@ -106,19 +112,20 @@ func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
 		stores    []string
 		storeMeta *meta.Store
 		gid       int
+		index     int
 		r         *rand.Rand
-		index 	  int
 		ok        bool
 	)
-	r = rand.New(rand.NewSource(time.Now().UnixNano()))
 	if len(d.gids) == 0 {
-		return nil, 0 , errors.New(fmt.Sprintf("no available gid"))
+		return nil, 0, errors.New(fmt.Sprintf("no available gid"))
 	}
+	r = d.rp.Get().(*rand.Rand)
+	defer d.rp.Put(r)
 	gid = d.gids[r.Intn(len(d.gids))]
 	stores = d.dr.gidStores[gid]
 	if len(stores) > 0 {
 		store = stores[0]
-		index = r.Intn(len(d.dr.idVolumes[store]))
+		index = d.r.Intn(len(d.dr.idVolumes[store]))
 		vid = int32(d.dr.idVolumes[store][index])
 	}
 	for _, store = range stores {

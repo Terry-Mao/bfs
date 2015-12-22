@@ -214,7 +214,7 @@ func (d *Directory) SyncZookeeper() {
 
 // cookie  rand uint16
 func (d *Directory) cookie() (cookie int32) {
-	return int32(uint16(time.Now().UnixNano()))
+	return int32(uint16(time.Now().UnixNano())) + 1
 }
 
 // Rstores get readable stores for http get

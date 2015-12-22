@@ -21,7 +21,7 @@ def getRack():
 		def watcher(event):
 			logger.info("/rack children changed, need update memory")
 			getRack()
-		zk_cilent.get('/rack', watcher)
+		zk_client.get('/rack', watcher)
 
 		children = zk_client.get_children('/rack')
 		for child in children:
