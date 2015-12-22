@@ -15,9 +15,8 @@ Table of Contents
 * [Installation](#installation)
 
 ## Features
-* Mostly probe all store nodes and feed back to all directorys
-* Adaptive Designs when store nodes change or pitchfork nodes change
-* High-low coupling pitchfork feed back to directory through zookeeper
+* Scheduling module of bfs, directory provieds http api for client
+* High availability and easy extension
 
 [Back to TOC](#table-of-contents)
 
@@ -100,10 +99,10 @@ response a json:
 
 ## Architechure
 ### Directory
-Directory contains unique id of pitchfork
+Directory pull store status from zookeeper and update into memory
 
 ### Dispatcher
-Dispatcher contains unique id, rack position in zookeeper and accessed host
+Dispatcher schedule client requests, and guarantee load balancing
 
 [Back to TOC](#table-of-contents)
 
