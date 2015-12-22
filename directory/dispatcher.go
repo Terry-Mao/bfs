@@ -29,7 +29,8 @@ const (
 // NewDispatcher
 func NewDispatcher(dr *Directory) (d *Dispatcher) {
 	d = new(Dispatcher)
-	d.dr = dr	d.rp = &sync.Pool{
+	d.dr = dr
+	d.rp = &sync.Pool{
 		New: func() interface{} {
 			return rand.New(rand.NewSource(time.Now().UnixNano()))
 		},
