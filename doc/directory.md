@@ -43,6 +43,13 @@ GET
 
 e.g curl "http://localhost:6065/get?key=5&cookie=5"
 
+***Get Response***
+
+```json
+	Vid    int32    `json:"vid,omitempty"`
+	Stores []string `json:"stores,omitempty"`
+```
+
 ### Upload
 
 upload a file
@@ -62,6 +69,15 @@ POST multipart/form-data
 | num        | true  | int32  | num of files |
 
 e.g curl -d "num=1" "http://localhost:6065/upload"
+
+***Upload Response***
+
+```json
+	Keys   []int64  `json:"keys,omitempty"`
+	Vid    int32    `json:"vid,omitempty"`
+	Cookie int32    `json:"cookie,omitempty"`
+	Stores []string `json:"stores,omitempty"`
+```
 
 ### Delete
 
@@ -84,14 +100,10 @@ POST application/x-www-form-urlencoded
 
 e.g curl -d "key=5&cookie=5" "http://localhost:6065/del"
 
-### ApiResponse
-
-response a json:
+***Del Response***
 
 ```json
-	Keys   []int64  `json:"keys,omitempty"`
 	Vid    int32    `json:"vid,omitempty"`
-	Cookie int32    `json:"cookie,omitempty"`
 	Stores []string `json:"stores,omitempty"`
 ```
 
