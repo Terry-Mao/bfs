@@ -29,8 +29,7 @@ const (
 // NewDispatcher
 func NewDispatcher(dr *Directory) (d *Dispatcher) {
 	d = new(Dispatcher)
-	d.dr = dr
-	d.rp = &sync.Pool{
+	d.dr = dr	d.rp = &sync.Pool{
 		New: func() interface{} {
 			return rand.New(rand.NewSource(time.Now().UnixNano()))
 		},
@@ -126,7 +125,7 @@ func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
 	stores = d.dr.gidStores[gid]
 	if len(stores) > 0 {
 		store = stores[0]
-		index = r.Intn(len(d.dr.idVolumes[store]))
+		index = d.r.Intn(len(d.dr.idVolumes[store]))
 		vid = int32(d.dr.idVolumes[store][index])
 	}
 	for _, store = range stores {
