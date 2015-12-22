@@ -27,12 +27,18 @@ func StartStat(addr string, s *Store) {
 			return
 		}
 		var (
-			err  error
-			data []byte
-			res  = map[string]interface{}{"ret": errors.RetOK}
+			rid     int32
+			err     error
+			data    []byte
+			v       *Volume
+			volumes = make(map[int32]*Volume, len(s.Volumes))
+			res     = map[string]interface{}{"ret": errors.RetOK}
 		)
+		for rid, v = range s.Volumes {
+			volumes[rid] = v
+		}
 		res["server"] = info
-		res["volumes"] = s.Volumes
+		res["volumes"] = volumes
 		res["free_volumes"] = s.FreeVolumes
 		if data, err = json.Marshal(res); err == nil {
 			if _, err = wr.Write(data); err != nil {
