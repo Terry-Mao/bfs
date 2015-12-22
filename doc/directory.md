@@ -41,13 +41,12 @@ GET
 | key       | true  | int64  | file key |
 | cookie       | true  | int64  | file cookie |
 
-e.g curl "http://localhost:6065/get?key=5&cookie=5"
+e.g curl "http://localhost:6065/get?key=679114092262199341&cookie=2937"
 
 ***Get Response***
 
 ```json
-	Vid    int32    `json:"vid,omitempty"`
-	Stores []string `json:"stores,omitempty"`
+{"vid":315,"stores":["192.168.0.1:6062","192.168.0.2:6062","192.168.0.3:6062"]}
 ```
 
 ### Upload
@@ -68,15 +67,12 @@ POST multipart/form-data
 | :-----     | :---  | :--- | :---      |
 | num        | true  | int32  | num of files |
 
-e.g curl -d "num=1" "http://localhost:6065/upload"
+e.g curl -d "num=2" "http://localhost:6065/upload"
 
 ***Upload Response***
 
 ```json
-	Keys   []int64  `json:"keys,omitempty"`
-	Vid    int32    `json:"vid,omitempty"`
-	Cookie int32    `json:"cookie,omitempty"`
-	Stores []string `json:"stores,omitempty"`
+{"keys":[679114092262199341,679114092740349989],"vid":315,"cookie":2937,"stores":["192.168.0.1:6062","192.168.0.2:6062","192.168.0.3:6062"]}
 ```
 
 ### Delete
@@ -103,8 +99,7 @@ e.g curl -d "key=5&cookie=5" "http://localhost:6065/del"
 ***Del Response***
 
 ```json
-	Vid    int32    `json:"vid,omitempty"`
-	Stores []string `json:"stores,omitempty"`
+{"vid":315,"stores":["192.168.0.1:6062","192.168.0.2:6062","192.168.0.3:6062"]}
 ```
 
 [Back to TOC](#table-of-contents)
