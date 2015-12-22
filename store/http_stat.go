@@ -27,15 +27,14 @@ func StartStat(addr string, s *Store) {
 			return
 		}
 		var (
-			rid     int32
 			err     error
 			data    []byte
 			v       *Volume
-			volumes = make(map[int32]*Volume, len(s.Volumes))
+			volumes = make([]*Volume, 0, len(s.Volumes))
 			res     = map[string]interface{}{"ret": errors.RetOK}
 		)
-		for rid, v = range s.Volumes {
-			volumes[rid] = v
+		for _, v = range s.Volumes {
+			volumes = append(volumes, v)
 		}
 		res["server"] = info
 		res["volumes"] = volumes
