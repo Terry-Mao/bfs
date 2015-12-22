@@ -12,8 +12,8 @@ import (
 // Dispatcher
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gids      []int   // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
-	dr        *Directory
+	gids []int // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
+	dr   *Directory
 }
 
 const (
@@ -107,12 +107,12 @@ func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
 		storeMeta *meta.Store
 		gid       int
 		r         *rand.Rand
-		index 	  int
+		index     int
 		ok        bool
 	)
 	r = rand.New(rand.NewSource(time.Now().UnixNano()))
 	if len(d.gids) == 0 {
-		return nil, 0 , errors.New(fmt.Sprintf("no available gid"))
+		return nil, 0, errors.New(fmt.Sprintf("no available gid"))
 	}
 	gid = d.gids[r.Intn(len(d.gids))]
 	stores = d.dr.gidStores[gid]
