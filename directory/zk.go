@@ -41,8 +41,12 @@ func NewZookeeper(addrs []string, timeout time.Duration, storeRootPath, volumeRo
 
 // WatchRacks get all racks and watch
 func (z *Zookeeper) WatchRacks() (nodes []string, ev <-chan zk.Event, err error) {
-	if nodes, _, ev, err = z.c.ChildrenW(z.storeRootPath); err != nil {
-		log.Errorf("zk.ChildrenW(\"%s\") error(%v)", z.storeRootPath, err)
+	if _, _, ev, err = z.c.GetW(z.storeRootPath); err != nil {
+		log.Errorf("zk.GetW(\"%s\") error(%v)", z.storeRootPath, err)
+		return
+	}
+	if nodes, _, err = z.c.Children(z.storeRootPath); err != nil {
+		log.Errorf("zk.Children(\"%s\") error(%v)", z.storeRootPath, err)
 	}
 	return
 }

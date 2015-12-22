@@ -152,7 +152,6 @@ def bfsopsGroupsGet():
 		resp['errorMsg'] = ""
 		resp['content'] = []
 
-		group_item = {}
 		status = 0
 
 		for group_id in GROUP_STORE:
@@ -160,6 +159,7 @@ def bfsopsGroupsGet():
 			for store_id in stores:
 				if STORE_INFO[FREE_VOLUME_KEY+store_id] == 0:
 					status = 1
+			group_item = {}
 			group_item['groupid'] = group_id
 			group_item['ips'] = ','.join(stores)
 			group_item['status'] = status
