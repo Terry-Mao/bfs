@@ -23,11 +23,9 @@ func NewRing(num int) *Ring {
 	return r
 }
 
-func InitRing(r *Ring, num int) {
-	if num > 0 {
-		r.data = make([]Index, num)
-		r.num = num
-	}
+func (r *Ring) Init(num int) {
+	r.data = make([]Index, num)
+	r.num = num
 }
 
 func (r *Ring) Get() (index *Index, err error) {

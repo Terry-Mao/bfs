@@ -141,7 +141,7 @@ func (b *SuperBlock) writeMeta() (err error) {
 
 // parseMeta parse block meta info.
 func (b *SuperBlock) parseMeta() (err error) {
-	var buf = make([]byte, b.Options.BufferSize)
+	var buf = make([]byte, headerSize)
 	if _, err = b.r.Read(buf[:headerSize]); err != nil {
 		return
 	}
@@ -153,6 +153,7 @@ func (b *SuperBlock) parseMeta() (err error) {
 	if b.Ver == Ver1 {
 		return errors.ErrSuperBlockVer
 	}
+	b.magic = nil // avoid memory leak
 	return
 }
 

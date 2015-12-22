@@ -41,7 +41,7 @@ const (
 	keySize    = 8
 	offsetSize = 4
 	sizeSize   = 4
-	// constant 16
+	// index size = 16
 	indexSize = keySize + offsetSize + sizeSize
 	// index offset
 	keyOffset    = 0
@@ -275,7 +275,6 @@ func (i *Indexer) merge() {
 		}
 	}
 	i.mergeRing()
-	i.write = 0
 	i.flush(true)
 	i.wg.Done()
 	log.Warningf("index: %s write job exit", i.File)
@@ -322,15 +321,15 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 	}
 	if err == io.EOF {
 		// advise no need page cache
-		if err = myos.Fadvise(fd, 0, fi.Size(), myos.POSIX_FADV_DONTNEED); err != nil {
-			log.Errorf("index: %s Fadvise() error(%v)", i.File)
+		if err = myos.Fadvise(fd, 0, fi.Size(), myos.POSIX_FADV_DONTNEED); err == nil {
+			err = nil
+			log.Infof("scan index: %s [ok]", i.File)
 			return
+		} else {
+			log.Errorf("index: %s Fadvise() error(%v)", i.File)
 		}
-		err = nil
-		log.Infof("scan index: %s [ok]", i.File)
-	} else {
-		log.Infof("scan index: %s error(%v) [failed]", i.File, err)
 	}
+	log.Infof("scan index: %s error(%v) [failed]", i.File, err)
 	return
 }
 
