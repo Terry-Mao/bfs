@@ -78,7 +78,11 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	n = &(ns[0])
 	if v = h.s.Volumes[int32(vid)]; v != nil {
 		if err = v.Get(key, int32(cookie), buf, n); err != nil {
-			ret = http.StatusInternalServerError
+			if err == ErrNeedleDeleted || err == ErrNeedleNotExist {
+				ret = http.StatusNotFound
+			} else {
+				ret = http.StatusInternalServerError
+			}
 		}
 	} else {
 		ret = http.StatusNotFound
