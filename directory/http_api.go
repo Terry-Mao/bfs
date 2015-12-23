@@ -54,8 +54,8 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	if res, ret, err = h.d.Rstores(key, int32(cookie)); err != nil {
-		log.Errorf("Rstores() error(%v)", err)
+	if res, ret, err = h.d.ReadStores(key, int32(cookie)); err != nil {
+		log.Errorf("ReadStores() error(%v)", err)
 		ret = http.StatusInternalServerError
 	}
 	return
@@ -84,8 +84,8 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	if res, ret, err = h.d.Wstores(int(num)); err != nil {
-		log.Errorf("Wstores() error(%v)", err)
+	if res, ret, err = h.d.WriteStores(int(num)); err != nil {
+		log.Errorf("WriteStores() error(%v)", err)
 		ret = http.StatusInternalServerError
 	}
 	return
@@ -119,8 +119,8 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	if res, ret, err = h.d.Dstores(key, int32(cookie)); err != nil {
-		log.Errorf("Dstores() error(%v)", err)
+	if res, ret, err = h.d.DelStores(key, int32(cookie)); err != nil {
+		log.Errorf("DelStores() error(%v)", err)
 		ret = http.StatusInternalServerError
 	}
 	return

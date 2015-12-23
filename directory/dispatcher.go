@@ -14,8 +14,7 @@ import (
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
 	gids []int // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
-	dr   *Directory
-	rp   *sync.Pool // rand pool
+	rand *rand.Rand
 }
 
 const (
@@ -27,60 +26,62 @@ const (
 )
 
 // NewDispatcher
-func NewDispatcher(dr *Directory) (d *Dispatcher) {
+func NewDispatcher() (d *Dispatcher) {
 	d = new(Dispatcher)
-	d.dr = dr
-	d.rp = &sync.Pool{
-		New: func() interface{} {
-			return rand.New(rand.NewSource(time.Now().UnixNano()))
-		},
-	}
+	d.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	return
 }
 
 // Update when zk updates
-func (d *Dispatcher) Update() (err error) {
+func (d *Dispatcher) Update(group map[int][]string,
+	store map[string]*meta.Store, volume map[int32]*meta.VolumeState,
+	volumeStore map[int32][]string) (err error) {
 	var (
-		store                      string
-		stores                     []string
-		storeMeta                  *meta.Store
-		volumeState                *meta.VolumeState
-		writable, ok               bool
-		totalAdd, totalAddDelay    uint64
-		restSpace, minScore, score int
-		gid, i                     int
+		gid                        int
 		vid                        int32
 		gids                       []int
+		sid                        string
+		stores                     []string
+		restSpace, minScore, score int
+		totalAdd, totalAddDelay    uint64
+		write, ok                  bool
+		storeMeta                  *meta.Store
+		volumeState                *meta.VolumeState
 	)
 	gids = []int{}
-	for gid, stores = range d.dr.gidStores {
-		writable = true
-		for _, store = range stores {
-			if storeMeta, ok = d.dr.idStore[store]; !ok {
-				log.Errorf("idStore cannot match store: %s", store)
+	for gid, stores = range group {
+		write = true
+		// check all stores can writeable by the group.
+		for _, sid = range stores {
+			if storeMeta, ok = store[sid]; !ok {
+				log.Errorf("idStore cannot match store: %s", sid)
 				break
 			}
-			if storeMeta.Status == meta.StoreStatusFail || storeMeta.Status == meta.StoreStatusRead {
-				writable = false
+			if !storeMeta.CanWrite() {
+				write = false
+				break
 			}
 		}
-		if writable {
-			for _, store = range stores {
-				totalAdd, totalAddDelay, restSpace, minScore = 0, 0, 0, 0
-				for _, vid = range d.dr.idVolumes[store] {
-					volumeState = d.dr.vidVolume[vid]
-					totalAdd = totalAdd + volumeState.TotalWriteProcessed
-					restSpace = restSpace + int(volumeState.FreeSpace)
-					totalAddDelay = totalAddDelay + volumeState.TotalWriteDelay
-				}
-				score = d.calScore(int(totalAdd), int(totalAddDelay), restSpace)
-				if score < minScore || minScore == 0 {
-					minScore = score
-				}
+		if !write {
+			continue
+		}
+		// calc score
+		for _, sid = range stores {
+			totalAdd, totalAddDelay, restSpace, minScore = 0, 0, 0, 0
+			// get all volumes by the store.
+			for _, vid = range storeVolume[sid] {
+				volumeState = volume[vid]
+				totalAdd = totalAdd + volumeState.TotalWriteProcessed
+				restSpace = restSpace + int(volumeState.FreeSpace)
+				totalAddDelay = totalAddDelay + volumeState.TotalWriteDelay
 			}
-			for i = 0; i < minScore; i++ {
-				gids = append(gids, gid)
+			score = d.calScore(int(totalAdd), int(totalAddDelay), restSpace)
+			if score < minScore || minScore == 0 {
+				minScore = score
 			}
+		}
+		for i = 0; i < minScore; i++ {
+			gids = append(gids, gid)
 		}
 	}
 	d.gids = gids
@@ -106,85 +107,23 @@ func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace int) (score int
 	return
 }
 
-// WStores get suitable stores for writing
-func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
+// VolumeId get a volume id.
+func (d *Dispatcher) VolumeId(group map[int][]string, storeVolume map[string][]int32) (vid int32, err error) {
 	var (
-		store     string
-		stores    []string
-		storeMeta *meta.Store
-		gid       int
-		index     int
-		r         *rand.Rand
-		index     int
-		ok        bool
+		sid  string
+		gid  int
+		vids []int32
 	)
 	if len(d.gids) == 0 {
-		return nil, 0, errors.New(fmt.Sprintf("no available gid"))
+		// TODO
+		return 0, errors.New(fmt.Sprintf("no available gid"))
 	}
-	r = d.rp.Get().(*rand.Rand)
-	defer d.rp.Put(r)
-	gid = d.gids[r.Intn(len(d.gids))]
-	stores = d.dr.gidStores[gid]
+	gid = d.gids[d.rand.Intn(len(d.gids))]
+	stores = group[gid]
 	if len(stores) > 0 {
-		store = stores[0]
-		index = d.r.Intn(len(d.dr.idVolumes[store]))
-		vid = int32(d.dr.idVolumes[store][index])
-	}
-	for _, store = range stores {
-		if storeMeta, ok = d.dr.idStore[store]; !ok {
-			log.Errorf("idStore cannot match store: %s", store)
-			return nil, 0, errors.New(fmt.Sprintf("bad store : %s", store))
-		}
-		hosts = append(hosts, storeMeta.Api)
-	}
-	return
-}
-
-// RStores get suitable stores for reading
-func (d *Dispatcher) RStores(vid int32) (hosts []string, err error) {
-	var (
-		store     string
-		stores    []string
-		storeMeta *meta.Store
-		ok        bool
-	)
-	hosts = []string{}
-	if stores, ok = d.dr.vidStores[vid]; !ok {
-		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
-	}
-	for _, store = range stores {
-		if storeMeta, ok = d.dr.idStore[store]; !ok {
-			log.Errorf("idStore cannot match store: %s", store)
-			continue
-		}
-		if storeMeta.Status != meta.StoreStatusFail {
-			hosts = append(hosts, storeMeta.Api)
-		}
-	}
-	return
-}
-
-// DStores get suitable stores for delete
-func (d *Dispatcher) DStores(vid int32) (hosts []string, err error) {
-	var (
-		store     string
-		stores    []string
-		storeMeta *meta.Store
-		ok        bool
-	)
-	hosts = []string{}
-	if stores, ok = d.dr.vidStores[vid]; !ok {
-		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
-	}
-	for _, store = range stores {
-		if storeMeta, ok = d.dr.idStore[store]; !ok {
-			log.Errorf("idStore cannot match store: %s", store)
-			continue
-		}
-		if storeMeta.Status == meta.StoreStatusFail {
-			return nil, errors.New(fmt.Sprintf("bad store : %s", store))
-		}
-		hosts = append(hosts, storeMeta.Api)
+		sid = stores[0]
+		vids = storeVolume[sid]
+		vid = vids[d.rand.Intn(len(vids))]
 	}
 	return
 }

@@ -3,8 +3,8 @@ package meta
 import (
 	"encoding/json"
 	"fmt"
-	log "github.com/golang/glog"
 	"github.com/Terry-Mao/bfs/libs/errors"
+	log "github.com/golang/glog"
 	"io/ioutil"
 	"net/http"
 )
@@ -23,7 +23,7 @@ const (
 	StoreStatusFail   = StoreStatusEnable
 	// api
 	statAPI = "http://%s/info"
-	getAPI = "http://%s/get?key=%d&cookie=%d&vid=%d"
+	getAPI  = "http://%s/get?key=%d&cookie=%d&vid=%d"
 )
 
 type StoreList []*Store
@@ -92,8 +92,8 @@ func (s *Store) Info() (vs []*Volume, err error) {
 // Head send a head request to store.
 func (s *Store) Head(n *Needle, vid int32) (err error) {
 	var (
-		resp    *http.Response
-		url     string
+		resp *http.Response
+		url  string
 	)
 	url = s.getAPI(n, vid)
 	if resp, err = http.Head(url); err != nil {
@@ -103,4 +103,9 @@ func (s *Store) Head(n *Needle, vid int32) (err error) {
 		err = errors.ErrInternal
 	}
 	return
+}
+
+// CanWrite reports whether the store can write.
+func (s *Store) CanWrite() bool {
+	return s.Status == StoreStatusWrite
 }

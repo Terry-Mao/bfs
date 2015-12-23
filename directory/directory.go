@@ -20,13 +20,17 @@ const (
 // Directory
 // id means store serverid; vid means volume id; gid means group id
 type Directory struct {
-	idStore   map[string]*meta.Store // store status
-	idVolumes map[string][]int32     // init from getStoreVolume
-	idGroup   map[string]int         // for http read
+	// STORE
+	store       map[string]*meta.Store // store_server_id:store_info
+	storeVolume map[string][]int32     // store_server_id:volume_ids
 
-	vidVolume map[int32]*meta.VolumeState
-	vidStores map[int32][]string // init from getStoreVolume    for  http Read
-	gidStores map[int][]string
+	// GROUP
+	storeGroup map[string]int   // store_server_id:group
+	group      map[int][]string // group_id:store_servers
+
+	// VOLUME
+	volume      map[int32]*meta.VolumeState // volume_id:volume_state
+	volumeStore map[int32][]string          // volume_id:store_server_id
 
 	genkey     *snowflake.Genkey  // snowflake client for gen key
 	hbase      *hbase.HBaseClient // hbase client
@@ -48,7 +52,7 @@ func NewDirectory(config *Config, zk *Zookeeper) (d *Directory, err error) {
 		return
 	}
 	d.hbase = hbase.NewHBaseClient()
-	d.dispatcher = NewDispatcher(d)
+	d.dispatcher = NewDispatcher()
 	go d.SyncZookeeper()
 	return
 }
@@ -57,24 +61,26 @@ func NewDirectory(config *Config, zk *Zookeeper) (d *Directory, err error) {
 func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 	var (
 		storeMeta              *meta.Store
-		idStore                map[string]*meta.Store
-		idVolumes              map[string][]int32
+		store                  map[string]*meta.Store
+		storeVolume            map[string][]int32
 		rack, store, volume    string
 		racks, stores, volumes []string
 		data                   []byte
 		vid                    int
 	)
-
+	// get all rack
 	if racks, ev, err = d.zk.WatchRacks(); err != nil {
 		return
 	}
-	idStore = make(map[string]*meta.Store)
-	idVolumes = make(map[string][]int32)
+	store = make(map[string]*meta.Store)
+	storeVolume = make(map[string][]int32)
 	for _, rack = range racks {
+		// get all stores in the rack
 		if stores, err = d.zk.Stores(rack); err != nil {
 			return
 		}
 		for _, store = range stores {
+			// get store
 			if data, err = d.zk.Store(rack, store); err != nil {
 				return
 			}
@@ -83,43 +89,46 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 				log.Errorf("json.Unmarshal() error(%v)", err)
 				return
 			}
+			// get all volumes in the store
 			if volumes, err = d.zk.StoreVolumes(rack, store); err != nil {
 				return
 			}
-			idVolumes[storeMeta.Id] = []int32{}
+			storeVolume[storeMeta.Id] = []int32{}
 			for _, volume = range volumes {
 				if vid, err = strconv.Atoi(volume); err != nil {
 					log.Errorf("wrong volume:%s", volume)
 					continue
 				}
-				idVolumes[storeMeta.Id] = append(idVolumes[storeMeta.Id], int32(vid))
+				storeVolume[storeMeta.Id] = append(storeVolume[storeMeta.Id], int32(vid))
 			}
-			idStore[storeMeta.Id] = storeMeta
+			store[storeMeta.Id] = storeMeta
 		}
 	}
-	d.idStore = idStore
-	d.idVolumes = idVolumes
+	d.store = store
+	d.storeVolume = storeVolume
 	return
 }
 
 // Volumes get all volumes in zk
 func (d *Directory) syncVolumes() (err error) {
 	var (
-		volumeState     *meta.VolumeState
-		vidVolume       map[int32]*meta.VolumeState
-		vidStores       map[int32][]string
-		volume          string
 		vid             int
+		str             string
 		volumes, stores []string
 		data            []byte
+		volumeState     *meta.VolumeState
+		volume          map[int32]*meta.VolumeState
+		volumeStore     map[int32][]string
 	)
+	// get all volumes
 	if volumes, err = d.zk.Volumes(); err != nil {
 		return
 	}
-	vidVolume = make(map[int32]*meta.VolumeState)
-	vidStores = make(map[int32][]string)
-	for _, volume = range volumes {
-		if data, err = d.zk.Volume(volume); err != nil {
+	volume = make(map[int32]*meta.VolumeState)
+	volumeStore = make(map[int32][]string)
+	for _, str = range volumes {
+		// get the volume
+		if data, err = d.zk.Volume(str); err != nil {
 			return
 		}
 		volumeState = new(meta.VolumeState)
@@ -127,50 +136,53 @@ func (d *Directory) syncVolumes() (err error) {
 			log.Errorf("json.Unmarshal() error(%v)", err)
 			return
 		}
-		if vid, err = strconv.Atoi(volume); err != nil {
-			log.Errorf("wrong volume:%s", volume)
+		if vid, err = strconv.Atoi(str); err != nil {
+			log.Errorf("wrong volume:%s", str)
 			continue
 		}
-		vidVolume[int32(vid)] = volumeState
-		if stores, err = d.zk.VolumeStores(volume); err != nil {
+		volume[int32(vid)] = volumeState
+		// get the stores by the volume
+		if stores, err = d.zk.VolumeStores(str); err != nil {
 			return
 		}
-		vidStores[int32(vid)] = stores
+		volumeStore[int32(vid)] = stores
 	}
-	d.vidVolume = vidVolume
-	d.vidStores = vidStores
+	d.volume = volume
+	d.volumeStore = volumeStore
 	return
 }
 
-// Groups get all groups and set a watcher
+// syncGroups get all groups and set a watcher.
 func (d *Directory) syncGroups() (err error) {
 	var (
-		gidStores      map[int][]string
-		idGroup        map[string]int
-		group, store   string
 		gid            int
+		str            string
 		groups, stores []string
+		group          map[int][]string
+		storeGroup     map[string]int
 	)
+	// get all groups
 	if groups, err = d.zk.Groups(); err != nil {
 		return
 	}
-	gidStores = make(map[int][]string)
-	idGroup = make(map[string]int)
-	for _, group = range groups {
-		if stores, err = d.zk.GroupStores(group); err != nil {
+	group = make(map[int][]string)
+	storeGroup = make(map[string]int)
+	for _, str = range groups {
+		// get all stores by the group
+		if stores, err = d.zk.GroupStores(str); err != nil {
 			return
 		}
-		if gid, err = strconv.Atoi(group); err != nil {
-			log.Errorf("wrong group:%s", group)
+		if gid, err = strconv.Atoi(str); err != nil {
+			log.Errorf("wrong group:%s", str)
 			continue
 		}
-		gidStores[gid] = stores
-		for _, store = range stores {
-			idGroup[store] = gid
+		group[gid] = stores
+		for _, str = range stores {
+			storeGroup[str] = gid
 		}
 	}
-	d.gidStores = gidStores
-	d.idGroup = idGroup
+	d.group = group
+	d.storeGroup = storeGroup
 	return
 }
 
@@ -212,13 +224,13 @@ func (d *Directory) SyncZookeeper() {
 	}
 }
 
-// cookie  rand uint16
+// TODO move cookie  rand uint16
 func (d *Directory) cookie() (cookie int32) {
 	return int32(uint16(time.Now().UnixNano())) + 1
 }
 
-// Rstores get readable stores for http get
-func (d *Directory) Rstores(key int64, cookie int32) (res Response, ret int, err error) {
+// ReadStores get readable stores for http get
+func (d *Directory) ReadStores(key int64, cookie int32) (res Response, ret int, err error) {
 	var (
 		f *filemeta.File
 	)
@@ -244,8 +256,8 @@ func (d *Directory) Rstores(key int64, cookie int32) (res Response, ret int, err
 	return
 }
 
-// Wstores get writable stores for http upload
-func (d *Directory) Wstores(numKeys int) (res Response, ret int, err error) {
+// Writestores get writable stores for http upload
+func (d *Directory) WriteStores(numKeys int) (res Response, ret int, err error) {
 	var (
 		i    int
 		key  int64
@@ -284,8 +296,8 @@ func (d *Directory) Wstores(numKeys int) (res Response, ret int, err error) {
 	return
 }
 
-// Dstores get delable stores for http del
-func (d *Directory) Dstores(key int64, cookie int32) (res Response, ret int, err error) {
+// DelStores get delable stores for http del
+func (d *Directory) DelStores(key int64, cookie int32) (res Response, ret int, err error) {
 	var (
 		f *filemeta.File
 	)
@@ -313,3 +325,88 @@ func (d *Directory) Dstores(key int64, cookie int32) (res Response, ret int, err
 	}
 	return
 }
+
+/*
+// WStores get suitable stores for writing
+func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
+	var (
+		store     string
+		stores    []string
+		storeMeta *meta.Store
+		gid       int
+		index     int
+		r         *rand.Rand
+		index     int
+		ok        bool
+	)
+	if len(d.gids) == 0 {
+		return nil, 0, errors.New(fmt.Sprintf("no available gid"))
+	}
+	r = d.rp.Get().(*rand.Rand)
+	defer d.rp.Put(r)
+	gid = d.gids[r.Intn(len(d.gids))]
+	stores = d.dr.gidStores[gid]
+	if len(stores) > 0 {
+		store = stores[0]
+		index = d.r.Intn(len(d.dr.idVolumes[store]))
+		vid = int32(d.dr.idVolumes[store][index])
+	}
+	for _, store = range stores {
+		if storeMeta, ok = d.dr.idStore[store]; !ok {
+			log.Errorf("idStore cannot match store: %s", store)
+			return nil, 0, errors.New(fmt.Sprintf("bad store : %s", store))
+		}
+		hosts = append(hosts, storeMeta.Api)
+	}
+	return
+}
+
+// RStores get suitable stores for reading
+func (d *Dispatcher) RStores(vid int32) (hosts []string, err error) {
+	var (
+		store     string
+		stores    []string
+		storeMeta *meta.Store
+		ok        bool
+	)
+	hosts = []string{}
+	if stores, ok = d.dr.vidStores[vid]; !ok {
+		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
+	}
+	for _, store = range stores {
+		if storeMeta, ok = d.dr.idStore[store]; !ok {
+			log.Errorf("idStore cannot match store: %s", store)
+			continue
+		}
+		if storeMeta.Status != meta.StoreStatusFail {
+			hosts = append(hosts, storeMeta.Api)
+		}
+	}
+	return
+}
+
+// DStores get suitable stores for delete
+func (d *Dispatcher) DStores(vid int32) (hosts []string, err error) {
+	var (
+		store     string
+		stores    []string
+		storeMeta *meta.Store
+		ok        bool
+	)
+	hosts = []string{}
+	if stores, ok = d.dr.vidStores[vid]; !ok {
+		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
+	}
+	for _, store = range stores {
+		if storeMeta, ok = d.dr.idStore[store]; !ok {
+			log.Errorf("idStore cannot match store: %s", store)
+			continue
+		}
+		if storeMeta.Status == meta.StoreStatusFail {
+			return nil, errors.New(fmt.Sprintf("bad store : %s", store))
+		}
+		hosts = append(hosts, storeMeta.Api)
+	}
+	return
+}
+*/
