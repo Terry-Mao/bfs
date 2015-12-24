@@ -322,7 +322,7 @@ func (b *SuperBlock) Recovery(offset uint32, fn func(*needle.Needle, uint32, uin
 	if offset == 0 {
 		offset = needle.NeedleOffset(headerOffset)
 	}
-	v.Block.Offset = offset
+	b.Offset = offset
 	if err = b.Scan(b.r, offset, func(n *needle.Needle, so, eo uint32) (err1 error) {
 		if err1 = fn(n, so, eo); err1 == nil {
 			b.Offset = eo
