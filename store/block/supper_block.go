@@ -318,6 +318,11 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 
 // Recovery recovery needles map from super block.
 func (b *SuperBlock) Recovery(offset uint32, fn func(*needle.Needle, uint32, uint32) error) (err error) {
+	// WARN block may be no left data, must update block offset first
+	if offset == 0 {
+		offset = needle.NeedleOffset(headerOffset)
+	}
+	v.Block.Offset = offset
 	if err = b.Scan(b.r, offset, func(n *needle.Needle, so, eo uint32) (err1 error) {
 		if err1 = fn(n, so, eo); err1 == nil {
 			b.Offset = eo

@@ -121,8 +121,6 @@ func (v *Volume) init() (err error) {
 		return
 	}
 	// recovery from super block
-	// WARN block may be no left data, must update block offset first
-	v.Block.Offset = offset
 	err = v.Block.Recovery(offset, func(n *needle.Needle, so, eo uint32) (err1 error) {
 		if n.TotalSize > int32(v.conf.NeedleMaxSize) || n.TotalSize < 0 {
 			err1 = errors.ErrNeedleSize
