@@ -197,9 +197,9 @@ func (i *Indexer) flush(force bool) (err error) {
 		log.Errorf("index: %s Write() error(%v)", i.File, err)
 		return
 	}
+	i.Offset += int64(i.bn)
 	i.bn = 0
 	i.write = 0
-	i.Offset += int64(i.bn)
 	offset = i.syncOffset
 	size = i.Offset - i.syncOffset
 	fd = i.f.Fd()
