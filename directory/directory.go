@@ -229,12 +229,16 @@ func (d *Directory) cookie() (cookie int32) {
 	return int32(uint16(time.Now().UnixNano())) + 1
 }
 
-// ReadStores get readable stores for http get
-func (d *Directory) ReadStores(key int64, cookie int32) (res Response, ret int, err error) {
+// GetStores get readable stores for http get
+func (d *Directory) GetStores(key int64, cookie int32) (res *GetResponse, ret int, err error) {
 	var (
 		f *filemeta.File
+		store  string
+		stores []string
+		storeMeta *meta.Store
 	)
 	ret = http.StatusOK
+	res = new(GetResponse)
 	if f, err = d.hbase.Get(key); err != nil {
 		return
 	}
@@ -247,8 +251,17 @@ func (d *Directory) ReadStores(key int64, cookie int32) (res Response, ret int, 
 		return
 	}
 	res.Vid = f.Vid
-	if res.Stores, err = d.dispatcher.RStores(res.Vid); err != nil {
-		return
+	if stores, ok = d.volumeStore[f.Vid]; !ok {
+		return nil, errors.New(fmt.Sprintf("volumeStore cannot match vid: %s", f.Vid))
+	}
+	for _, store = range stores {
+		if storeMeta, ok = d.store[store]; !ok {
+			log.Errorf("store cannot match store:", store)
+			continue
+		}
+		if storeMeta.CanRead() {
+			res.Stores = append(res.Stores, store)
+		}
 	}
 	if len(res.Stores) == 0 {
 		ret = http.StatusInternalServerError
@@ -256,8 +269,8 @@ func (d *Directory) ReadStores(key int64, cookie int32) (res Response, ret int, 
 	return
 }
 
-// Writestores get writable stores for http upload
-func (d *Directory) WriteStores(numKeys int) (res Response, ret int, err error) {
+// UploadStores get writable stores for http upload
+func (d *Directory) UploadStores(numKeys int) (res *UploadResponse, ret int, err error) {
 	var (
 		i    int
 		key  int64
@@ -265,17 +278,16 @@ func (d *Directory) WriteStores(numKeys int) (res Response, ret int, err error) 
 		f    filemeta.File
 	)
 	ret = http.StatusOK
+	res = new(UploadResponse)
 	if numKeys > d.config.MaxNum {
 		ret = http.StatusBadRequest
 		return
 	}
-	if res.Stores, res.Vid, err = d.dispatcher.WStores(); err != nil {
+	if res.Vid, err = d.dispatcher.VolumeId(); err != nil {
+		//todo  No available
 		return
 	}
-	if len(res.Stores) == 0 {
-		ret = http.StatusInternalServerError
-		return
-	}
+	res.Stores = d.volumeStore[res.Vid]
 	keys = make([]int64, numKeys)
 	for i = 0; i < numKeys; i++ {
 		if key, err = d.genkey.Getkey(); err != nil {
@@ -297,11 +309,15 @@ func (d *Directory) WriteStores(numKeys int) (res Response, ret int, err error) 
 }
 
 // DelStores get delable stores for http del
-func (d *Directory) DelStores(key int64, cookie int32) (res Response, ret int, err error) {
+func (d *Directory) DelStores(key int64, cookie int32) (res *DelResponse, ret int, err error) {
 	var (
 		f *filemeta.File
+		store  string
+		stores []string
+		storeMeta *meta.Store
 	)
 	ret = http.StatusOK
+	res = new(DelResponse)
 	if f, err = d.hbase.Get(key); err != nil {
 		return
 	}
@@ -313,100 +329,24 @@ func (d *Directory) DelStores(key int64, cookie int32) (res Response, ret int, e
 		ret = http.StatusBadRequest
 		return
 	}
-	if err = d.hbase.Del(key); err != nil {
-		return
-	}
 	res.Vid = f.Vid
-	if res.Stores, err = d.dispatcher.DStores(res.Vid); err != nil {
+	if res.Stores, ok = d.volumeStore[f.Vid]; !ok {
+		//todo
+		return nil, errors.New(fmt.Sprintf("volumeStore cannot match vid: %s", f.Vid))
+	}
+	for _, store = range res.Stores {
+		if storeMeta, ok = d.store[store]; !ok {
+			//todo
+			return
+		}
+		if !storeMeta.CanWrite() {
+			//todo
+			return
+		}
+	}
+	if err = d.hbase.Del(key); err != nil {
+		// todo 
 		return
 	}
-	if len(res.Stores) == 0 {
-		ret = http.StatusInternalServerError
-	}
 	return
 }
-
-/*
-// WStores get suitable stores for writing
-func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
-	var (
-		store     string
-		stores    []string
-		storeMeta *meta.Store
-		gid       int
-		index     int
-		r         *rand.Rand
-		index     int
-		ok        bool
-	)
-	if len(d.gids) == 0 {
-		return nil, 0, errors.New(fmt.Sprintf("no available gid"))
-	}
-	r = d.rp.Get().(*rand.Rand)
-	defer d.rp.Put(r)
-	gid = d.gids[r.Intn(len(d.gids))]
-	stores = d.dr.gidStores[gid]
-	if len(stores) > 0 {
-		store = stores[0]
-		index = d.r.Intn(len(d.dr.idVolumes[store]))
-		vid = int32(d.dr.idVolumes[store][index])
-	}
-	for _, store = range stores {
-		if storeMeta, ok = d.dr.idStore[store]; !ok {
-			log.Errorf("idStore cannot match store: %s", store)
-			return nil, 0, errors.New(fmt.Sprintf("bad store : %s", store))
-		}
-		hosts = append(hosts, storeMeta.Api)
-	}
-	return
-}
-
-// RStores get suitable stores for reading
-func (d *Dispatcher) RStores(vid int32) (hosts []string, err error) {
-	var (
-		store     string
-		stores    []string
-		storeMeta *meta.Store
-		ok        bool
-	)
-	hosts = []string{}
-	if stores, ok = d.dr.vidStores[vid]; !ok {
-		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
-	}
-	for _, store = range stores {
-		if storeMeta, ok = d.dr.idStore[store]; !ok {
-			log.Errorf("idStore cannot match store: %s", store)
-			continue
-		}
-		if storeMeta.Status != meta.StoreStatusFail {
-			hosts = append(hosts, storeMeta.Api)
-		}
-	}
-	return
-}
-
-// DStores get suitable stores for delete
-func (d *Dispatcher) DStores(vid int32) (hosts []string, err error) {
-	var (
-		store     string
-		stores    []string
-		storeMeta *meta.Store
-		ok        bool
-	)
-	hosts = []string{}
-	if stores, ok = d.dr.vidStores[vid]; !ok {
-		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
-	}
-	for _, store = range stores {
-		if storeMeta, ok = d.dr.idStore[store]; !ok {
-			log.Errorf("idStore cannot match store: %s", store)
-			continue
-		}
-		if storeMeta.Status == meta.StoreStatusFail {
-			return nil, errors.New(fmt.Sprintf("bad store : %s", store))
-		}
-		hosts = append(hosts, storeMeta.Api)
-	}
-	return
-}
-*/

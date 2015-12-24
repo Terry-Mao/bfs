@@ -35,7 +35,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		err         error
 		key, cookie int64
 		ret         int
-		res         Response
+		res         *GetResponse
 		params      = r.URL.Query()
 	)
 	if r.Method != "GET" {
@@ -54,8 +54,8 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	if res, ret, err = h.d.ReadStores(key, int32(cookie)); err != nil {
-		log.Errorf("ReadStores() error(%v)", err)
+	if res, ret, err = h.d.GetStores(key, int32(cookie)); err != nil {
+		log.Errorf("GetStores() error(%v)", err)
 		ret = http.StatusInternalServerError
 	}
 	return
@@ -71,7 +71,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		err error
 		num int64
 		ret int
-		res Response
+		res *UploadResponse
 	)
 	if r.Method != "POST" {
 		ret = http.StatusMethodNotAllowed
@@ -84,8 +84,8 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	if res, ret, err = h.d.WriteStores(int(num)); err != nil {
-		log.Errorf("WriteStores() error(%v)", err)
+	if res, ret, err = h.d.UploadStores(int(num)); err != nil {
+		log.Errorf("UploadStores() error(%v)", err)
 		ret = http.StatusInternalServerError
 	}
 	return
@@ -101,7 +101,7 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		err         error
 		cookie, key int64
 		ret         int
-		res         Response
+		res         *DelResponse
 	)
 	if r.Method != "POST" {
 		ret = http.StatusMethodNotAllowed

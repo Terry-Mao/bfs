@@ -15,6 +15,7 @@ import (
 type Dispatcher struct {
 	gids []int // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
 	rand *rand.Rand
+	rlock sync.Mutex
 }
 
 const (
@@ -118,12 +119,15 @@ func (d *Dispatcher) VolumeId(group map[int][]string, storeVolume map[string][]i
 		// TODO
 		return 0, errors.New(fmt.Sprintf("no available gid"))
 	}
+	d.rlock.Lock()
+	defer d.rlock.Unlock()
 	gid = d.gids[d.rand.Intn(len(d.gids))]
 	stores = group[gid]
-	if len(stores) > 0 {
-		sid = stores[0]
-		vids = storeVolume[sid]
-		vid = vids[d.rand.Intn(len(vids))]
+	if len(stores) == 0 {
+		// todo
 	}
+	sid = stores[0]
+	vids = storeVolume[sid]
+	vid = vids[d.rand.Intn(len(vids))]
 	return
 }

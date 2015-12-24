@@ -107,5 +107,10 @@ func (s *Store) Head(n *Needle, vid int32) (err error) {
 
 // CanWrite reports whether the store can write.
 func (s *Store) CanWrite() bool {
-	return s.Status == StoreStatusWrite
+	return s.Status == StoreStatusWrite || s.Status == StoreStatusHealth
+}
+
+// CanRead reports whether the store can read.
+func (s *Store) CanRead() bool {
+	return s.Status == StoreStatusRead || s.Status == StoreStatusHealth
 }
