@@ -336,15 +336,16 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 // Recovery recovery needle cache meta data in memory, index file  will stop
 // at the right parse data offset.
 func (i *Indexer) Recovery(fn func(*Index) error) (err error) {
-	var offset int64
-	if i.Scan(i.f, func(ix *Index) error {
-		offset += int64(indexSize)
-		return fn(ix)
+	if i.Scan(i.f, func(ix *Index) (err1 error) {
+		if err1 = fn(ix); err1 == nil {
+			i.Offset += int64(indexSize)
+		}
+		return
 	}); err != nil {
 		return
 	}
 	// reset b.w offset, discard left space which can't parse to a needle
-	if _, err = i.f.Seek(offset, os.SEEK_SET); err != nil {
+	if _, err = i.f.Seek(i.Offset, os.SEEK_SET); err != nil {
 		log.Errorf("index: %s Seek() error(%v)", i.File, err)
 	}
 	return
