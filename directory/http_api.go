@@ -43,7 +43,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), &res, &ret)
+	defer HttpGetWriter(r, wr, time.Now(), &res, &ret)
 	if key, err = strconv.ParseInt(params.Get("key"), 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest
@@ -56,7 +56,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	}
 	if res, ret, err = h.d.GetStores(key, int32(cookie)); err != nil {
 		log.Errorf("GetStores() error(%v)", err)
-		ret = http.StatusInternalServerError
+		ret = http.StatusOK
 	}
 	return
 }
@@ -78,7 +78,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), &res, &ret)
+	defer HttpUploadWriter(r, wr, time.Now(), &res, &ret)
 	if num, err = strconv.ParseInt(r.FormValue("num"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("num"), err)
 		ret = http.StatusBadRequest
@@ -86,7 +86,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	}
 	if res, ret, err = h.d.UploadStores(int(num)); err != nil {
 		log.Errorf("UploadStores() error(%v)", err)
-		ret = http.StatusInternalServerError
+		ret = http.StatusOK
 	}
 	return
 }
@@ -108,7 +108,7 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		http.Error(wr, "method not allowed", ret)
 		return
 	}
-	defer HttpWriter(r, wr, time.Now(), &res, &ret)
+	defer HttpDelWriter(r, wr, time.Now(), &res, &ret)
 	if key, err = strconv.ParseInt(r.FormValue("key"), 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
 		ret = http.StatusBadRequest
@@ -121,7 +121,7 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	}
 	if res, ret, err = h.d.DelStores(key, int32(cookie)); err != nil {
 		log.Errorf("DelStores() error(%v)", err)
-		ret = http.StatusInternalServerError
+		ret = http.StatusOK
 	}
 	return
 }

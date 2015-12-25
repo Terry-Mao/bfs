@@ -53,5 +53,15 @@ var (
 		RetVolumeClosed:    "volume closed",
 		RetVolumeBatch:     "volume exceed batch write number",
 		/* ========================= Store ========================= */
+		/* ========================= Directory ========================= */
+		// hbase
+		RetHbaseFailed: 		"hbase failed",
+		// id
+		RetNoAvailableId: 	"generate id failed",
+		// store
+		RetNoAvailableStore: "store not available",
+		// zookeeper
+		RetZookeeperDataError: "zookeeper data error",
+		/* ========================= Directory ========================= */
 	}
 )

@@ -5,6 +5,7 @@ import (
 	"github.com/Terry-Mao/bfs/directory/hbase"
 	"github.com/Terry-Mao/bfs/directory/hbase/filemeta"
 	"github.com/Terry-Mao/bfs/directory/snowflake"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
@@ -63,7 +64,7 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 		storeMeta              *meta.Store
 		store                  map[string]*meta.Store
 		storeVolume            map[string][]int32
-		rack, store, volume    string
+		rack, str, volume      string
 		racks, stores, volumes []string
 		data                   []byte
 		vid                    int
@@ -79,9 +80,9 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 		if stores, err = d.zk.Stores(rack); err != nil {
 			return
 		}
-		for _, store = range stores {
+		for _, str = range stores {
 			// get store
-			if data, err = d.zk.Store(rack, store); err != nil {
+			if data, err = d.zk.Store(rack, str); err != nil {
 				return
 			}
 			storeMeta = new(meta.Store)
@@ -90,7 +91,7 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 				return
 			}
 			// get all volumes in the store
-			if volumes, err = d.zk.StoreVolumes(rack, store); err != nil {
+			if volumes, err = d.zk.StoreVolumes(rack, str); err != nil {
 				return
 			}
 			storeVolume[storeMeta.Id] = []int32{}
@@ -208,7 +209,7 @@ func (d *Directory) SyncZookeeper() {
 			time.Sleep(retrySleep)
 			continue
 		}
-		if err = d.dispatcher.Update(); err != nil {
+		if err = d.dispatcher.Update(d.group, d.store, d.volume, d.storeVolume); err != nil {
 			log.Errorf("Update() called error(%v)", err)
 			time.Sleep(retrySleep)
 			continue
@@ -232,14 +233,16 @@ func (d *Directory) cookie() (cookie int32) {
 // GetStores get readable stores for http get
 func (d *Directory) GetStores(key int64, cookie int32) (res *GetResponse, ret int, err error) {
 	var (
-		f *filemeta.File
-		store  string
-		stores []string
+		f         *filemeta.File
+		store     string
+		stores    []string
 		storeMeta *meta.Store
+		ok        bool
 	)
 	ret = http.StatusOK
 	res = new(GetResponse)
 	if f, err = d.hbase.Get(key); err != nil {
+		res.Ret = errors.RetHbaseFailed
 		return
 	}
 	if f == nil {
@@ -252,7 +255,8 @@ func (d *Directory) GetStores(key int64, cookie int32) (res *GetResponse, ret in
 	}
 	res.Vid = f.Vid
 	if stores, ok = d.volumeStore[f.Vid]; !ok {
-		return nil, errors.New(fmt.Sprintf("volumeStore cannot match vid: %s", f.Vid))
+		res.Ret = errors.RetZookeeperDataError
+		return
 	}
 	for _, store = range stores {
 		if storeMeta, ok = d.store[store]; !ok {
@@ -264,7 +268,7 @@ func (d *Directory) GetStores(key int64, cookie int32) (res *GetResponse, ret in
 		}
 	}
 	if len(res.Stores) == 0 {
-		ret = http.StatusInternalServerError
+		res.Ret = errors.RetNoAvailableStore
 	}
 	return
 }
@@ -274,7 +278,8 @@ func (d *Directory) UploadStores(numKeys int) (res *UploadResponse, ret int, err
 	var (
 		i    int
 		key  int64
-		keys []int64
+		kc   KeyCookie
+		keys []KeyCookie
 		f    filemeta.File
 	)
 	ret = http.StatusOK
@@ -283,25 +288,27 @@ func (d *Directory) UploadStores(numKeys int) (res *UploadResponse, ret int, err
 		ret = http.StatusBadRequest
 		return
 	}
-	if res.Vid, err = d.dispatcher.VolumeId(); err != nil {
-		//todo  No available
+	if res.Vid, err = d.dispatcher.VolumeId(d.group, d.storeVolume); err != nil {
+		res.Ret = errors.RetNoAvailableStore
 		return
 	}
 	res.Stores = d.volumeStore[res.Vid]
-	keys = make([]int64, numKeys)
+	keys = make([]KeyCookie, numKeys)
 	for i = 0; i < numKeys; i++ {
 		if key, err = d.genkey.Getkey(); err != nil {
+			res.Ret = errors.RetNoAvailableId
 			return
 		}
-		keys[i] = key
+		keys[i].Key = key
+		keys[i].Cookie = d.cookie()
 	}
 	res.Keys = keys
-	res.Cookie = d.cookie()
-	for _, key = range keys {
-		f.Key = key
+	for _, kc = range keys {
+		f.Key = kc.Key
 		f.Vid = res.Vid
-		f.Cookie = res.Cookie
+		f.Cookie = kc.Cookie
 		if err = d.hbase.Put(&f); err != nil {
+			res.Ret = errors.RetHbaseFailed
 			return //puted keys will be ignored
 		}
 	}
@@ -311,14 +318,15 @@ func (d *Directory) UploadStores(numKeys int) (res *UploadResponse, ret int, err
 // DelStores get delable stores for http del
 func (d *Directory) DelStores(key int64, cookie int32) (res *DelResponse, ret int, err error) {
 	var (
-		f *filemeta.File
-		store  string
-		stores []string
+		f         *filemeta.File
+		store     string
 		storeMeta *meta.Store
+		ok        bool
 	)
 	ret = http.StatusOK
 	res = new(DelResponse)
 	if f, err = d.hbase.Get(key); err != nil {
+		res.Ret = errors.RetHbaseFailed
 		return
 	}
 	if f == nil {
@@ -331,21 +339,21 @@ func (d *Directory) DelStores(key int64, cookie int32) (res *DelResponse, ret in
 	}
 	res.Vid = f.Vid
 	if res.Stores, ok = d.volumeStore[f.Vid]; !ok {
-		//todo
-		return nil, errors.New(fmt.Sprintf("volumeStore cannot match vid: %s", f.Vid))
+		res.Ret = errors.RetZookeeperDataError
+		return
 	}
 	for _, store = range res.Stores {
 		if storeMeta, ok = d.store[store]; !ok {
-			//todo
+			res.Ret = errors.RetZookeeperDataError
 			return
 		}
 		if !storeMeta.CanWrite() {
-			//todo
+			res.Ret = errors.RetNoAvailableStore
 			return
 		}
 	}
 	if err = d.hbase.Del(key); err != nil {
-		// todo 
+		res.Ret = errors.RetHbaseFailed
 		return
 	}
 	return
