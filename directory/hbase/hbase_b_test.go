@@ -3,14 +3,15 @@ package hbase
 import (
     "testing"
     "time"
-    "github.com/Terry-Mao/bfs/directory/hbase/filemeta"
+    "math/rand"
+    "github.com/Terry-Mao/bfs/libs/meta"
 )
 
 func BenchmarkHbasePut(b *testing.B) {
     var (
         err   error
         h     = NewHBaseClient()
-        m     = &filemeta.File{}
+        m     = &meta.Needle{}
         t     int64
     )
     ch := make(chan int64, 1000000)
@@ -41,16 +42,18 @@ func BenchmarkHbaseGet(b *testing.B) {
         err   error
         h     = NewHBaseClient()
         t     int64
+        r     *rand.Rand
     )
     if err = Init("172.16.13.90:9090", 5*time.Second, 200, 200); err != nil {
             b.Errorf("Init failed")
             b.FailNow()
     }
+    r = rand.New(rand.NewSource(time.Now().UnixNano()))
     b.ResetTimer()
     b.SetParallelism(8)
     b.RunParallel(func(pb *testing.PB) {
         for pb.Next() {
-            t = mrand.Int63n(1000000)
+            t = r.Int63n(1000000)
             if _,err = h.Get(t); err != nil {
                 b.Errorf("Put() error(%v)", err)
                 b.FailNow()

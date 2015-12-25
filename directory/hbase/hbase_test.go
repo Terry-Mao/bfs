@@ -4,13 +4,14 @@ import (
 	"testing"
 	"time"
 	"fmt"
-    "github.com/Terry-Mao/bfs/directory/hbase/filemeta"
+    "github.com/Terry-Mao/bfs/libs/meta"
 )
 
 
 func TestHbase(t *testing.T) {
     var (
             err             error
+            m,n             *meta.Needle
     )
     if err = Init("172.16.13.90:9090", 5*time.Second, 10, 10); err != nil {
             t.Errorf("Init failed")
@@ -18,11 +19,11 @@ func TestHbase(t *testing.T) {
     }
 
     h := NewHBaseClient()
-    m := &filemeta.File{}
+    m = new(meta.Needle)
     m.Key = 445
     m.Vid = 55
     m.Cookie=5
-    n := &filemeta.File{}
+    n = new(meta.Needle)
     if err = h.Put(m); err != nil {
             t.Errorf("error: %v", err)
             t.FailNow()
