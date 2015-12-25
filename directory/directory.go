@@ -316,45 +316,35 @@ func (d *Directory) UploadStores(numKeys int) (res *UploadResponse, ret int, err
 }
 
 // DelStores get delable stores for http del
-func (d *Directory) DelStores(key int64, cookie int32) (res *DelResponse, ret int, err error) {
+func (d *Directory) DelStores(key int64, cookie int32) (vid int32, stores []string, err error) {
 	var (
-		f         *filemeta.File
+		ok        bool
+		hcookie   int32
+		key       int64
 		store     string
 		storeMeta *meta.Store
-		ok        bool
 	)
-	ret = http.StatusOK
-	res = new(DelResponse)
-	if f, err = d.hbase.Get(key); err != nil {
-		res.Ret = errors.RetHbaseFailed
+	if vid, hcookie, err = d.hbase.Get(key); err != nil {
 		return
 	}
-	if f == nil {
-		ret = http.StatusNotFound
+	if cookie != hcookie {
+		// err = errors.
 		return
 	}
-	if f.Cookie != cookie {
-		ret = http.StatusBadRequest
+	if stores, ok = d.volumeStore[f.Vid]; !ok {
+		// err =
 		return
 	}
-	res.Vid = f.Vid
-	if res.Stores, ok = d.volumeStore[f.Vid]; !ok {
-		res.Ret = errors.RetZookeeperDataError
-		return
-	}
-	for _, store = range res.Stores {
+	for _, store = range stores {
 		if storeMeta, ok = d.store[store]; !ok {
-			res.Ret = errors.RetZookeeperDataError
+			// err =
 			return
 		}
 		if !storeMeta.CanWrite() {
-			res.Ret = errors.RetNoAvailableStore
+			// err
 			return
 		}
 	}
-	if err = d.hbase.Del(key); err != nil {
-		res.Ret = errors.RetHbaseFailed
-		return
-	}
+	err = d.hbase.Del(key)
 	return
 }

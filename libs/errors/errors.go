@@ -10,8 +10,8 @@ var (
 	errorMsg = map[int]string{
 		/* ========================= Store ========================= */
 		// common
-		RetOK:       "ok",
-		RetParamErr: "store param error",
+		RetOK:          "ok",
+		RetParamErr:    "store param error",
 		RetInternalErr: "internal server error",
 		// api
 		RetUploadMaxFile: "exceed upload max file num",
@@ -55,9 +55,9 @@ var (
 		/* ========================= Store ========================= */
 		/* ========================= Directory ========================= */
 		// hbase
-		RetHbaseFailed: 		"hbase failed",
+		RetHbaseFailed: "hbase failed",
 		// id
-		RetNoAvailableId: 	"generate id failed",
+		RetNoAvailableId: "generate id failed",
 		// store
 		RetNoAvailableStore: "store not available",
 		// zookeeper

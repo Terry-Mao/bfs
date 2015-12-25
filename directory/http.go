@@ -9,28 +9,28 @@ import (
 
 // KeyCookie one file : key and cookie
 type KeyCookie struct {
-	Key 	int64 `json:"key"`
-	Cookie 	int32 `json:"cookie"`
+	Key    int64 `json:"key"`
+	Cookie int32 `json:"cookie"`
 }
 
 // GetResponse response for http get req
 type GetResponse struct {
-	Ret    int32 	`json:"ret"`
+	Ret    int32    `json:"ret"`
 	Vid    int32    `json:"vid"`
 	Stores []string `json:"stores"`
 }
 
 // UploadResponse response for http upload req
 type UploadResponse struct {
-	Ret    int32 	`json:"ret"`
+	Ret    int32       `json:"ret"`
 	Keys   []KeyCookie `json:"keys"`
-	Vid    int32    `json:"vid"`
-	Stores []string `json:"stores"`
+	Vid    int32       `json:"vid"`
+	Stores []string    `json:"stores"`
 }
 
 // DelResponse response for http del req
 type DelResponse struct {
-	Ret    int32 	`json:"ret"`
+	Ret    int32    `json:"ret"`
 	Vid    int32    `json:"vid"`
 	Stores []string `json:"stores"`
 }

@@ -15,7 +15,6 @@ const (
 	RetIndexSize   = 4000
 	RetIndexClosed = 4001
 	// needle
-	RetNeedleExist       = 5000
 	RetNeedleNotExist    = 5001
 	RetNeedleChecksum    = 5002
 	RetNeedleFlag        = 5003
@@ -56,7 +55,6 @@ var (
 	ErrIndexSize   = Error(RetIndexSize)
 	ErrIndexClosed = Error(RetIndexClosed)
 	// needle
-	ErrNeedleExist       = Error(RetNeedleExist)
 	ErrNeedleNotExist    = Error(RetNeedleNotExist)
 	ErrNeedleChecksum    = Error(RetNeedleChecksum)
 	ErrNeedleFlag        = Error(RetNeedleFlag)

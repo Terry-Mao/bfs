@@ -1,74 +1,103 @@
 package hbase
 
 import (
-	"github.com/Terry-Mao/bfs/directory/hbase/hbasethrift"
-	"github.com/Terry-Mao/bfs/directory/hbase/filemeta"
 	"bytes"
 	"crypto/sha1"
-	"time"
-	"fmt"
-	"errors"
 	"encoding/binary"
+	"errors"
+	"fmt"
+	"github.com/Terry-Mao/bfs/directory/hbase/hbasethrift"
+	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
+	"time"
 )
 
 const (
-	retrySleep = time.Second * 1
-	retryCount = 3
-	// The size of a SHA1 checksum in bytes.
-	Size = 20
+	table        = []byte("bfsmeta")
+	familyBasic  = []byte("basic")
+	columnVid    = []byte("vid")
+	columnCookie = []byte("cookie")
 )
 
 type HBaseClient struct {
+	// key, vid, cookie
+	kbuf [8]byte
+	vbuf [4]byte
+	cbuf [4]byte
+	key  hbasethrift.TGet
+	tput hbasethrift.TPut
+	tdel hbasethrift.TDelete
 }
 
 // NewHBaseClient
 func NewHBaseClient() *HBaseClient {
-	return &HBaseClient{}
+	h := &HBaseClient{}
+	h.tput.ColumnValues = []*hbasethrift.TColumnValue{
+		// vid
+		&hbasethrift.TColumnValue{
+			Family:    familyBasic,
+			Qualifier: columnVid,
+			Value:     h.vbuf[:],
+		},
+		// cookie
+		&hbasethrift.TColumnValue{
+			Family:    familyBasic,
+			Qualifier: columnCookie,
+			Value:     h.cbuf[:],
+		},
+	}
+	h.tdel.Columns = []hbasethrift.TColumn{
+		// vid
+		&hbasethrift.TColumn{
+			Family:    familyBasic,
+			Qualifier: columnVid,
+		},
+		// cookie
+		&hbasethrift.TColumn{
+			Family:    familyBasic,
+			Qualifier: columnCookie,
+		},
+	}
+	return h
 }
 
-// Get if f return nil means not found
-func (h *HBaseClient) Get(key int64) (f *filemeta.File, err error) {
+// key get a hbase tget key.
+func (h *HBaseClient) key(key int64) *hbasethrift.TGet {
+	var b = h.kbuf[:]
+	binary.BigEndian.PutUint64(b, uint64(key))
+	h.key.Row = sha1.Sum(b)[:]
+	return &h.key
+}
+
+// Get get meta data from hbase.
+func (h *HBaseClient) Get(key int64) (n *meta.Needle, err error) {
 	var (
-		k	= make([]byte, 8)
-		ks  = [Size]byte{}
-		i     int
-		v     uint32
-		c     interface{}
-		r     *hbasethrift.TResult_
-		cv    *hbasethrift.TColumnValue
+		c  interface{}
+		r  *hbasethrift.TResult_
+		cv *hbasethrift.TColumnValue
 	)
-	binary.BigEndian.PutUint64(k, uint64(key))
-	ks = sha1.Sum(k)
 	if c, err = hbasePool.Get(); err != nil {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
 	defer hbasePool.Put(c, false)
-	for i = 0; i < retryCount; i++ {
-		if r, err = c.(hbasethrift.THBaseService).Get(filemeta.HbaseTable, &hbasethrift.TGet{Row: ks[:]}); err == nil {
-			break
-		}
-		time.Sleep(retrySleep)
-	}
-	if err != nil {
-		log.Errorf("client.Get error(%v)", err)
+	if r, err = c.(hbasethrift.THBaseService).Get(table, h.key(key)); err != nil {
 		return
 	}
 	if len(r.ColumnValues) == 0 {
 		return
 	}
-	f = &filemeta.File{}
-	f.Key = key
+	n = new(meta.Needle)
+	n.Key = key
 	for _, cv = range r.ColumnValues {
 		if cv != nil {
-			v = binary.BigEndian.Uint32(cv.Value)
-			if bytes.Equal(cv.Family, filemeta.HbaseFamilyBasic) {
-				if bytes.Equal(cv.Qualifier, filemeta.HbaseColumnVid) {
-					f.Vid = int32(v)
-				} else if bytes.Equal(cv.Qualifier, filemeta.HbaseColumnCookie) {
-					f.Cookie = int32(v)
-				}
+			continue
+		}
+		if bytes.Equal(cv.Family, familyBasic) {
+			if bytes.Equal(cv.Qualifier, columnVid) {
+				n.Vid = int32(binary.BigEndian.Uint32(cv.Value))
+			} else if bytes.Equal(cv.Qualifier, columnCookie) {
+				n.Cookie = int32(binary.BigEndian.Uint32(cv.Value))
 			}
 		}
 	}
@@ -76,102 +105,41 @@ func (h *HBaseClient) Get(key int64) (f *filemeta.File, err error) {
 }
 
 // Put overwriting is bug,  banned
-func (h *HBaseClient) Put(f *filemeta.File) (err error) {
+func (h *HBaseClient) Put(n *meta.Needle) (err error) {
 	var (
-		i     int
-		k   = make([]byte, 8)
-		ks  = [Size]byte{}
-		vs  = make([]byte, 4)
-		cs  = make([]byte, 4)
+		exist bool
 		c     interface{}
-		exist = false
+		key   = h.key(n.Key)
 	)
-	if nil == f {
-		return errors.New("filemeta.File is nil")
-	}
-	binary.BigEndian.PutUint64(k, uint64(f.Key))
-	ks = sha1.Sum(k)
-	binary.BigEndian.PutUint32(vs, uint32(f.Vid))
-	binary.BigEndian.PutUint32(cs, uint32(f.Cookie))
 	if c, err = hbasePool.Get(); err != nil {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
 	defer hbasePool.Put(c, false)
-	for i = 0; i < retryCount; i++ {
-		if exist, err = c.(hbasethrift.THBaseService).Exists(filemeta.HbaseTable, &hbasethrift.TGet{Row: ks[:]}); err == nil {
-			break
-		}
-		time.Sleep(retrySleep)
-	}
-	if err != nil {
-		log.Errorf("client.Exists error(%v)", err)
+	if exist, err = c.(hbasethrift.THBaseService).Exists(table, key); err != nil {
 		return
 	}
 	if exist {
-		return errors.New(fmt.Sprintf("key already exists in hbase  key:%v", f.Key))
+		return errors.ErrNeedleExists
 	}
-	for i = 0; i < retryCount; i++ {
-		if err = c.(hbasethrift.THBaseService).Put(filemeta.HbaseTable, &hbasethrift.TPut{
-			Row: ks[:],
-			ColumnValues: []*hbasethrift.TColumnValue{
-				&hbasethrift.TColumnValue{
-					Family:    filemeta.HbaseFamilyBasic,
-					Qualifier: filemeta.HbaseColumnVid,
-					Value:     vs,
-				},
-				&hbasethrift.TColumnValue{
-					Family:    filemeta.HbaseFamilyBasic,
-					Qualifier: filemeta.HbaseColumnCookie,
-					Value:     cs,
-				},
-			},
-		}); err == nil {
-			break
-		}
-		time.Sleep(retrySleep)
-	}
-	if err != nil {
-		log.Errorf("client.Put error(%v)", err)
-	}
+	binary.BigEndian.PutUint32(vbuf, uint32(n.Vid))
+	binary.BigEndian.PutUint32(cbuf, uint32(n.Cookie))
+	h.tput.Row = key
+	err = c.(hbasethrift.THBaseService).Put(table, &h.tput)
 	return
 }
 
-// Del delete the key
+// Del delete the hbase colume vid and cookie by the key.
 func (h *HBaseClient) Del(key int64) (err error) {
 	var (
-		i     int
-		k   = make([]byte, 8)
-		ks  = [Size]byte{}
-		c     interface{}
+		c interface{}
 	)
-	binary.BigEndian.PutUint64(k, uint64(key))
-	ks = sha1.Sum(k)
 	if c, err = hbasePool.Get(); err != nil {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
 	defer hbasePool.Put(c, false)
-	for i = 0; i < retryCount; i++ {
-		if err = c.(hbasethrift.THBaseService).DeleteSingle(filemeta.HbaseTable, &hbasethrift.TDelete{
-			Row: ks[:],
-			Columns: []*hbasethrift.TColumn{
-				&hbasethrift.TColumn{
-					Family:    filemeta.HbaseFamilyBasic,
-					Qualifier: filemeta.HbaseColumnVid,
-				},
-				&hbasethrift.TColumn{
-					Family:    filemeta.HbaseFamilyBasic,
-					Qualifier: filemeta.HbaseColumnCookie,
-				},
-			},
-		}); err == nil {
-			break
-		}
-		time.Sleep(retrySleep)
-	}
-	if err != nil {
-		log.Errorf("client.DeleteSingle error(%v)", err)
-	}
+	h.tdel.Row = h.key(key)
+	err = c.(hbasethrift.THBaseService).DeleteSingle(table, &h.tdel)
 	return
 }
