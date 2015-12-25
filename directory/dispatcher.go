@@ -1,8 +1,7 @@
 package main
 
 import (
-	"errors"
-	"fmt"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"math/rand"
@@ -13,8 +12,9 @@ import (
 // Dispatcher
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gids []int // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
-	rand *rand.Rand
+	gids  []int // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
+	rand  *rand.Rand
+	rlock sync.Mutex
 }
 
 const (
@@ -35,9 +35,10 @@ func NewDispatcher() (d *Dispatcher) {
 // Update when zk updates
 func (d *Dispatcher) Update(group map[int][]string,
 	store map[string]*meta.Store, volume map[int32]*meta.VolumeState,
-	volumeStore map[int32][]string) (err error) {
+	storeVolume map[string][]int32) (err error) {
 	var (
 		gid                        int
+		i                          int
 		vid                        int32
 		gids                       []int
 		sid                        string
@@ -110,20 +111,25 @@ func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace int) (score int
 // VolumeId get a volume id.
 func (d *Dispatcher) VolumeId(group map[int][]string, storeVolume map[string][]int32) (vid int32, err error) {
 	var (
-		sid  string
-		gid  int
-		vids []int32
+		sid    string
+		stores []string
+		gid    int
+		vids   []int32
 	)
 	if len(d.gids) == 0 {
-		// TODO
-		return 0, errors.New(fmt.Sprintf("no available gid"))
+		err = errors.ErrNoAvailableStore
+		return
 	}
+	d.rlock.Lock()
+	defer d.rlock.Unlock()
 	gid = d.gids[d.rand.Intn(len(d.gids))]
 	stores = group[gid]
-	if len(stores) > 0 {
-		sid = stores[0]
-		vids = storeVolume[sid]
-		vid = vids[d.rand.Intn(len(vids))]
+	if len(stores) == 0 {
+		err = errors.ErrZookeeperDataError
+		return
 	}
+	sid = stores[0]
+	vids = storeVolume[sid]
+	vid = vids[d.rand.Intn(len(vids))]
 	return
 }

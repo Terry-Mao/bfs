@@ -5,6 +5,7 @@ import (
 	"github.com/Terry-Mao/bfs/directory/hbase"
 	"github.com/Terry-Mao/bfs/directory/hbase/filemeta"
 	"github.com/Terry-Mao/bfs/directory/snowflake"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
@@ -63,7 +64,7 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 		storeMeta              *meta.Store
 		store                  map[string]*meta.Store
 		storeVolume            map[string][]int32
-		rack, store, volume    string
+		rack, str, volume      string
 		racks, stores, volumes []string
 		data                   []byte
 		vid                    int
@@ -79,9 +80,9 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 		if stores, err = d.zk.Stores(rack); err != nil {
 			return
 		}
-		for _, store = range stores {
+		for _, str = range stores {
 			// get store
-			if data, err = d.zk.Store(rack, store); err != nil {
+			if data, err = d.zk.Store(rack, str); err != nil {
 				return
 			}
 			storeMeta = new(meta.Store)
@@ -90,7 +91,7 @@ func (d *Directory) syncStores() (ev <-chan zk.Event, err error) {
 				return
 			}
 			// get all volumes in the store
-			if volumes, err = d.zk.StoreVolumes(rack, store); err != nil {
+			if volumes, err = d.zk.StoreVolumes(rack, str); err != nil {
 				return
 			}
 			storeVolume[storeMeta.Id] = []int32{}
@@ -208,7 +209,7 @@ func (d *Directory) SyncZookeeper() {
 			time.Sleep(retrySleep)
 			continue
 		}
-		if err = d.dispatcher.Update(); err != nil {
+		if err = d.dispatcher.Update(d.group, d.store, d.volume, d.storeVolume); err != nil {
 			log.Errorf("Update() called error(%v)", err)
 			time.Sleep(retrySleep)
 			continue
@@ -229,13 +230,19 @@ func (d *Directory) cookie() (cookie int32) {
 	return int32(uint16(time.Now().UnixNano())) + 1
 }
 
-// ReadStores get readable stores for http get
-func (d *Directory) ReadStores(key int64, cookie int32) (res Response, ret int, err error) {
+// GetStores get readable stores for http get
+func (d *Directory) GetStores(key int64, cookie int32) (res *GetResponse, ret int, err error) {
 	var (
-		f *filemeta.File
+		f         *filemeta.File
+		store     string
+		stores    []string
+		storeMeta *meta.Store
+		ok        bool
 	)
 	ret = http.StatusOK
+	res = new(GetResponse)
 	if f, err = d.hbase.Get(key); err != nil {
+		res.Ret = errors.RetHbaseFailed
 		return
 	}
 	if f == nil {
@@ -247,49 +254,61 @@ func (d *Directory) ReadStores(key int64, cookie int32) (res Response, ret int, 
 		return
 	}
 	res.Vid = f.Vid
-	if res.Stores, err = d.dispatcher.RStores(res.Vid); err != nil {
+	if stores, ok = d.volumeStore[f.Vid]; !ok {
+		res.Ret = errors.RetZookeeperDataError
 		return
 	}
+	for _, store = range stores {
+		if storeMeta, ok = d.store[store]; !ok {
+			log.Errorf("store cannot match store:", store)
+			continue
+		}
+		if storeMeta.CanRead() {
+			res.Stores = append(res.Stores, store)
+		}
+	}
 	if len(res.Stores) == 0 {
-		ret = http.StatusInternalServerError
+		res.Ret = errors.RetNoAvailableStore
 	}
 	return
 }
 
-// Writestores get writable stores for http upload
-func (d *Directory) WriteStores(numKeys int) (res Response, ret int, err error) {
+// UploadStores get writable stores for http upload
+func (d *Directory) UploadStores(numKeys int) (res *UploadResponse, ret int, err error) {
 	var (
 		i    int
 		key  int64
-		keys []int64
+		kc   KeyCookie
+		keys []KeyCookie
 		f    filemeta.File
 	)
 	ret = http.StatusOK
+	res = new(UploadResponse)
 	if numKeys > d.config.MaxNum {
 		ret = http.StatusBadRequest
 		return
 	}
-	if res.Stores, res.Vid, err = d.dispatcher.WStores(); err != nil {
+	if res.Vid, err = d.dispatcher.VolumeId(d.group, d.storeVolume); err != nil {
+		res.Ret = errors.RetNoAvailableStore
 		return
 	}
-	if len(res.Stores) == 0 {
-		ret = http.StatusInternalServerError
-		return
-	}
-	keys = make([]int64, numKeys)
+	res.Stores = d.volumeStore[res.Vid]
+	keys = make([]KeyCookie, numKeys)
 	for i = 0; i < numKeys; i++ {
 		if key, err = d.genkey.Getkey(); err != nil {
+			res.Ret = errors.RetNoAvailableId
 			return
 		}
-		keys[i] = key
+		keys[i].Key = key
+		keys[i].Cookie = d.cookie()
 	}
 	res.Keys = keys
-	res.Cookie = d.cookie()
-	for _, key = range keys {
-		f.Key = key
+	for _, kc = range keys {
+		f.Key = kc.Key
 		f.Vid = res.Vid
-		f.Cookie = res.Cookie
+		f.Cookie = kc.Cookie
 		if err = d.hbase.Put(&f); err != nil {
+			res.Ret = errors.RetHbaseFailed
 			return //puted keys will be ignored
 		}
 	}
@@ -297,12 +316,17 @@ func (d *Directory) WriteStores(numKeys int) (res Response, ret int, err error) 
 }
 
 // DelStores get delable stores for http del
-func (d *Directory) DelStores(key int64, cookie int32) (res Response, ret int, err error) {
+func (d *Directory) DelStores(key int64, cookie int32) (res *DelResponse, ret int, err error) {
 	var (
-		f *filemeta.File
+		f         *filemeta.File
+		store     string
+		storeMeta *meta.Store
+		ok        bool
 	)
 	ret = http.StatusOK
+	res = new(DelResponse)
 	if f, err = d.hbase.Get(key); err != nil {
+		res.Ret = errors.RetHbaseFailed
 		return
 	}
 	if f == nil {
@@ -313,100 +337,24 @@ func (d *Directory) DelStores(key int64, cookie int32) (res Response, ret int, e
 		ret = http.StatusBadRequest
 		return
 	}
-	if err = d.hbase.Del(key); err != nil {
-		return
-	}
 	res.Vid = f.Vid
-	if res.Stores, err = d.dispatcher.DStores(res.Vid); err != nil {
+	if res.Stores, ok = d.volumeStore[f.Vid]; !ok {
+		res.Ret = errors.RetZookeeperDataError
 		return
 	}
-	if len(res.Stores) == 0 {
-		ret = http.StatusInternalServerError
+	for _, store = range res.Stores {
+		if storeMeta, ok = d.store[store]; !ok {
+			res.Ret = errors.RetZookeeperDataError
+			return
+		}
+		if !storeMeta.CanWrite() {
+			res.Ret = errors.RetNoAvailableStore
+			return
+		}
+	}
+	if err = d.hbase.Del(key); err != nil {
+		res.Ret = errors.RetHbaseFailed
+		return
 	}
 	return
 }
-
-/*
-// WStores get suitable stores for writing
-func (d *Dispatcher) WStores() (hosts []string, vid int32, err error) {
-	var (
-		store     string
-		stores    []string
-		storeMeta *meta.Store
-		gid       int
-		index     int
-		r         *rand.Rand
-		index     int
-		ok        bool
-	)
-	if len(d.gids) == 0 {
-		return nil, 0, errors.New(fmt.Sprintf("no available gid"))
-	}
-	r = d.rp.Get().(*rand.Rand)
-	defer d.rp.Put(r)
-	gid = d.gids[r.Intn(len(d.gids))]
-	stores = d.dr.gidStores[gid]
-	if len(stores) > 0 {
-		store = stores[0]
-		index = d.r.Intn(len(d.dr.idVolumes[store]))
-		vid = int32(d.dr.idVolumes[store][index])
-	}
-	for _, store = range stores {
-		if storeMeta, ok = d.dr.idStore[store]; !ok {
-			log.Errorf("idStore cannot match store: %s", store)
-			return nil, 0, errors.New(fmt.Sprintf("bad store : %s", store))
-		}
-		hosts = append(hosts, storeMeta.Api)
-	}
-	return
-}
-
-// RStores get suitable stores for reading
-func (d *Dispatcher) RStores(vid int32) (hosts []string, err error) {
-	var (
-		store     string
-		stores    []string
-		storeMeta *meta.Store
-		ok        bool
-	)
-	hosts = []string{}
-	if stores, ok = d.dr.vidStores[vid]; !ok {
-		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
-	}
-	for _, store = range stores {
-		if storeMeta, ok = d.dr.idStore[store]; !ok {
-			log.Errorf("idStore cannot match store: %s", store)
-			continue
-		}
-		if storeMeta.Status != meta.StoreStatusFail {
-			hosts = append(hosts, storeMeta.Api)
-		}
-	}
-	return
-}
-
-// DStores get suitable stores for delete
-func (d *Dispatcher) DStores(vid int32) (hosts []string, err error) {
-	var (
-		store     string
-		stores    []string
-		storeMeta *meta.Store
-		ok        bool
-	)
-	hosts = []string{}
-	if stores, ok = d.dr.vidStores[vid]; !ok {
-		return nil, errors.New(fmt.Sprintf("vidStores cannot match vid: %s", vid))
-	}
-	for _, store = range stores {
-		if storeMeta, ok = d.dr.idStore[store]; !ok {
-			log.Errorf("idStore cannot match store: %s", store)
-			continue
-		}
-		if storeMeta.Status == meta.StoreStatusFail {
-			return nil, errors.New(fmt.Sprintf("bad store : %s", store))
-		}
-		hosts = append(hosts, storeMeta.Api)
-	}
-	return
-}
-*/
