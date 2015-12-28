@@ -3,13 +3,11 @@ package main
 import (
 	"encoding/json"
 	"github.com/Terry-Mao/bfs/directory/hbase"
-	"github.com/Terry-Mao/bfs/directory/hbase/filemeta"
 	"github.com/Terry-Mao/bfs/directory/snowflake"
 	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
-	"net/http"
 	"strconv"
 	"time"
 )
@@ -231,84 +229,96 @@ func (d *Directory) cookie() (cookie int32) {
 }
 
 // GetStores get readable stores for http get
-func (d *Directory) GetStores(key int64, cookie int32) (res *GetResponse, ret int, err error) {
+func (d *Directory) GetStores(key int64, cookie int32) (vid int32, stores []string, err error) {
 	var (
-		f         *filemeta.File
+		n         *meta.Needle
 		store     string
-		stores    []string
+		svrs      []string
 		storeMeta *meta.Store
 		ok        bool
 	)
-	ret = http.StatusOK
-	res = new(GetResponse)
-	if f, err = d.hbase.Get(key); err != nil {
-		res.Ret = errors.RetHbaseFailed
+	if n, err = d.hbase.Get(key); err != nil {
+		log.Errorf("hbase.Get error(%v)", err)
+		err = errors.ErrHbase
 		return
 	}
-	if f == nil {
-		ret = http.StatusNotFound
+	if n == nil {
+		err = errors.ErrNeedleNotExist
 		return
 	}
-	if f.Cookie != cookie {
-		ret = http.StatusBadRequest
+	if n.Cookie != cookie {
+		err = errors.ErrNeedleCookie
 		return
 	}
-	res.Vid = f.Vid
-	if stores, ok = d.volumeStore[f.Vid]; !ok {
-		res.Ret = errors.RetZookeeperDataError
+	vid = n.Vid
+	if svrs, ok = d.volumeStore[n.Vid]; !ok {
+		err = errors.ErrZookeeperDataError
 		return
 	}
-	for _, store = range stores {
+	stores = make([]string, 0, len(svrs))
+	for _, store = range svrs {
 		if storeMeta, ok = d.store[store]; !ok {
 			log.Errorf("store cannot match store:", store)
 			continue
 		}
-		if storeMeta.CanRead() {
-			res.Stores = append(res.Stores, store)
+		if !storeMeta.CanRead() {
+			continue
 		}
+		stores = append(stores, storeMeta.Api)
 	}
-	if len(res.Stores) == 0 {
-		res.Ret = errors.RetNoAvailableStore
+	if len(stores) == 0 {
+		err = errors.ErrStoreNotAvailable
 	}
 	return
 }
 
 // UploadStores get writable stores for http upload
-func (d *Directory) UploadStores(numKeys int) (res *UploadResponse, ret int, err error) {
+func (d *Directory) UploadStores(numKeys int) (keys []KeyCookie, vid int32, stores []string, err error) {
 	var (
 		i    int
 		key  int64
 		kc   KeyCookie
-		keys []KeyCookie
-		f    filemeta.File
+		n    meta.Needle
+		svrs []string
+		store string
+		storeMeta *meta.Store
+		ok 	bool
 	)
-	ret = http.StatusOK
-	res = new(UploadResponse)
 	if numKeys > d.config.MaxNum {
-		ret = http.StatusBadRequest
+		err = errors.ErrUploadMaxFile
 		return
 	}
-	if res.Vid, err = d.dispatcher.VolumeId(d.group, d.storeVolume); err != nil {
-		res.Ret = errors.RetNoAvailableStore
+	if vid, err = d.dispatcher.VolumeId(d.group, d.storeVolume); err != nil {
+		log.Errorf("dispatcher.VolumeId error(%v)", err)
+		err = errors.ErrStoreNotAvailable
 		return
 	}
-	res.Stores = d.volumeStore[res.Vid]
+	svrs = d.volumeStore[vid]
+	stores = make([]string, 0, len(svrs))
+	for _, store = range svrs {
+		if storeMeta, ok = d.store[store]; !ok {
+			err = errors.ErrZookeeperDataError
+			return 
+		}
+		stores = append(stores, storeMeta.Api)
+	}
 	keys = make([]KeyCookie, numKeys)
 	for i = 0; i < numKeys; i++ {
 		if key, err = d.genkey.Getkey(); err != nil {
-			res.Ret = errors.RetNoAvailableId
+			log.Errorf("genkey.Getkey() error(%v)", err)
+			err = errors.ErrIdNotAvailable
 			return
 		}
 		keys[i].Key = key
 		keys[i].Cookie = d.cookie()
 	}
-	res.Keys = keys
 	for _, kc = range keys {
-		f.Key = kc.Key
-		f.Vid = res.Vid
-		f.Cookie = kc.Cookie
-		if err = d.hbase.Put(&f); err != nil {
-			res.Ret = errors.RetHbaseFailed
+		n.Key = kc.Key
+		n.Vid = vid
+		n.Cookie = kc.Cookie
+		if err = d.hbase.Put(&n); err != nil {
+			log.Errorf("hbase.Put error(%v)", err)
+			err = errors.ErrHbase
 			return //puted keys will be ignored
 		}
 	}
@@ -318,33 +328,45 @@ func (d *Directory) UploadStores(numKeys int) (res *UploadResponse, ret int, err
 // DelStores get delable stores for http del
 func (d *Directory) DelStores(key int64, cookie int32) (vid int32, stores []string, err error) {
 	var (
+		n         *meta.Needle
 		ok        bool
-		hcookie   int32
-		key       int64
 		store     string
+		svrs      []string
 		storeMeta *meta.Store
 	)
-	if vid, hcookie, err = d.hbase.Get(key); err != nil {
+	if n, err = d.hbase.Get(key); err != nil {
+		log.Errorf("hbase.Get error(%v)", err)
+		err = errors.ErrHbase
 		return
 	}
-	if cookie != hcookie {
-		// err = errors.
+	if n == nil {
+		err = errors.ErrNeedleNotExist
 		return
 	}
-	if stores, ok = d.volumeStore[f.Vid]; !ok {
-		// err =
+	if n.Cookie != cookie {
+		err = errors.ErrNeedleCookie
 		return
 	}
-	for _, store = range stores {
+	vid = n.Vid
+	if svrs, ok = d.volumeStore[n.Vid]; !ok {
+		err = errors.ErrZookeeperDataError
+		return
+	}
+	stores = make([]string, 0, len(svrs))
+	for _, store = range svrs {
 		if storeMeta, ok = d.store[store]; !ok {
-			// err =
+			err = errors.ErrZookeeperDataError
 			return
 		}
 		if !storeMeta.CanWrite() {
-			// err
+			err = errors.ErrStoreNotAvailable
 			return
 		}
+		stores = append(stores, storeMeta.Api)
 	}
-	err = d.hbase.Del(key)
+	if err = d.hbase.Del(key); err != nil {
+		log.Errorf("hbase.Del error(%v)", err)
+		err = errors.ErrHbase
+	}
 	return
 }

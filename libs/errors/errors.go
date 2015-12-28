@@ -55,11 +55,11 @@ var (
 		/* ========================= Store ========================= */
 		/* ========================= Directory ========================= */
 		// hbase
-		RetHbaseFailed: "hbase failed",
+		RetHbase: "hbase failed",
 		// id
-		RetNoAvailableId: "generate id failed",
+		RetIdNotAvailable: "generate id failed",
 		// store
-		RetNoAvailableStore: "store not available",
+		RetStoreNotAvailable: "store not available",
 		// zookeeper
 		RetZookeeperDataError: "zookeeper data error",
 		/* ========================= Directory ========================= */

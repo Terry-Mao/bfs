@@ -1,10 +1,10 @@
 package hbase
 
 import (
-	"time"
-	"github.com/Terry-Mao/bfs/directory/hbase/hbasethrift"
 	"git.apache.org/thrift.git/lib/go/thrift"
+	"github.com/Terry-Mao/bfs/directory/hbase/hbasethrift"
 	log "github.com/golang/glog"
+	"time"
 )
 
 var (

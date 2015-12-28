@@ -5,8 +5,8 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"github.com/Terry-Mao/bfs/directory/hbase/hbasethrift"
-	"github.com/Terry-Mao/bfs/libs/meta"
 	"github.com/Terry-Mao/bfs/libs/errors"
+	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
 )
 
@@ -22,7 +22,7 @@ type HBaseClient struct {
 	kbuf [8]byte
 	vbuf [4]byte
 	cbuf [4]byte
-	tget  hbasethrift.TGet
+	tget hbasethrift.TGet
 	tput hbasethrift.TPut
 	tdel hbasethrift.TDelete
 }
@@ -61,9 +61,9 @@ func NewHBaseClient() *HBaseClient {
 
 // key get a hbase tget key.
 func (h *HBaseClient) key(key int64) []byte {
-	var ( 
+	var (
 		sb [sha1.Size]byte
-		b = h.kbuf[:]
+		b  = h.kbuf[:]
 	)
 	binary.BigEndian.PutUint64(b, uint64(key))
 	sb = sha1.Sum(b)
@@ -81,11 +81,12 @@ func (h *HBaseClient) Get(key int64) (n *meta.Needle, err error) {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
-	defer hbasePool.Put(c, false)
 	h.tget.Row = h.key(key)
 	if r, err = c.(hbasethrift.THBaseService).Get(table, &h.tget); err != nil {
+		hbasePool.Put(c, true)
 		return
 	}
+	hbasePool.Put(c, false)
 	if len(r.ColumnValues) == 0 {
 		return
 	}
@@ -111,15 +112,15 @@ func (h *HBaseClient) Put(n *meta.Needle) (err error) {
 	var (
 		exist bool
 		c     interface{}
-		key =  h.key(n.Key)
+		key   = h.key(n.Key)
 	)
 	if c, err = hbasePool.Get(); err != nil {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
-	defer hbasePool.Put(c, false)
 	h.tget.Row = key
 	if exist, err = c.(hbasethrift.THBaseService).Exists(table, &h.tget); err != nil {
+		hbasePool.Put(c, true)
 		return
 	}
 	if exist {
@@ -128,7 +129,11 @@ func (h *HBaseClient) Put(n *meta.Needle) (err error) {
 	binary.BigEndian.PutUint32(h.vbuf[:], uint32(n.Vid))
 	binary.BigEndian.PutUint32(h.cbuf[:], uint32(n.Cookie))
 	h.tput.Row = key
-	err = c.(hbasethrift.THBaseService).Put(table, &h.tput)
+	if err = c.(hbasethrift.THBaseService).Put(table, &h.tput); err != nil {
+		hbasePool.Put(c, true)
+		return
+	}
+	hbasePool.Put(c, false)
 	return
 }
 
@@ -141,8 +146,11 @@ func (h *HBaseClient) Del(key int64) (err error) {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
-	defer hbasePool.Put(c, false)
 	h.tdel.Row = h.key(key)
-	err = c.(hbasethrift.THBaseService).DeleteSingle(table, &h.tdel)
+	if err = c.(hbasethrift.THBaseService).DeleteSingle(table, &h.tdel); err != nil {
+		hbasePool.Put(c, true)
+		return
+	}
+	hbasePool.Put(c, false)
 	return
 }
