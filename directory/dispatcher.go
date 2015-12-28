@@ -117,7 +117,7 @@ func (d *Dispatcher) VolumeId(group map[int][]string, storeVolume map[string][]i
 		vids   []int32
 	)
 	if len(d.gids) == 0 {
-		err = errors.ErrNoAvailableStore
+		err = errors.ErrStoreNotAvailable
 		return
 	}
 	d.rlock.Lock()

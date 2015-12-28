@@ -15,14 +15,14 @@ type KeyCookie struct {
 
 // GetResponse response for http get req
 type GetResponse struct {
-	Ret    int32    `json:"ret"`
+	Ret    int    `json:"ret"`
 	Vid    int32    `json:"vid"`
 	Stores []string `json:"stores"`
 }
 
 // UploadResponse response for http upload req
 type UploadResponse struct {
-	Ret    int32       `json:"ret"`
+	Ret    int       `json:"ret"`
 	Keys   []KeyCookie `json:"keys"`
 	Vid    int32       `json:"vid"`
 	Stores []string    `json:"stores"`
@@ -30,24 +30,25 @@ type UploadResponse struct {
 
 // DelResponse response for http del req
 type DelResponse struct {
-	Ret    int32    `json:"ret"`
+	Ret    int    `json:"ret"`
 	Vid    int32    `json:"vid"`
 	Stores []string `json:"stores"`
 }
 
 // HttpGetWriter
-func HttpGetWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res **GetResponse, ret *int) {
+func HttpGetWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res *GetResponse) {
 	var (
 		err      error
 		byteJson []byte
+		ret      = res.Ret
 	)
-	if *ret != http.StatusOK {
-		log.Errorf("HttpWriter ret error: %d", *ret)
-		http.Error(wr, http.StatusText(*ret), *ret)
+	if ret != http.StatusOK {
+		log.Errorf("HttpWriter ret error: %d", ret)
+		http.Error(wr, http.StatusText(ret), ret)
 		return
 	}
-	if byteJson, err = json.Marshal(*res); err != nil {
-		log.Errorf("json.Marshal(\"%v\") failed (%v)", *res, err)
+	if byteJson, err = json.Marshal(res); err != nil {
+		log.Errorf("json.Marshal(\"%v\") failed (%v)", res, err)
 		return
 	}
 	wr.Header().Set("Content-Type", "application/json;charset=utf-8")
@@ -56,22 +57,23 @@ func HttpGetWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res
 		return
 	}
 	log.Infof("%s path:%s(params:%s,time:%f,ret:%v)", r.Method,
-		r.URL.Path, r.Form.Encode(), time.Now().Sub(start).Seconds(), *ret)
+		r.URL.Path, r.Form.Encode(), time.Now().Sub(start).Seconds(), ret)
 }
 
 // HttpUploadWriter
-func HttpUploadWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res **UploadResponse, ret *int) {
+func HttpUploadWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res *UploadResponse) {
 	var (
 		err      error
 		byteJson []byte
+		ret      = res.Ret
 	)
-	if *ret != http.StatusOK {
-		log.Errorf("HttpWriter ret error: %d", *ret)
-		http.Error(wr, http.StatusText(*ret), *ret)
+	if ret != http.StatusOK {
+		log.Errorf("HttpWriter ret error: %d", ret)
+		http.Error(wr, http.StatusText(ret), ret)
 		return
 	}
-	if byteJson, err = json.Marshal(*res); err != nil {
-		log.Errorf("json.Marshal(\"%v\") failed (%v)", *res, err)
+	if byteJson, err = json.Marshal(res); err != nil {
+		log.Errorf("json.Marshal(\"%v\") failed (%v)", res, err)
 		return
 	}
 	wr.Header().Set("Content-Type", "application/json;charset=utf-8")
@@ -80,22 +82,23 @@ func HttpUploadWriter(r *http.Request, wr http.ResponseWriter, start time.Time, 
 		return
 	}
 	log.Infof("%s path:%s(params:%s,time:%f,ret:%v)", r.Method,
-		r.URL.Path, r.Form.Encode(), time.Now().Sub(start).Seconds(), *ret)
+		r.URL.Path, r.Form.Encode(), time.Now().Sub(start).Seconds(), ret)
 }
 
 // HttpDelWriter
-func HttpDelWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res **DelResponse, ret *int) {
+func HttpDelWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res *DelResponse) {
 	var (
 		err      error
 		byteJson []byte
+		ret      = res.Ret
 	)
-	if *ret != http.StatusOK {
-		log.Errorf("HttpWriter ret error: %d", *ret)
-		http.Error(wr, http.StatusText(*ret), *ret)
+	if ret != http.StatusOK {
+		log.Errorf("HttpWriter ret error: %d", ret)
+		http.Error(wr, http.StatusText(ret), ret)
 		return
 	}
-	if byteJson, err = json.Marshal(*res); err != nil {
-		log.Errorf("json.Marshal(\"%v\") failed (%v)", *res, err)
+	if byteJson, err = json.Marshal(res); err != nil {
+		log.Errorf("json.Marshal(\"%v\") failed (%v)", res, err)
 		return
 	}
 	wr.Header().Set("Content-Type", "application/json;charset=utf-8")
@@ -104,5 +107,5 @@ func HttpDelWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res
 		return
 	}
 	log.Infof("%s path:%s(params:%s,time:%f,ret:%v)", r.Method,
-		r.URL.Path, r.Form.Encode(), time.Now().Sub(start).Seconds(), *ret)
+		r.URL.Path, r.Form.Encode(), time.Now().Sub(start).Seconds(), ret)
 }
