@@ -32,6 +32,8 @@ func Init(hbaseAddr string, hbaseTimeout time.Duration, hbaseMaxIdle, hbaseMaxAc
 			client.Transport.Close()
 		}
 		return nil
+	}, func() interface{} {
+		return NewHBaseData()
 	}, hbaseMaxIdle)
 	hbasePool.MaxActive = hbaseMaxActive
 	return nil

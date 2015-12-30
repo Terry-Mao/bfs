@@ -92,6 +92,9 @@ type Pool struct {
 	// Close is an application supplied functoin for closeing connections.
 	Close func(c interface{}) error
 
+	// NewData is new data of a conn
+	NewData func() interface{}
+
 	// TestOnBorrow is an optional application supplied function for checking
 	// the health of an idle connection before the connection is used again by
 	// the application. Argument t is the time that the connection was returned
@@ -122,24 +125,26 @@ type Pool struct {
 
 type idleConn struct {
 	c interface{}
+	d interface{}
 	t time.Time
 }
 
 // New creates a new pool. This function is deprecated. Applications should
 // initialize the Pool fields directly as shown in example.
-func New(dialFn func() (interface{}, error), closeFn func(c interface{}) error, maxIdle int) *Pool {
-	return &Pool{Dial: dialFn, Close: closeFn, MaxIdle: maxIdle}
+func New(dialFn func() (interface{}, error), closeFn func(c interface{}) error,
+	newData func() interface{}, maxIdle int) *Pool {
+	return &Pool{Dial: dialFn, Close: closeFn, NewData: newData, MaxIdle: maxIdle}
 }
 
 // Get gets a connection. The application must close the returned connection.
 // This method always returns a valid connection so that applications can defer
 // error handling to the first use of the connection.
-func (p *Pool) Get() (interface{}, error) {
+func (p *Pool) Get() (interface{}, interface{}, error) {
 	p.mu.Lock()
 	// if closed
 	if p.closed {
 		p.mu.Unlock()
-		return nil, ErrPoolClosed
+		return nil, nil, ErrPoolClosed
 	}
 	// Prune stale connections.
 	if timeout := p.IdleTimeout; timeout > 0 {
@@ -171,7 +176,7 @@ func (p *Pool) Get() (interface{}, error) {
 		test := p.TestOnBorrow
 		p.mu.Unlock()
 		if test == nil || test(ic.c, ic.t) == nil {
-			return ic.c, nil
+			return ic.c, ic.d, nil
 		}
 		// ic.c.Close()
 		p.Close(ic.c)
@@ -180,7 +185,7 @@ func (p *Pool) Get() (interface{}, error) {
 	}
 	if p.MaxActive > 0 && p.active >= p.MaxActive {
 		p.mu.Unlock()
-		return nil, ErrPoolExhausted
+		return nil, nil, ErrPoolExhausted
 	}
 	// No idle connection, create new.
 	dial := p.Dial
@@ -193,15 +198,16 @@ func (p *Pool) Get() (interface{}, error) {
 		p.mu.Unlock()
 		c = nil
 	}
-	return c, err
+	d := p.NewData()
+	return c, d, err
 }
 
 // Put adds conn back to the pool, use forceClose to close the connection forcely
-func (p *Pool) Put(c interface{}, forceClose bool) error {
+func (p *Pool) Put(c interface{}, d interface{}, forceClose bool) error {
 	if !forceClose {
 		p.mu.Lock()
 		if !p.closed {
-			p.idle.PushFront(idleConn{t: nowFunc(), c: c})
+			p.idle.PushFront(idleConn{t: nowFunc(), c: c, d: d})
 			if p.idle.Len() > p.MaxIdle {
 				// remove exceed conn
 				c = p.idle.Remove(p.idle.Back()).(idleConn).c

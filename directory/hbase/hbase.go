@@ -8,43 +8,60 @@ import (
 	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/libs/meta"
 	log "github.com/golang/glog"
+	"time"
 )
 
 var (
-	table        = []byte("bfsmeta")
-	familyBasic  = []byte("basic")
-	columnVid    = []byte("vid")
-	columnCookie = []byte("cookie")
+	table            = []byte("bfsmeta")
+	familyBasic      = []byte("basic")
+	columnVid        = []byte("vid")
+	columnCookie     = []byte("cookie")
+	columnInsertTime = []byte("insert_time")
 )
 
 type HBaseClient struct {
+}
+
+// NewHBaseClient
+func NewHBaseClient() *HBaseClient {
+	return &HBaseClient{}
+}
+
+type HBaseData struct {
 	// key, vid, cookie
 	kbuf [8]byte
 	vbuf [4]byte
 	cbuf [4]byte
+	ibuf [8]byte
 	tget hbasethrift.TGet
 	tput hbasethrift.TPut
 	tdel hbasethrift.TDelete
 }
 
 // NewHBaseClient
-func NewHBaseClient() *HBaseClient {
-	h := &HBaseClient{}
-	h.tput.ColumnValues = []*hbasethrift.TColumnValue{
+func NewHBaseData() *HBaseData {
+	d := &HBaseData{}
+	d.tput.ColumnValues = []*hbasethrift.TColumnValue{
 		// vid
 		&hbasethrift.TColumnValue{
 			Family:    familyBasic,
 			Qualifier: columnVid,
-			Value:     h.vbuf[:],
+			Value:     d.vbuf[:],
 		},
 		// cookie
 		&hbasethrift.TColumnValue{
 			Family:    familyBasic,
 			Qualifier: columnCookie,
-			Value:     h.cbuf[:],
+			Value:     d.cbuf[:],
+		},
+		// insert_time
+		&hbasethrift.TColumnValue{
+			Family:    familyBasic,
+			Qualifier: columnInsertTime,
+			Value:     d.ibuf[:],
 		},
 	}
-	h.tdel.Columns = []*hbasethrift.TColumn{
+	d.tdel.Columns = []*hbasethrift.TColumn{
 		// vid
 		&hbasethrift.TColumn{
 			Family:    familyBasic,
@@ -55,15 +72,20 @@ func NewHBaseClient() *HBaseClient {
 			Family:    familyBasic,
 			Qualifier: columnCookie,
 		},
+		// insert_time
+		&hbasethrift.TColumn{
+			Family:    familyBasic,
+			Qualifier: columnInsertTime,
+		},
 	}
-	return h
+	return d
 }
 
 // key get a hbase tget key.
-func (h *HBaseClient) key(key int64) []byte {
+func (d *HBaseData) key(key int64) []byte {
 	var (
 		sb [sha1.Size]byte
-		b  = h.kbuf[:]
+		b  = d.kbuf[:]
 	)
 	binary.BigEndian.PutUint64(b, uint64(key))
 	sb = sha1.Sum(b)
@@ -74,19 +96,20 @@ func (h *HBaseClient) key(key int64) []byte {
 func (h *HBaseClient) Get(key int64) (n *meta.Needle, err error) {
 	var (
 		c  interface{}
+		d  interface{}
 		r  *hbasethrift.TResult_
 		cv *hbasethrift.TColumnValue
 	)
-	if c, err = hbasePool.Get(); err != nil {
+	if c, d, err = hbasePool.Get(); err != nil {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
-	h.tget.Row = h.key(key)
-	if r, err = c.(hbasethrift.THBaseService).Get(table, &h.tget); err != nil {
-		hbasePool.Put(c, true)
+	d.(*HBaseData).tget.Row = d.(*HBaseData).key(key)
+	if r, err = c.(hbasethrift.THBaseService).Get(table, &d.(*HBaseData).tget); err != nil {
+		hbasePool.Put(c, d, true)
 		return
 	}
-	hbasePool.Put(c, false)
+	hbasePool.Put(c, d, false)
 	if len(r.ColumnValues) == 0 {
 		return
 	}
@@ -112,28 +135,31 @@ func (h *HBaseClient) Put(n *meta.Needle) (err error) {
 	var (
 		exist bool
 		c     interface{}
-		key   = h.key(n.Key)
+		d     interface{}
+		key   []byte
 	)
-	if c, err = hbasePool.Get(); err != nil {
+	if c, d, err = hbasePool.Get(); err != nil {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
-	h.tget.Row = key
-	if exist, err = c.(hbasethrift.THBaseService).Exists(table, &h.tget); err != nil {
-		hbasePool.Put(c, true)
+	key = d.(*HBaseData).key(n.Key)
+	d.(*HBaseData).tget.Row = key
+	if exist, err = c.(hbasethrift.THBaseService).Exists(table, &d.(*HBaseData).tget); err != nil {
+		hbasePool.Put(c, d, true)
 		return
 	}
 	if exist {
 		return errors.ErrNeedleExist
 	}
-	binary.BigEndian.PutUint32(h.vbuf[:], uint32(n.Vid))
-	binary.BigEndian.PutUint32(h.cbuf[:], uint32(n.Cookie))
-	h.tput.Row = key
-	if err = c.(hbasethrift.THBaseService).Put(table, &h.tput); err != nil {
-		hbasePool.Put(c, true)
+	binary.BigEndian.PutUint32(d.(*HBaseData).vbuf[:], uint32(n.Vid))
+	binary.BigEndian.PutUint32(d.(*HBaseData).cbuf[:], uint32(n.Cookie))
+	binary.BigEndian.PutUint64(d.(*HBaseData).ibuf[:], uint64(time.Now().UnixNano()))
+	d.(*HBaseData).tput.Row = key
+	if err = c.(hbasethrift.THBaseService).Put(table, &d.(*HBaseData).tput); err != nil {
+		hbasePool.Put(c, d, true)
 		return
 	}
-	hbasePool.Put(c, false)
+	hbasePool.Put(c, d, false)
 	return
 }
 
@@ -141,16 +167,17 @@ func (h *HBaseClient) Put(n *meta.Needle) (err error) {
 func (h *HBaseClient) Del(key int64) (err error) {
 	var (
 		c interface{}
+		d interface{}
 	)
-	if c, err = hbasePool.Get(); err != nil {
+	if c, d, err = hbasePool.Get(); err != nil {
 		log.Errorf("hbasePool.Get() error(%v)", err)
 		return
 	}
-	h.tdel.Row = h.key(key)
-	if err = c.(hbasethrift.THBaseService).DeleteSingle(table, &h.tdel); err != nil {
-		hbasePool.Put(c, true)
+	d.(*HBaseData).tdel.Row = d.(*HBaseData).key(key)
+	if err = c.(hbasethrift.THBaseService).DeleteSingle(table, &d.(*HBaseData).tdel); err != nil {
+		hbasePool.Put(c, d, true)
 		return
 	}
-	hbasePool.Put(c, false)
+	hbasePool.Put(c, d, false)
 	return
 }

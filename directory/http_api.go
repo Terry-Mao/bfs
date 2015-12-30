@@ -1,8 +1,8 @@
 package main
 
 import (
-	log "github.com/golang/glog"
 	"github.com/Terry-Mao/bfs/libs/errors"
+	log "github.com/golang/glog"
 	"net/http"
 	"strconv"
 	"time"
