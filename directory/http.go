@@ -15,14 +15,14 @@ type KeyCookie struct {
 
 // GetResponse response for http get req
 type GetResponse struct {
-	Ret    int    `json:"ret"`
+	Ret    int      `json:"ret"`
 	Vid    int32    `json:"vid"`
 	Stores []string `json:"stores"`
 }
 
 // UploadResponse response for http upload req
 type UploadResponse struct {
-	Ret    int       `json:"ret"`
+	Ret    int         `json:"ret"`
 	Keys   []KeyCookie `json:"keys"`
 	Vid    int32       `json:"vid"`
 	Stores []string    `json:"stores"`
@@ -30,7 +30,7 @@ type UploadResponse struct {
 
 // DelResponse response for http del req
 type DelResponse struct {
-	Ret    int    `json:"ret"`
+	Ret    int      `json:"ret"`
 	Vid    int32    `json:"vid"`
 	Stores []string `json:"stores"`
 }

@@ -275,14 +275,14 @@ func (d *Directory) GetStores(key int64, cookie int32) (vid int32, stores []stri
 // UploadStores get writable stores for http upload
 func (d *Directory) UploadStores(numKeys int) (keys []KeyCookie, vid int32, stores []string, err error) {
 	var (
-		i    int
-		key  int64
-		kc   KeyCookie
-		n    meta.Needle
-		svrs []string
-		store string
+		i         int
+		key       int64
+		kc        KeyCookie
+		n         meta.Needle
+		svrs      []string
+		store     string
 		storeMeta *meta.Store
-		ok 	bool
+		ok        bool
 	)
 	if numKeys > d.config.MaxNum {
 		err = errors.ErrUploadMaxFile
@@ -298,7 +298,7 @@ func (d *Directory) UploadStores(numKeys int) (keys []KeyCookie, vid int32, stor
 	for _, store = range svrs {
 		if storeMeta, ok = d.store[store]; !ok {
 			err = errors.ErrZookeeperDataError
-			return 
+			return
 		}
 		stores = append(stores, storeMeta.Api)
 	}
