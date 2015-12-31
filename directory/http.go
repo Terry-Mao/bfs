@@ -42,11 +42,6 @@ func HttpGetWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res
 		byteJson []byte
 		ret      = res.Ret
 	)
-	if ret != http.StatusOK {
-		log.Errorf("HttpWriter ret error: %d", ret)
-		http.Error(wr, http.StatusText(ret), ret)
-		return
-	}
 	if byteJson, err = json.Marshal(res); err != nil {
 		log.Errorf("json.Marshal(\"%v\") failed (%v)", res, err)
 		return
@@ -67,11 +62,6 @@ func HttpUploadWriter(r *http.Request, wr http.ResponseWriter, start time.Time, 
 		byteJson []byte
 		ret      = res.Ret
 	)
-	if ret != http.StatusOK {
-		log.Errorf("HttpWriter ret error: %d", ret)
-		http.Error(wr, http.StatusText(ret), ret)
-		return
-	}
 	if byteJson, err = json.Marshal(res); err != nil {
 		log.Errorf("json.Marshal(\"%v\") failed (%v)", res, err)
 		return
@@ -92,11 +82,6 @@ func HttpDelWriter(r *http.Request, wr http.ResponseWriter, start time.Time, res
 		byteJson []byte
 		ret      = res.Ret
 	)
-	if ret != http.StatusOK {
-		log.Errorf("HttpWriter ret error: %d", ret)
-		http.Error(wr, http.StatusText(ret), ret)
-		return
-	}
 	if byteJson, err = json.Marshal(res); err != nil {
 		log.Errorf("json.Marshal(\"%v\") failed (%v)", res, err)
 		return

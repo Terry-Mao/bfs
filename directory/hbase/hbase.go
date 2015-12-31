@@ -38,7 +38,7 @@ type HBaseData struct {
 	tdel hbasethrift.TDelete
 }
 
-// NewHBaseClient
+// NewHBaseData
 func NewHBaseData() *HBaseData {
 	d := &HBaseData{}
 	d.tput.ColumnValues = []*hbasethrift.TColumnValue{
