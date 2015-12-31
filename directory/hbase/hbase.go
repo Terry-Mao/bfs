@@ -116,7 +116,7 @@ func (h *HBaseClient) Get(key int64) (n *meta.Needle, err error) {
 	n = new(meta.Needle)
 	n.Key = key
 	for _, cv = range r.ColumnValues {
-		if cv != nil {
+		if cv == nil {
 			continue
 		}
 		if bytes.Equal(cv.Family, familyBasic) {
