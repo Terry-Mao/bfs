@@ -13,7 +13,7 @@ var (
 
 func Init(hbaseAddr string, hbaseTimeout time.Duration, hbaseMaxIdle, hbaseMaxActive int) error {
 	// init hbase thrift pool
-	hbasePool = New(func() (client interface{}, err error) {
+	hbasePool = New(func() (c *HbaseConn, err error) {
 		var trans thrift.TTransport
 		trans, err = thrift.NewTSocketTimeout(hbaseAddr, hbaseTimeout)
 		if err != nil {
@@ -21,19 +21,56 @@ func Init(hbaseAddr string, hbaseTimeout time.Duration, hbaseMaxIdle, hbaseMaxAc
 			return
 		}
 		trans = thrift.NewTFramedTransport(trans)
-		client = hbasethrift.NewTHBaseServiceClientFactory(trans, thrift.NewTBinaryProtocolFactoryDefault())
+		c = new(HbaseConn)
+		c.conn = hbasethrift.NewTHBaseServiceClientFactory(trans, thrift.NewTBinaryProtocolFactoryDefault())
 		if err = trans.Open(); err != nil {
 			log.Error("trans.Open error(%v)", err)
+			return
+		}
+		c.tput.ColumnValues = []*hbasethrift.TColumnValue{
+			// vid
+			&hbasethrift.TColumnValue{
+				Family:    familyBasic,
+				Qualifier: columnVid,
+				Value:     c.vbuf[:],
+			},
+			// cookie
+			&hbasethrift.TColumnValue{
+				Family:    familyBasic,
+				Qualifier: columnCookie,
+				Value:     c.cbuf[:],
+			},
+			// insert_time
+			&hbasethrift.TColumnValue{
+				Family:    familyBasic,
+				Qualifier: columnInsertTime,
+				Value:     c.ibuf[:],
+			},
+		}
+		c.tdel.Columns = []*hbasethrift.TColumn{
+			// vid
+			&hbasethrift.TColumn{
+				Family:    familyBasic,
+				Qualifier: columnVid,
+			},
+			// cookie
+			&hbasethrift.TColumn{
+				Family:    familyBasic,
+				Qualifier: columnCookie,
+			},
+			// insert_time
+			&hbasethrift.TColumn{
+				Family:    familyBasic,
+				Qualifier: columnInsertTime,
+			},
 		}
 		return
-	}, func(c interface{}) error {
-		client, ok := c.(hbasethrift.THBaseServiceClient)
-		if ok && client.Transport != nil {
+	}, func(c *HbaseConn) error {
+		client := c.conn
+		if client != nil && client.Transport != nil {
 			client.Transport.Close()
 		}
 		return nil
-	}, func() interface{} {
-		return NewHBaseData()
 	}, hbaseMaxIdle)
 	hbasePool.MaxActive = hbaseMaxActive
 	return nil
