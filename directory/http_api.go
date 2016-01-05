@@ -42,21 +42,20 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		uerr   errors.Error
 	)
 	if r.Method != "GET" {
-		res.Ret = http.StatusMethodNotAllowed
-		http.Error(wr, "method not allowed", res.Ret)
+		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	defer HttpGetWriter(r, wr, time.Now(), &res)
 	if key, err = strconv.ParseInt(params.Get("key"), 10, 64); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
-		res.Ret = http.StatusBadRequest
+		log.Errorf("strconv.ParseInt(\"%d\") error(%v)", r.FormValue("key"), err)
+		http.Error(wr, "bad request", http.StatusBadRequest)
 		return
 	}
 	if cookie, err = strconv.ParseInt(params.Get("cookie"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("cookie"), err)
-		res.Ret = http.StatusBadRequest
+		log.Errorf("strconv.ParseInt(\"%d\") error(%v)", r.FormValue("cookie"), err)
+		http.Error(wr, "bad request", http.StatusBadRequest)
 		return
 	}
+	defer HttpGetWriter(r, wr, time.Now(), &res)
 	if res.Vid, res.Stores, err = h.d.GetStores(key, int32(cookie)); err != nil {
 		log.Errorf("GetStores() error(%v)", err)
 		if uerr, ok = err.(errors.Error); ok {
@@ -82,16 +81,15 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		uerr errors.Error
 	)
 	if r.Method != "POST" {
-		res.Ret = http.StatusMethodNotAllowed
-		http.Error(wr, "method not allowed", res.Ret)
+		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if num, err = strconv.ParseInt(r.FormValue("num"), 10, 32); err != nil {
+		log.Errorf("strconv.ParseInt(\"%d\") error(%v)", r.FormValue("num"), err)
+		http.Error(wr, "bad request", http.StatusBadRequest)
 		return
 	}
 	defer HttpUploadWriter(r, wr, time.Now(), &res)
-	if num, err = strconv.ParseInt(r.FormValue("num"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("num"), err)
-		res.Ret = http.StatusBadRequest
-		return
-	}
 	if res.Keys, res.Vid, res.Stores, err = h.d.UploadStores(int(num)); err != nil {
 		log.Errorf("UploadStores() error(%v)", err)
 		if uerr, ok = err.(errors.Error); ok {
@@ -118,21 +116,20 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		uerr   errors.Error
 	)
 	if r.Method != "POST" {
-		res.Ret = http.StatusMethodNotAllowed
-		http.Error(wr, "method not allowed", res.Ret)
+		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	defer HttpDelWriter(r, wr, time.Now(), &res)
 	if key, err = strconv.ParseInt(r.FormValue("key"), 10, 64); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("key"), err)
-		res.Ret = http.StatusBadRequest
+		log.Errorf("strconv.ParseInt(\"%d\") error(%v)", r.FormValue("key"), err)
+		http.Error(wr, "bad request", http.StatusBadRequest)
 		return
 	}
 	if cookie, err = strconv.ParseInt(r.FormValue("cookie"), 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", r.FormValue("cookie"), err)
-		res.Ret = http.StatusBadRequest
+		log.Errorf("strconv.ParseInt(\"%d\") error(%v)", r.FormValue("cookie"), err)
+		http.Error(wr, "bad request", http.StatusBadRequest)
 		return
 	}
+	defer HttpDelWriter(r, wr, time.Now(), &res)
 	if res.Vid, res.Stores, err = h.d.DelStores(key, int32(cookie)); err != nil {
 		log.Errorf("DelStores() error(%v)", err)
 		if uerr, ok = err.(errors.Error); ok {
