@@ -3,7 +3,6 @@ package hbase
 import (
 	"container/list"
 	"errors"
-	"github.com/Terry-Mao/bfs/directory/hbase/hbasethrift"
 	"sync"
 	"time"
 )
@@ -194,44 +193,6 @@ func (p *Pool) Get() (*HbaseConn, error) {
 		p.active -= 1
 		p.mu.Unlock()
 		c = nil
-		return c, err
-	}
-	c.tput.ColumnValues = []*hbasethrift.TColumnValue{
-		// vid
-		&hbasethrift.TColumnValue{
-			Family:    familyBasic,
-			Qualifier: columnVid,
-			Value:     c.vbuf[:],
-		},
-		// cookie
-		&hbasethrift.TColumnValue{
-			Family:    familyBasic,
-			Qualifier: columnCookie,
-			Value:     c.cbuf[:],
-		},
-		// insert_time
-		&hbasethrift.TColumnValue{
-			Family:    familyBasic,
-			Qualifier: columnInsertTime,
-			Value:     c.ibuf[:],
-		},
-	}
-	c.tdel.Columns = []*hbasethrift.TColumn{
-		// vid
-		&hbasethrift.TColumn{
-			Family:    familyBasic,
-			Qualifier: columnVid,
-		},
-		// cookie
-		&hbasethrift.TColumn{
-			Family:    familyBasic,
-			Qualifier: columnCookie,
-		},
-		// insert_time
-		&hbasethrift.TColumn{
-			Family:    familyBasic,
-			Qualifier: columnInsertTime,
-		},
 	}
 	return c, err
 }
