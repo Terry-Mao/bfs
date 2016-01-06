@@ -54,6 +54,7 @@ type SuperBlock struct {
 	w       *os.File
 	File    string  `json:"file"`
 	Offset  uint32  `json:"offset"`
+	Size    int64   `json:"size"`
 	LastErr error   `json:"last_err"`
 	Ver     byte    `json:"ver"`
 	Options Options `json:"options"`
@@ -70,7 +71,6 @@ func NewSuperBlock(file string, options Options) (b *SuperBlock, err error) {
 	b = &SuperBlock{}
 	b.File = file
 	b.Options = options
-	b.Offset = needle.NeedleOffset(headerSize)
 	b.closed = false
 	b.write = 0
 	b.syncOffset = 0
@@ -100,7 +100,7 @@ func (b *SuperBlock) init() (err error) {
 		log.Errorf("block: %s Stat() error(%v)", b.File, err)
 		return
 	}
-	if stat.Size() == 0 {
+	if b.Size = stat.Size(); b.Size == 0 {
 		// falloc(FALLOC_FL_KEEP_SIZE)
 		if err = myos.Fallocate(b.w.Fd(), myos.FALLOC_FL_KEEP_SIZE, 0, maxSize); err != nil {
 			log.Errorf("block: %s Fallocate() error(%s)", b.File, err)
@@ -119,8 +119,8 @@ func (b *SuperBlock) init() (err error) {
 			log.Errorf("block: %s Seek() error(%v)", b.File, err)
 			return
 		}
-		b.Offset = needle.NeedleOffset(headerOffset)
 	}
+	b.Offset = needle.NeedleOffset(headerOffset)
 	return
 }
 
@@ -159,10 +159,13 @@ func (b *SuperBlock) parseMeta() (err error) {
 
 // Write write needle to the block.
 func (b *SuperBlock) Write(data []byte) (err error) {
+	var (
+		size       = int64(len(data))
+		incrOffset = needle.NeedleOffset(size)
+	)
 	if b.LastErr != nil {
 		return b.LastErr
 	}
-	var incrOffset = needle.NeedleOffset(int64(len(data)))
 	if maxOffset-incrOffset < b.Offset {
 		err = errors.ErrSuperBlockNoSpace
 		return
@@ -174,6 +177,7 @@ func (b *SuperBlock) Write(data []byte) (err error) {
 		return
 	}
 	b.Offset += incrOffset
+	b.Size += size
 	return
 }
 

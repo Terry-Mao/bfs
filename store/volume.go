@@ -108,23 +108,36 @@ func NewVolume(id int32, bfile, ifile string, c *Config) (v *Volume, err error) 
 
 // init recovery super block from index or super block.
 func (v *Volume) init() (err error) {
-	var offset uint32
+	var (
+		size               int64
+		lastOffset, offset uint32
+	)
 	// recovery from index
-	if err = v.Indexer.Recovery(func(ix *index.Index) (err1 error) {
+	if err = v.Indexer.Recovery(func(ix *index.Index) error {
+		if ix.Size > int32(v.conf.NeedleMaxSize) || ix.Size < 0 {
+			log.Error("recovery index: %s error(%v)", ix, errors.ErrIndexSize)
+			return errors.ErrIndexSize
+		}
+		if ix.Offset < lastOffset {
+			log.Error("recovery index: %s lastoffset: %d error(%v)", ix, lastOffset, errors.ErrIndexOffset)
+			return errors.ErrIndexOffset
+		}
+		if size = int64(ix.Size) + needle.BlockOffset(ix.Offset); size > v.Block.Size {
+			log.Error("recovery index: %s EOF", ix)
+			return errors.ErrIndexEOF
+		}
 		v.needles[ix.Key] = needle.NewCache(ix.Offset, ix.Size)
 		offset = ix.Offset + needle.NeedleOffset(int64(ix.Size))
-		if ix.Size > int32(v.conf.NeedleMaxSize) || ix.Size < 0 {
-			err1 = errors.ErrIndexSize
-		}
-		return
-	}); err != nil {
+		lastOffset = ix.Offset
+		return nil
+	}); err != nil && err != errors.ErrIndexEOF {
 		return
 	}
 	// recovery from super block
-	err = v.Block.Recovery(offset, func(n *needle.Needle, so, eo uint32) (err1 error) {
+	if err = v.Block.Recovery(offset, func(n *needle.Needle, so, eo uint32) (err1 error) {
 		if n.TotalSize > int32(v.conf.NeedleMaxSize) || n.TotalSize < 0 {
-			err1 = errors.ErrNeedleSize
-			return
+			log.Error("recovery needle: %s error(%v)", n, errors.ErrNeedleSize)
+			return errors.ErrNeedleSize
 		}
 		if n.Flag == needle.FlagOK {
 			if err1 = v.Indexer.Write(n.Key, so, n.TotalSize); err1 != nil {
@@ -135,7 +148,9 @@ func (v *Volume) init() (err error) {
 		}
 		v.needles[n.Key] = needle.NewCache(so, n.TotalSize)
 		return
-	})
+	}); err != nil {
+		return
+	}
 	// flush index
 	err = v.Indexer.Flush()
 	return

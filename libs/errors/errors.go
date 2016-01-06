@@ -25,6 +25,8 @@ var (
 		// index
 		RetIndexSize:   "index size error",
 		RetIndexClosed: "index closed",
+		RetIndexOffset: "index offset",
+		RetIndexEOF:    "index eof",
 		// needle
 		RetNeedleExist:       "needle already exist",
 		RetNeedleNotExist:    "needle not exist",

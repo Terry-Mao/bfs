@@ -33,6 +33,6 @@ func HttpGetWriter(r *http.Request, wr http.ResponseWriter, start time.Time, err
 		}
 		http.Error(wr, errStr, *ret)
 	}
-	log.Infof("%s path:%s(params:%s,time:%f,ret:%v)", r.Method,
-		r.URL.Path, r.URL.String(), time.Now().Sub(start).Seconds(), *ret)
+	log.Infof("%s path:%s(params:%s,time:%f,err:%s,ret:%v)", r.Method,
+		r.URL.Path, r.URL.String(), time.Now().Sub(start).Seconds(), errStr, *ret)
 }

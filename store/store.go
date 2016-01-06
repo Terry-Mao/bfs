@@ -55,7 +55,6 @@ type Store struct {
 
 // NewStore
 func NewStore(zk *Zookeeper, c *Config) (s *Store, err error) {
-	var i int
 	s = &Store{}
 	s.zk = zk
 	s.conf = c
