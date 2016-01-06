@@ -155,7 +155,7 @@ func (v *Volume) init() (err error) {
 	}
 	// recheck offset, keep size and offset consistency
 	if v.Block.Size != needle.BlockOffset(v.Block.Offset) {
-		log.Error("block: %s size: %d, offset: %d(%dsize) not consistency", v.Block.File, v.Block.Size, v.Block.Offset, needle.BlockOffset(v.Block.Offset))
+		log.Error("block: %s size: %d, offset: %d (%d size) not consistency", v.Block.File, v.Block.Size, v.Block.Offset, needle.BlockOffset(v.Block.Offset))
 		return errors.ErrSuperBlockOffset
 	}
 	// flush index

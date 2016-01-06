@@ -110,6 +110,7 @@ func (b *SuperBlock) init() (err error) {
 			log.Errorf("block: %s writeMeta() error(%v)", b.File, err)
 			return
 		}
+		b.Size = headerSize
 	} else {
 		if err = b.parseMeta(); err != nil {
 			log.Errorf("block: %s parseMeta() error(%v)", b.File, err)
