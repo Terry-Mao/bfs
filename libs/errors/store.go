@@ -11,6 +11,7 @@ const (
 	RetSuperBlockNoSpace    = 3003
 	RetSuperBlockRepairSize = 3004
 	RetSuperBlockClosed     = 3005
+	RetSuperBlockOffset     = 3006
 	// index
 	RetIndexSize   = 4000
 	RetIndexClosed = 4001
@@ -53,6 +54,7 @@ var (
 	ErrSuperBlockNoSpace    = Error(RetSuperBlockNoSpace)
 	ErrSuperBlockRepairSize = Error(RetSuperBlockRepairSize)
 	ErrSuperBlockClosed     = Error(RetSuperBlockClosed)
+	ErrSuperBlockOffset     = Error(RetSuperBlockOffset)
 	// index
 	ErrIndexSize   = Error(RetIndexSize)
 	ErrIndexClosed = Error(RetIndexClosed)

@@ -22,6 +22,7 @@ var (
 		RetSuperBlockNoSpace:    "super block no left free space",
 		RetSuperBlockRepairSize: "super block repair size must equal original",
 		RetSuperBlockClosed:     "super block closed",
+		RetSuperBlockOffset:     "super block offset not consistency with size",
 		// index
 		RetIndexSize:   "index size error",
 		RetIndexClosed: "index closed",

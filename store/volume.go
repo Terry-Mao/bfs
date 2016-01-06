@@ -118,10 +118,12 @@ func (v *Volume) init() (err error) {
 			log.Error("recovery index: %s error(%v)", ix, errors.ErrIndexSize)
 			return errors.ErrIndexSize
 		}
+		// must no less than last offset
 		if ix.Offset < lastOffset {
 			log.Error("recovery index: %s lastoffset: %d error(%v)", ix, lastOffset, errors.ErrIndexOffset)
 			return errors.ErrIndexOffset
 		}
+		// WARN if index's offset more than the block, discard it.
 		if size = int64(ix.Size) + needle.BlockOffset(ix.Offset); size > v.Block.Size {
 			log.Error("recovery index: %s EOF", ix)
 			return errors.ErrIndexEOF
@@ -150,6 +152,11 @@ func (v *Volume) init() (err error) {
 		return
 	}); err != nil {
 		return
+	}
+	// recheck offset, keep size and offset consistency
+	if v.Block.Size != needle.BlockOffset(v.Block.Offset) {
+		log.Error("block: %s size: %d, offset: %d(%dsize) not consistency", v.Block.File, v.Block.Size, v.Block.Offset, needle.BlockOffset(v.Block.Offset))
+		return errors.ErrSuperBlockOffset
 	}
 	// flush index
 	err = v.Indexer.Flush()
