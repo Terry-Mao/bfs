@@ -529,7 +529,7 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 		v.Block, nv.Block = nv.Block, v.Block
 		v.Indexer, nv.Indexer = nv.Indexer, v.Indexer
 		v.needles, nv.needles = nv.needles, v.needles
-		atomic.AddUint64(&v.Stats.TotalCompactDelay, uint64(time.Now().UnixNano()-v.CompactTime.UnixNano()))
+		atomic.AddUint64(&v.Stats.TotalCompactDelay, uint64(time.Now().UnixNano()-v.CompactTime))
 	}
 free:
 	v.Compact = false
