@@ -343,7 +343,13 @@ func (s *Store) AddFreeVolume(n int, bdir, idir string) (sn int, err error) {
 	for i = 0; i < n; i++ {
 		s.FreeId++
 		bfile, ifile = s.freeFile(s.FreeId, bdir, idir)
+		if myos.Exist(bfile) || myos.Exist(ifile) {
+			continue
+		}
 		if v, err = NewVolume(volumeFreeId, bfile, ifile, s.conf); err != nil {
+			// if no free space, delete the file
+			os.Remove(bfile)
+			os.Remove(ifile)
 			break
 		}
 		v.Close()
