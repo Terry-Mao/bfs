@@ -480,7 +480,7 @@ func (v *Volume) compact(nv *Volume) (err error) {
 		}
 		if n.Flag != needle.FlagDel {
 			n.Write(buf)
-			if err1 = nv.Add(n, buf); err1 != nil {
+			if err1 = nv.Add(n, buf[:n.TotalSize]); err1 != nil {
 				return
 			}
 		}
