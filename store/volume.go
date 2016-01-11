@@ -289,11 +289,10 @@ func (v *Volume) Add(n *needle.Needle, buf []byte) (err error) {
 		nc              int64
 		offset, ooffset uint32
 	)
-	if v.Debug {
-		if n.TotalSize != int32(len(buf)) {
-			err = errors.ErrNeedleSize
-			return
-		}
+	// safe check
+	if n.TotalSize != int32(len(buf)) {
+		err = errors.ErrNeedleSize
+		return
 	}
 	v.lock.Lock()
 	offset = v.Block.Offset
@@ -335,15 +334,14 @@ func (v *Volume) Write(ns []needle.Needle, buf []byte) (err error) {
 		ts              int32
 		n               *needle.Needle
 	)
-	if v.Debug {
-		for i = 0; i < len(ns); i++ {
-			n = &ns[i]
-			ts += n.TotalSize
-		}
-		if int(ts) != len(buf) {
-			err = errors.ErrNeedleSize
-			return
-		}
+	// safe check
+	for i = 0; i < len(ns); i++ {
+		n = &ns[i]
+		ts += n.TotalSize
+	}
+	if int(ts) != len(buf) {
+		err = errors.ErrNeedleSize
+		return
 	}
 	v.lock.Lock()
 	offset = v.Block.Offset
