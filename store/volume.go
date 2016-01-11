@@ -517,10 +517,7 @@ func (v *Volume) StartCompact(nv *Volume) (err error) {
 // update inner block/index/needles pointer.
 // if nv is nil, only reset compact status.
 func (v *Volume) StopCompact(nv *Volume) (err error) {
-	var (
-		now = time.Now().UnixNano()
-		key int64
-	)
+	var key int64
 	v.lock.Lock()
 	if nv != nil {
 		if err = v.compact(nv); err != nil {
@@ -534,7 +531,7 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 		v.Block, nv.Block = nv.Block, v.Block
 		v.Indexer, nv.Indexer = nv.Indexer, v.Indexer
 		v.needles, nv.needles = nv.needles, v.needles
-		atomic.AddUint64(&v.Stats.TotalCompactDelay, uint64(time.Now().UnixNano()-now))
+		atomic.AddUint64(&v.Stats.TotalCompactDelay, uint64(time.Now().UnixNano()-v.CompactTime.UnixNano()))
 	}
 free:
 	v.Compact = false
