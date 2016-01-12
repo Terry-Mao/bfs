@@ -196,8 +196,8 @@ def bfsopsVolumesPost():
 		for store_id in stores:
 			if min_free_volume_id == 0 or min_free_volume_id > STORE_INFO[FREE_VOLUME_KEY+store_id]:
 				min_free_volume_id = STORE_INFO[FREE_VOLUME_KEY+store_id]
-		for i in range(min_free_volume_id):
-			volume_id = MAX_VOLUME_ID+1
+		for i in range(min_free_volume_id-1):
+			volume_id = MAX_VOLUME_ID + 1
 			for store_id in stores:
 				if not store_client.storeAddVolume(STORE_TO_IP[store_id], volume_id):
 					logger.error("storeAddVolume() called, failed, store_ip: %s, volume_id: %d", STORE_TO_IP[store_id], volume_id)

@@ -58,6 +58,10 @@ func (d *Dispatcher) Update(group map[int][]string,
 				log.Errorf("idStore cannot match store: %s", sid)
 				break
 			}
+			if storeMeta == nil {
+				log.Warningf("storeMeta is null, %s", sid)
+				return
+			}
 			if !storeMeta.CanWrite() {
 				write = false
 				break
@@ -72,6 +76,10 @@ func (d *Dispatcher) Update(group map[int][]string,
 			// get all volumes by the store.
 			for _, vid = range storeVolume[sid] {
 				volumeState = volume[vid]
+				if volumeState == nil {
+					log.Warningf("volumeState is nil, %d", vid)
+					return
+				}
 				totalAdd = totalAdd + volumeState.TotalWriteProcessed
 				restSpace = restSpace + int(volumeState.FreeSpace)
 				totalAddDelay = totalAddDelay + volumeState.TotalWriteDelay
