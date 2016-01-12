@@ -8,7 +8,7 @@ import (
 	log "github.com/golang/glog"
 	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -306,18 +306,18 @@ func (s *Store) FreeBuffer(n int, d []byte) {
 // freeFile get volume block & index free file name.
 func (s *Store) freeFile(id int32, bdir, idir string) (bfile, ifile string) {
 	var file = fmt.Sprintf("%s%d", freeVolumePrefix, id)
-	bfile = path.Join(bdir, file)
+	bfile = filepath.Join(bdir, file)
 	file = fmt.Sprintf("%s%d%s", freeVolumePrefix, id, volumeIndexExt)
-	ifile = path.Join(idir, file)
+	ifile = filepath.Join(idir, file)
 	return
 }
 
 // file get volume block & index file name.
 func (s *Store) file(id int32, bdir, idir string, i int) (bfile, ifile string) {
 	var file = fmt.Sprintf("%d_%d", id, i)
-	bfile = path.Join(bdir, file)
+	bfile = filepath.Join(bdir, file)
 	file = fmt.Sprintf("%d_%d%s", id, i, volumeIndexExt)
-	ifile = path.Join(idir, file)
+	ifile = filepath.Join(idir, file)
 	return
 }
 
@@ -325,7 +325,7 @@ func (s *Store) file(id int32, bdir, idir string, i int) (bfile, ifile string) {
 func (s *Store) fileFreeId(file string) (id int32) {
 	var (
 		fid    int64
-		fidStr = strings.Replace(path.Base(file), freeVolumePrefix, "", -1)
+		fidStr = strings.Replace(filepath.Base(file), freeVolumePrefix, "", -1)
 	)
 	fid, _ = strconv.ParseInt(fidStr, 10, 32)
 	id = int32(fid)
@@ -377,7 +377,7 @@ func (s *Store) freeVolume(id int32) (v *Volume, err error) {
 	s.FreeVolumes = s.FreeVolumes[1:]
 	v.Id = id
 	bfile, ifile = v.Block.File, v.Indexer.File
-	bdir, idir = path.Dir(bfile), path.Dir(ifile)
+	bdir, idir = filepath.Dir(bfile), filepath.Dir(ifile)
 	for {
 		nbfile, nifile = s.file(id, bdir, idir, i)
 		if !myos.Exist(nbfile) && !myos.Exist(nifile) {
@@ -506,7 +506,10 @@ func (s *Store) BulkVolume(id int32, bfile, ifile string) (err error) {
 
 // CompactVolume compact a super block to another file.
 func (s *Store) CompactVolume(id int32) (err error) {
-	var v, nv *Volume
+	var (
+		v, nv      *Volume
+		bdir, idir string
+	)
 	// try check volume
 	if v = s.Volumes[id]; v != nil {
 		if v.Compact {
@@ -541,6 +544,8 @@ func (s *Store) CompactVolume(id int32) (err error) {
 		// nv now has old block/index
 		nv.Close()
 		nv.Destroy()
+		bdir, idir = filepath.Dir(nv.Block.File), filepath.Dir(nv.Indexer.File)
+		_, err = s.AddFreeVolume(1, bdir, idir)
 	}
 	return
 }
