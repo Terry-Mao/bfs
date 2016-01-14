@@ -23,7 +23,7 @@ func StartApi(addr string, d *Directory) {
 		serveMux.Handle("/get", httpGetHandler{d: d})
 		serveMux.Handle("/upload", httpUploadHandler{d: d})
 		serveMux.Handle("/del", httpDelHandler{d: d})
-		serveMux.Handle("/ping", httpPingHandler{})
+		serveMux.Handle("/directory-bfs/ping", httpPingHandler{})
 		if err = http.ListenAndServe(addr, serveMux); err != nil {
 			log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
 			return
