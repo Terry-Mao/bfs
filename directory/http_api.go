@@ -18,6 +18,7 @@ func StartApi(addr string, d *Directory) {
 		serveMux.Handle("/get", httpGetHandler{d: d})
 		serveMux.Handle("/upload", httpUploadHandler{d: d})
 		serveMux.Handle("/del", httpDelHandler{d: d})
+		serveMux.Handle("/ping", httpPingHandler{})
 		if err = http.ListenAndServe(addr, serveMux); err != nil {
 			log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
 			return
@@ -138,5 +139,13 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			res.Ret = errors.RetInternalErr
 		}
 	}
+	return
+}
+
+// httpPingHandler http ping health
+type httpPingHandler struct {
+}
+
+func (h httpPingHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	return
 }
