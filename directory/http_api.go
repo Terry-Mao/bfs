@@ -1,11 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/Terry-Mao/bfs/libs/errors"
 	log "github.com/golang/glog"
 	"net/http"
 	"strconv"
 	"time"
+)
+
+const (
+	PingOk = 0
 )
 
 // StartApi start api http listen.
@@ -147,5 +152,19 @@ type httpPingHandler struct {
 }
 
 func (h httpPingHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+	var (
+		byteJson []byte
+		res      = map[string]interface{}{"code": PingOk}
+		err      error
+	)
+	if byteJson, err = json.Marshal(res); err != nil {
+		log.Errorf("json.Marshal(\"%v\") failed (%v)", res, err)
+		return
+	}
+	wr.Header().Set("Content-Type", "application/json;charset=utf-8")
+	if _, err = wr.Write(byteJson); err != nil {
+		log.Errorf("HttpWriter Write error(%v)", err)
+		return
+	}
 	return
 }
