@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+const (
+	lvsTimeout = time.Second * 80
+)
+
 var (
 	hbasePool *Pool
 )
@@ -73,6 +77,7 @@ func Init(hbaseAddr string, hbaseTimeout time.Duration, hbaseMaxIdle, hbaseMaxAc
 		return nil
 	}, hbaseMaxIdle)
 	hbasePool.MaxActive = hbaseMaxActive
+	hbasePool.IdleTimeout = lvsTimeout
 	return nil
 }
 
