@@ -10,7 +10,7 @@ const (
 	configStoreVolumeCache = 32
 	configVolumeIndex      = "./volume.idx"
 	configFreeVolumeIndex  = "./free_volume.idx"
-	configNeedleMaxSize    = 1 * 1024 * 1024 // 1mb
+	configNeedleMaxSize    = 30 * 1024 * 1024 // 30mb
 	configBatchMaxNum      = 30
 	// volume
 	configVolumeDelChan       = 1024 * 10
