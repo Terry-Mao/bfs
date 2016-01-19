@@ -8,7 +8,7 @@ import (
 
 func compareNeedle(t *testing.T, n *Needle, key int64, cookie int32, data []byte, flag byte, checksum uint32) {
 	if n.Key != key || n.Cookie != cookie || !bytes.Equal(n.Data, data) || n.Flag != flag || n.Checksum != checksum {
-		t.Errorf("not match: %s", n)
+		t.Errorf("not match: %s, %d, %d, %d", n, key, cookie, checksum)
 		t.FailNow()
 	}
 }
@@ -90,33 +90,74 @@ func TestNeedles(t *testing.T) {
 
 func TestNeedle(t *testing.T) {
 	var (
-		err  error
-		n    = &Needle{}
-		data = []byte("test")
-		buf  = make([]byte, 40)
+		err       error
+		n, tn     *Needle
+		data1     = []byte("tes1")
+		checksum1 = crc32.Update(0, _crc32Table, data1)
+		data2     = []byte("tes2")
+		checksum2 = crc32.Update(0, _crc32Table, data2)
+		buf       = &bytes.Buffer{}
 	)
-	n.Buffer = buf
-	n.Init(1, 1, data)
+	// Write
+	n = new(Needle)
+	n.Buffer = make([]byte, 40)
+	n.Init(1, 1, data1)
 	if err = n.Write(); err != nil {
+		t.Error(err)
 		t.FailNow()
 	}
-	if err = n.Parse(); err != nil {
+	tn = new(Needle)
+	tn.Buffer = n.Buffer
+	if err = tn.Parse(); err != nil {
+		t.Error(err)
 		t.FailNow()
 	}
-	if n.Cookie != 1 || n.Key != 1 || n.Size != 4 || !bytes.Equal(n.Data, data) || n.Flag != FlagOK || n.PaddingSize != 7 {
-		t.FailNow()
-	}
-	n.Init(2, 2, data)
+	compareNeedle(t, tn, 1, 1, data1, FlagOK, checksum1)
+	n = new(Needle)
+	n.Buffer = make([]byte, 40)
+	n.Init(2, 2, data2)
 	if err = n.Write(); err != nil {
+		t.Error(err)
 		t.FailNow()
 	}
-	if err = n.Parse(); err != nil {
+	tn = new(Needle)
+	tn.Buffer = n.Buffer
+	if err = tn.Parse(); err != nil {
+		t.Error(err)
 		t.FailNow()
 	}
-	if n.Cookie != 2 || n.Key != 2 || n.Size != 4 || !bytes.Equal(n.Data, data) || n.Flag != FlagOK || n.PaddingSize != 7 {
-		t.Error("Parse() error")
+	compareNeedle(t, tn, 2, 2, data2, FlagOK, checksum2)
+	// WriteFrom
+	buf.Write(data1)
+	n = new(Needle)
+	n.Buffer = make([]byte, 40)
+	n.InitSize(3, 3, 4)
+	if err = n.WriteFrom(buf); err != nil {
+		t.Error(err)
 		t.FailNow()
 	}
+	tn = new(Needle)
+	tn.Buffer = n.Buffer
+	if err = tn.Parse(); err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	compareNeedle(t, tn, 3, 3, data1, FlagOK, checksum1)
+	buf.Write(data2)
+	n = new(Needle)
+	n.Buffer = make([]byte, 40)
+	n.InitSize(4, 4, 4)
+	if err = n.WriteFrom(buf); err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	tn = new(Needle)
+	tn.Buffer = n.Buffer
+	if err = tn.Parse(); err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	compareNeedle(t, tn, 4, 4, data2, FlagOK, checksum2)
 }
 
 func TestAlign(t *testing.T) {
