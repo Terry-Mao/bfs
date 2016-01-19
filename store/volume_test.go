@@ -1,11 +1,11 @@
 package main
 
 import (
-	"crypto/rand"
-	"github.com/Terry-Mao/bfs/libs/encoding/binary"
+	//"crypto/rand"
+	//"github.com/Terry-Mao/bfs/libs/encoding/binary"
 	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/store/needle"
-	mrand "math/rand"
+	//mrand "math/rand"
 	"os"
 	"testing"
 )
@@ -16,15 +16,16 @@ const (
 
 func TestVolume(t *testing.T) {
 	var (
-		ts    int32
 		v     *Volume
 		err   error
 		data  = []byte("test")
-		buf   = make([]byte, 1024)
 		bfile = "./test/test1"
 		ifile = "./test/test1.idx"
 		n     = &needle.Needle{}
-		ns    = make([]needle.Needle, 3)
+		ns    = &needle.Needles{
+			Items:  make([]needle.Needle, 3),
+			Buffer: make([]byte, testConf.NeedleMaxSize*3),
+		}
 	)
 	os.Remove(bfile)
 	os.Remove(ifile)
@@ -41,41 +42,48 @@ func TestVolume(t *testing.T) {
 		t.FailNow()
 	}
 	defer v.Close()
+	n.Buffer = make([]byte, testConf.NeedleMaxSize)
 	n.Init(1, 1, data)
-	n.Write(buf)
-	if err = v.Add(n, buf[:n.TotalSize]); err != nil {
+	n.Write()
+	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	if err = v.Add(n, buf[:n.TotalSize]); err != nil {
+	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
 	n.Init(2, 2, data)
-	n.Write(buf)
-	if err = v.Add(n, buf[:n.TotalSize]); err != nil {
+	n.Write()
+	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
 	n.Init(3, 3, data)
-	n.Write(buf)
-	if err = v.Add(n, buf[:n.TotalSize]); err != nil {
+	n.Write()
+	if err = v.Add(n); err != nil {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	n = &(ns[0])
+	n = &ns.Items[0]
 	n.Init(4, 4, data)
-	n.Write(buf)
-	ts += n.TotalSize
-	n = &(ns[1])
+	if err = ns.Write(n); err != nil {
+		t.Errorf("ns.Write() error(%v)", err)
+		t.FailNow()
+	}
+	n = &ns.Items[1]
 	n.Init(5, 5, data)
-	n.Write(buf[ts:])
-	ts += n.TotalSize
-	n = &(ns[2])
+	if err = ns.Write(n); err != nil {
+		t.Errorf("ns.Write() error(%v)", err)
+		t.FailNow()
+	}
+	n = &ns.Items[2]
 	n.Init(6, 6, data)
-	n.Write(buf[ts:])
-	ts += n.TotalSize
-	if err = v.Write(ns, buf[:ts]); err != nil {
+	if err = ns.Write(n); err != nil {
+		t.Errorf("ns.Write() error(%v)", err)
+		t.FailNow()
+	}
+	if err = v.Write(ns); err != nil {
 		t.Errorf("Write() error(%v)", err)
 		t.FailNow()
 	}
@@ -83,7 +91,9 @@ func TestVolume(t *testing.T) {
 		t.Errorf("Del error(%v)", err)
 		t.FailNow()
 	}
-	if err = v.Get(3, 3, buf, n); err != errors.ErrNeedleDeleted {
+	n.Key = 3
+	n.Cookie = 3
+	if err = v.Get(n); err != errors.ErrNeedleDeleted {
 		t.Error("err must be ErrNeedleDeleted")
 		t.FailNow()
 	} else {
@@ -91,6 +101,7 @@ func TestVolume(t *testing.T) {
 	}
 }
 
+/*
 func BenchmarkVolumeAdd(b *testing.B) {
 	var (
 		v     *Volume
@@ -118,15 +129,15 @@ func BenchmarkVolumeAdd(b *testing.B) {
 			t    int64
 			err1 error
 			buf  = make([]byte, 16351*2)
-			n    = &needle.Needle{}
+			n    = &needle.Needle{Buffer: buf}
 		)
 		n.Init(1, 1, data)
-		n.Write(buf)
+		n.Write()
 		for pb.Next() {
 			t = mrand.Int63()
 			n.Key = t
 			binary.BigEndian.PutInt64(buf[needle.KeyOffset:], n.Key)
-			if err1 = v.Add(n, buf[:n.TotalSize]); err1 != nil {
+			if err1 = v.Add(n); err1 != nil {
 				b.Errorf("Add() error(%v)", err1)
 				b.FailNow()
 			}
@@ -163,19 +174,20 @@ func BenchmarkVolumeWrite(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		var (
 			i, j int
-			ts   int32
 			t    int64
 			err1 error
 			n    *needle.Needle
-			ns   = make([]needle.Needle, 9)
 			buf  = make([]byte, 163840) // 16kb
+			ns   = &needle.Needles{
+				Items:  make([]needle.Needle, 9),
+				Buffer: buf,
+			}
 		)
 		for i = 0; i < 9; i++ {
 			t = mrand.Int63()
-			n = &ns[i]
+			n = &ns.Items[i]
 			n.Init(t, 1, data)
-			n.Write(buf[ts:])
-			ts += n.TotalSize
+			ns.Write(n)
 		}
 		for pb.Next() {
 			for j = 0; j < 9; j++ {
@@ -184,7 +196,7 @@ func BenchmarkVolumeWrite(b *testing.B) {
 				n.Key = t
 				binary.BigEndian.PutInt64(buf[n.TotalSize+needle.KeyOffset:], n.Key)
 			}
-			if err1 = v.Write(ns, buf[:ts]); err1 != nil {
+			if err1 = v.Write(ns); err1 != nil {
 				b.Errorf("Add() error(%v)", err1)
 				v.Unlock()
 				b.FailNow()
@@ -247,3 +259,4 @@ func BenchmarkVolumeGet(b *testing.B) {
 		}
 	})
 }
+*/

@@ -29,6 +29,10 @@ const (
 	RetNeedleCookie      = 5009
 	RetNeedleDeleted     = 5010
 	RetNeedleTooLarge    = 5011
+	RetNeedleHeaderSize  = 5012
+	RetNeedleDataSize    = 5013
+	RetNeedleFooterSize  = 5014
+	RetNeedlePaddingSize = 5015
 	// ring
 	RetRingEmpty = 6000
 	RetRingFull  = 6001
@@ -72,6 +76,10 @@ var (
 	ErrNeedleCookie      = Error(RetNeedleCookie)
 	ErrNeedleDeleted     = Error(RetNeedleDeleted)
 	ErrNeedleTooLarge    = Error(RetNeedleTooLarge)
+	ErrNeedleHeaderSize  = Error(RetNeedleHeaderSize)
+	ErrNeedleDataSize    = Error(RetNeedleDataSize)
+	ErrNeedleFooterSize  = Error(RetNeedleFooterSize)
+	ErrNeedlePaddingSize = Error(RetNeedlePaddingSize)
 	// ring
 	ErrRingEmpty = Error(RetRingEmpty)
 	ErrRingFull  = Error(RetRingFull)

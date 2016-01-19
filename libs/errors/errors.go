@@ -41,6 +41,10 @@ var (
 		RetNeedleCookie:      "needle cookie not match",
 		RetNeedleDeleted:     "needle deleted",
 		RetNeedleTooLarge:    "needle has no left free space",
+		RetNeedleHeaderSize:  "needle header size",
+		RetNeedleDataSize:    "needle data size",
+		RetNeedleFooterSize:  "needle footer size",
+		RetNeedlePaddingSize: "needle padding size",
 		// ring
 		RetRingEmpty: "index ring buffer empty",
 		RetRingFull:  "index ring buffer full",

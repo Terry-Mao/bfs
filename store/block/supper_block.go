@@ -23,29 +23,29 @@ import (
 
 const (
 	// size
-	headerSize  = needle.PaddingSize
-	magicSize   = 4
-	verSize     = 1
-	paddingSize = headerSize - magicSize - verSize
+	_headerSize  = needle.PaddingSize
+	_magicSize   = 4
+	_verSize     = 1
+	_paddingSize = _headerSize - _magicSize - _verSize
 	// offset
-	headerOffset  = headerSize
-	magicOffset   = 0
-	verOffset     = magicOffset + verSize
-	paddingOffset = verOffset + paddingSize
-	paddingByte   = byte(0)
+	_headerOffset  = _headerSize
+	_magicOffset   = 0
+	_verOffset     = _magicOffset + _verSize
+	_paddingOffset = _verOffset + _paddingSize
+	_paddingByte   = byte(0)
 	// ver
 	Ver1 = byte(1)
 	// limits
 	// offset aligned 8 bytes, 4GB * needle_padding_size
-	maxSize   = 4 * 1024 * 1024 * 1024 * needle.PaddingSize
-	maxOffset = 4294967295
+	_maxSize   = 4 * 1024 * 1024 * 1024 * needle.PaddingSize
+	_maxOffset = 4294967295
 )
 
 var (
-	magic    = []byte{0xab, 0xcd, 0xef, 0x00}
-	ver      = []byte{Ver1}
-	padding  = bytes.Repeat([]byte{paddingByte}, paddingSize)
-	pagesize = syscall.Getpagesize()
+	_magic    = []byte{0xab, 0xcd, 0xef, 0x00}
+	_ver      = []byte{Ver1}
+	_padding  = bytes.Repeat([]byte{_paddingByte}, _paddingSize)
+	_pagesize = syscall.Getpagesize()
 )
 
 // An Volume contains one superblock and many needles.
@@ -102,7 +102,7 @@ func (b *SuperBlock) init() (err error) {
 	}
 	if b.Size = stat.Size(); b.Size == 0 {
 		// falloc(FALLOC_FL_KEEP_SIZE)
-		if err = myos.Fallocate(b.w.Fd(), myos.FALLOC_FL_KEEP_SIZE, 0, maxSize); err != nil {
+		if err = myos.Fallocate(b.w.Fd(), myos.FALLOC_FL_KEEP_SIZE, 0, _maxSize); err != nil {
 			log.Errorf("block: %s Fallocate() error(%s)", b.File, err)
 			return
 		}
@@ -110,45 +110,45 @@ func (b *SuperBlock) init() (err error) {
 			log.Errorf("block: %s writeMeta() error(%v)", b.File, err)
 			return
 		}
-		b.Size = headerSize
+		b.Size = _headerSize
 	} else {
 		if err = b.parseMeta(); err != nil {
 			log.Errorf("block: %s parseMeta() error(%v)", b.File, err)
 			return
 		}
-		if _, err = b.w.Seek(headerOffset, os.SEEK_SET); err != nil {
+		if _, err = b.w.Seek(_headerOffset, os.SEEK_SET); err != nil {
 			log.Errorf("block: %s Seek() error(%v)", b.File, err)
 			return
 		}
 	}
-	b.Offset = needle.NeedleOffset(headerOffset)
+	b.Offset = needle.NeedleOffset(_headerOffset)
 	return
 }
 
 // writeMeta write block meta info.
 func (b *SuperBlock) writeMeta() (err error) {
 	// magic
-	if _, err = b.w.Write(magic); err != nil {
+	if _, err = b.w.Write(_magic); err != nil {
 		return
 	}
 	// ver
-	if _, err = b.w.Write(ver); err != nil {
+	if _, err = b.w.Write(_ver); err != nil {
 		return
 	}
 	// padding
-	_, err = b.w.Write(padding)
+	_, err = b.w.Write(_padding)
 	return
 }
 
 // parseMeta parse block meta info.
 func (b *SuperBlock) parseMeta() (err error) {
-	var buf = make([]byte, headerSize)
-	if _, err = b.r.Read(buf[:headerSize]); err != nil {
+	var buf = make([]byte, _headerSize)
+	if _, err = b.r.Read(buf[:_headerSize]); err != nil {
 		return
 	}
-	b.magic = buf[magicOffset : magicOffset+magicSize]
-	b.Ver = buf[verOffset : verOffset+verSize][0]
-	if !bytes.Equal(b.magic, magic) {
+	b.magic = buf[_magicOffset : _magicOffset+_magicSize]
+	b.Ver = buf[_verOffset : _verOffset+_verSize][0]
+	if !bytes.Equal(b.magic, _magic) {
 		return errors.ErrSuperBlockMagic
 	}
 	if b.Ver == Ver1 {
@@ -167,7 +167,7 @@ func (b *SuperBlock) Write(data []byte) (err error) {
 	if b.LastErr != nil {
 		return b.LastErr
 	}
-	if maxOffset-incrOffset < b.Offset {
+	if _maxOffset-incrOffset < b.Offset {
 		err = errors.ErrSuperBlockNoSpace
 		return
 	}
@@ -261,7 +261,7 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 		rd     = bufio.NewReaderSize(r, b.Options.BufferSize)
 	)
 	if offset == 0 {
-		offset = needle.NeedleOffset(headerOffset)
+		offset = needle.NeedleOffset(_headerOffset)
 	}
 	so, eo = offset, offset
 	bso = needle.BlockOffset(so)
@@ -280,6 +280,7 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 		return
 	}
 	for {
+		// header
 		if data, err = rd.Peek(needle.HeaderSize); err != nil {
 			break
 		}
@@ -289,13 +290,24 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 		if _, err = rd.Discard(needle.HeaderSize); err != nil {
 			break
 		}
-		if data, err = rd.Peek(n.DataSize); err != nil {
+		// data
+		if data, err = rd.Peek(int(n.Size)); err != nil {
+			break
+		}
+		if err = n.ParseData(data); err != nil {
+			break
+		}
+		if _, err = rd.Discard(int(n.Size)); err != nil {
+			break
+		}
+		// footer
+		if data, err = rd.Peek(int(n.FooterSize)); err != nil {
 			break
 		}
 		if err = n.ParseFooter(data); err != nil {
 			break
 		}
-		if _, err = rd.Discard(n.DataSize); err != nil {
+		if _, err = rd.Discard(int(n.FooterSize)); err != nil {
 			break
 		}
 		if log.V(1) {
@@ -325,7 +337,7 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 func (b *SuperBlock) Recovery(offset uint32, fn func(*needle.Needle, uint32, uint32) error) (err error) {
 	// WARN block may be no left data, must update block offset first
 	if offset == 0 {
-		offset = needle.NeedleOffset(headerOffset)
+		offset = needle.NeedleOffset(_headerOffset)
 	}
 	b.Offset = offset
 	if err = b.Scan(b.r, offset, func(n *needle.Needle, so, eo uint32) (err1 error) {

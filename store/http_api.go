@@ -45,9 +45,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		now              = time.Now()
 		v                *Volume
 		n                *needle.Needle
-		ns               []needle.Needle
 		err              error
-		buf              []byte
 		vid, key, cookie int64
 		ret              = http.StatusOK
 		params           = r.URL.Query()
@@ -73,11 +71,11 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	buf = h.s.Buffer(1)
-	ns = h.s.Needle(1)
-	n = &(ns[0])
+	n = h.s.Needle()
+	n.Key = key
+	n.Cookie = int32(cookie)
 	if v = h.s.Volumes[int32(vid)]; v != nil {
-		if err = v.Get(key, int32(cookie), buf, n); err != nil {
+		if err = v.Get(n); err != nil {
 			if err == errors.ErrNeedleDeleted || err == errors.ErrNeedleNotExist {
 				ret = http.StatusNotFound
 			} else {
@@ -99,8 +97,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			log.Infof("get a needle: %v", n)
 		}
 	}
-	h.s.FreeBuffer(1, buf)
-	h.s.FreeNeedle(1, ns)
+	h.s.FreeNeedle(n)
 	return
 }
 
@@ -113,17 +110,14 @@ type httpUploadHandler struct {
 func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		ok     bool
-		rn     int
 		vid    int64
 		key    int64
 		cookie int64
 		size   int64
 		err    error
 		str    string
-		buf    []byte
 		v      *Volume
 		n      *needle.Needle
-		ns     []needle.Needle
 		file   multipart.File
 		sr     sizer
 		fr     *os.File
@@ -167,6 +161,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetInternalErr
 		return
 	}
+	defer file.Close()
 	if sr, ok = file.(sizer); ok {
 		size = sr.Size()
 	} else if fr, ok = file.(*os.File); ok {
@@ -180,29 +175,16 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetNeedleTooLarge
 		return
 	}
-	ns = h.s.Needle(1)
-	n = &(ns[0])
-	buf = h.s.Buffer(1)
-	// fill buf skip needle header offset
-	// --------------------
-	// header (data) footer
-	// --------------------
-	rn, err = file.Read(buf[needle.HeaderSize:])
-	file.Close()
-	if err != nil {
-		res["ret"] = errors.RetInternalErr
-		return
+	n = h.s.Needle()
+	n.InitSize(key, int32(cookie), int32(size))
+	if err = n.WriteFrom(file); err == nil {
+		if v = h.s.Volumes[int32(vid)]; v != nil {
+			err = v.Add(n)
+		} else {
+			err = errors.ErrVolumeNotExist
+		}
 	}
-	n.Init(key, int32(cookie), buf[needle.HeaderSize:needle.HeaderSize+rn])
-	n.WriteHeader(buf)
-	n.WriteFooter(buf[needle.HeaderSize+rn:], false)
-	if v = h.s.Volumes[int32(vid)]; v != nil {
-		err = v.Add(n, buf[:n.TotalSize])
-	} else {
-		err = errors.ErrVolumeNotExist
-	}
-	h.s.FreeBuffer(1, buf)
-	h.s.FreeNeedle(1, ns)
+	h.s.FreeNeedle(n)
 	if err != nil {
 		if uerr, ok = err.(errors.Error); ok {
 			res["ret"] = int(uerr)
@@ -221,28 +203,27 @@ type httpUploadsHandler struct {
 
 func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		i, rn, tn, nn, nb int
-		ok                bool
-		buf               []byte
-		err               error
-		vid               int64
-		key               int64
-		cookie            int64
-		size              int64
-		str               string
-		keys              []string
-		cookies           []string
-		sr                sizer
-		fr                *os.File
-		fi                os.FileInfo
-		v                 *Volume
-		n                 *needle.Needle
-		ns                []needle.Needle
-		uerr              errors.Error
-		file              multipart.File
-		fh                *multipart.FileHeader
-		fhs               []*multipart.FileHeader
-		res               = map[string]interface{}{"ret": errors.RetOK}
+		i, nn   int
+		ok      bool
+		err     error
+		vid     int64
+		key     int64
+		cookie  int64
+		size    int64
+		str     string
+		keys    []string
+		cookies []string
+		sr      sizer
+		fr      *os.File
+		fi      os.FileInfo
+		v       *Volume
+		n       *needle.Needle
+		ns      *needle.Needles
+		uerr    errors.Error
+		file    multipart.File
+		fh      *multipart.FileHeader
+		fhs     []*multipart.FileHeader
+		res     = map[string]interface{}{"ret": errors.RetOK}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
@@ -278,10 +259,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		res["ret"] = errors.RetParamErr
 		return
 	}
-	nb = int(size-1)/(h.c.NeedleMaxSize) + 1
-	buf = h.s.Buffer(nb)
-	ns = h.s.Needle(nn)
-	tn = needle.HeaderSize
+	ns = h.s.Needles(nn)
 	for i, fh = range fhs {
 		if key, err = strconv.ParseInt(keys[i], 10, 64); err != nil {
 			log.Errorf("strconv.ParseInt(\"%s\") error(%v)", keys[i], err)
@@ -293,9 +271,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			err = errors.ErrParam
 			break
 		}
-		file, err = fh.Open()
-		file.Close()
-		if err != nil {
+		if file, err = fh.Open(); err != nil {
 			log.Errorf("fh.Open() error(%v)", err)
 			break
 		}
@@ -304,33 +280,32 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			size = sr.Size()
 		} else if fr, ok = file.(*os.File); ok {
 			if fi, err = fr.Stat(); err != nil {
-				break
+				goto failed
 			}
 			size = fi.Size()
 		}
 		if size > int64(h.c.NeedleMaxSize) {
 			err = errors.ErrNeedleTooLarge
-			break
+			goto failed
 		}
-		if rn, err = file.Read(buf[tn:]); err != nil {
-			log.Errorf("file.Read() error(%v)", err)
-			break
+		n = &ns.Items[i]
+		n.InitSize(key, int32(cookie), int32(size))
+		if err = ns.WriteFrom(n, file); err != nil {
+			goto failed
 		}
-		n = &ns[i]
-		n.Init(key, int32(cookie), buf[tn:tn+rn])
-		n.WriteHeader(buf[tn-needle.HeaderSize:])
-		n.WriteFooter(buf[tn+rn:], false)
-		tn += int(n.TotalSize) // prev needle + header
+		continue
+	failed:
+		file.Close()
+		break
 	}
 	if err == nil {
 		if v = h.s.Volumes[int32(vid)]; v != nil {
-			err = v.Write(ns, buf[:tn])
+			err = v.Write(ns)
 		} else {
 			err = errors.ErrVolumeNotExist
 		}
 	}
-	h.s.FreeBuffer(nb, buf)
-	h.s.FreeNeedle(nn, ns)
+	h.s.FreeNeedles(nn, ns)
 	if err != nil {
 		if uerr, ok = err.(errors.Error); ok {
 			res["ret"] = int(uerr)

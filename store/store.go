@@ -43,8 +43,8 @@ type Store struct {
 	vf          *os.File
 	fvf         *os.File
 	FreeId      int32
-	bp          []sync.Pool       // buffer pool
-	np          []sync.Pool       // needle pool
+	np          sync.Pool         // needle pool
+	nsp         []sync.Pool       // needles pool
 	Volumes     map[int32]*Volume // split volumes lock
 	FreeVolumes []*Volume
 	zk          *Zookeeper
@@ -59,9 +59,8 @@ func NewStore(zk *Zookeeper, c *Config) (s *Store, err error) {
 	s.zk = zk
 	s.conf = c
 	s.FreeId = 0
+	s.nsp = make([]sync.Pool, c.BatchMaxNum+1)
 	s.Volumes = make(map[int32]*Volume, c.StoreVolumeCache)
-	s.bp = make([]sync.Pool, c.BatchMaxNum+1)
-	s.np = make([]sync.Pool, c.BatchMaxNum+1)
 	if s.vf, err = os.OpenFile(c.VolumeIndex, os.O_RDWR|os.O_CREATE|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", c.VolumeIndex, err)
 		s.Close()
@@ -273,34 +272,37 @@ func (s *Store) saveVolumeIndex() (err error) {
 }
 
 // Needle get a needle from sync.Pool.
-func (s *Store) Needle(n int) (ns []needle.Needle) {
-	var i interface{}
-	if i = s.np[n].Get(); i != nil {
-		ns = i.([]needle.Needle)
-		return
+func (s *Store) Needle() *needle.Needle {
+	var n interface{}
+	if n = s.np.Get(); n != nil {
+		return n.(*needle.Needle)
 	}
-	return make([]needle.Needle, n)
+	return &needle.Needle{
+		Buffer: make([]byte, needle.Size(s.conf.NeedleMaxSize)),
+	}
 }
 
 // FreeNeedle free the needle to pool.
-func (s *Store) FreeNeedle(n int, ns []needle.Needle) {
-	s.np[n].Put(ns)
+func (s *Store) FreeNeedle(n *needle.Needle) {
+	s.np.Put(n)
 }
 
-// Buffer get a buffer from sync.Pool.
-func (s *Store) Buffer(n int) (d []byte) {
-	var di interface{}
-	if di = s.bp[n].Get(); di != nil {
-		d = di.([]byte)
-		return
+// Needles get needles from sync.Pool.
+func (s *Store) Needles(i int) *needle.Needles {
+	var n interface{}
+	if n = s.nsp[i].Get(); n != nil {
+		return n.(*needle.Needles)
 	}
-	d = make([]byte, n*s.conf.NeedleMaxSize)
-	return
+	return &needle.Needles{
+		Items:  make([]needle.Needle, i),
+		Buffer: make([]byte, needle.Size(s.conf.NeedleMaxSize)*i),
+	}
 }
 
-// FreeBuffer free the buffer to pool.
-func (s *Store) FreeBuffer(n int, d []byte) {
-	s.bp[n].Put(d)
+// FreeNeedles free the needles to pool.
+func (s *Store) FreeNeedles(i int, n *needle.Needles) {
+	n.TotalSize = 0
+	s.nsp[i].Put(n)
 }
 
 // freeFile get volume block & index free file name.

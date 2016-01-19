@@ -13,7 +13,6 @@ func TestStore(t *testing.T) {
 		z       *Zookeeper
 		v       *Volume
 		err     error
-		buf     []byte
 		data    = []byte("test")
 		n       = &needle.Needle{}
 		bfile   = "./test/_free_block_1"
@@ -76,15 +75,16 @@ func TestStore(t *testing.T) {
 		t.Error("Volume(1) not exist")
 		t.FailNow()
 	}
-	buf = s.Buffer(1)
-	defer s.FreeBuffer(1, buf)
+	n.Buffer = make([]byte, testConf.NeedleMaxSize)
 	n.Init(1, 1, data)
-	n.Write(buf)
-	if err = v.Add(n, buf[:n.TotalSize]); err != nil {
+	n.Write()
+	if err = v.Add(n); err != nil {
 		t.Errorf("v.Add(1) error(%v)", err)
 		t.FailNow()
 	}
-	if err = v.Get(1, 1, buf, n); err != nil {
+	n.Key = 1
+	n.Cookie = 1
+	if err = v.Get(n); err != nil {
 		t.Errorf("v.Get(1) error(%v)", err)
 		t.FailNow()
 	}
@@ -96,11 +96,13 @@ func TestStore(t *testing.T) {
 		t.Error("Volume(2) not exist")
 		t.FailNow()
 	}
-	if err = v.Add(n, buf[:n.TotalSize]); err != nil {
+	if err = v.Add(n); err != nil {
 		t.Errorf("v.Add() error(%v)", err)
 		t.FailNow()
 	}
-	if err = v.Get(1, 1, buf, n); err != nil {
+	n.Key = 1
+	n.Cookie = 1
+	if err = v.Get(n); err != nil {
 		t.Errorf("v.Get(1) error(%v)", err)
 		t.FailNow()
 	}
@@ -112,7 +114,9 @@ func TestStore(t *testing.T) {
 		t.Error("Volume(1) not exist")
 		t.FailNow()
 	}
-	if err = v.Get(1, 1, buf, n); err != nil {
+	n.Key = 1
+	n.Cookie = 1
+	if err = v.Get(n); err != nil {
 		t.Errorf("v.Get(1) error(%v)", err)
 		t.FailNow()
 	}
