@@ -42,12 +42,17 @@ import (
 
 const (
 	// size
-	_magicSize    = 4
-	_cookieSize   = 4
-	_keySize      = 8
-	_flagSize     = 1
-	_sizeSize     = 4
+	// footer
+	_magicSize  = 4
+	_cookieSize = 4
+	_keySize    = 8
+	_flagSize   = 1
+	_sizeSize   = 4
+	// data
+	// footer
+	// magic
 	_checksumSize = 4
+	// padding
 
 	// offset
 	// header
@@ -60,7 +65,9 @@ const (
 
 	KeyOffset  = _keyOffset
 	FlagOffset = _flagOffset
+
 	// footer
+	// _magicOffset  = 0
 	_checksumOffset = _magicOffset + _magicSize
 	_paddingOffset  = _checksumOffset + _checksumSize
 
@@ -97,8 +104,6 @@ var (
 	_footerMagic = []byte{0x87, 0x65, 0x43, 0x21}
 	// flag
 	FlagDelBytes = []byte{FlagDel}
-	// needle min size, which data is one byte
-	MinSize = align(_headerSize + _footerSize + 1)
 )
 
 // init the padding table
@@ -141,13 +146,12 @@ func (ns *Needles) WriteFrom(n *Needle, rd io.Reader) (err error) {
 		dataOffset   = headerOffset + _headerSize
 		footerOffset = dataOffset + n.Size
 		endOffset    = footerOffset + n.FooterSize
+		data         = ns.Buffer[dataOffset:footerOffset]
 	)
 	if err = n.WriteHeader(ns.Buffer[headerOffset:dataOffset]); err == nil {
-		if _, err = rd.Read(ns.Buffer[dataOffset:footerOffset]); err == nil {
-			// data
-			n.Data = ns.Buffer[dataOffset:footerOffset]
-			// checksum
-			n.Checksum = crc32.Update(0, _crc32Table, n.Data)
+		if _, err = rd.Read(data); err == nil {
+			n.Data = data
+			n.Checksum = crc32.Update(0, _crc32Table, data)
 			err = n.WriteFooter(ns.Buffer[footerOffset:endOffset])
 		}
 	}
@@ -188,6 +192,7 @@ func (n *Needle) InitSize(key int64, cookie, size int32) {
 	n.calcSize()
 	n.Key = key
 	n.Cookie = cookie
+	n.Flag = FlagOK
 	n.HeaderMagic = _headerMagic
 	n.FooterMagic = _footerMagic
 	n.Padding = _padding[n.PaddingSize]
@@ -241,7 +246,7 @@ func (n *Needle) ParseData(buf []byte) (err error) {
 
 // ParseFooter parse a needle footer part.
 func (n *Needle) ParseFooter(buf []byte) (err error) {
-	if len(buf) != int(_footerSize+n.PaddingSize) {
+	if len(buf) != int(n.FooterSize) {
 		return errors.ErrNeedleFooterSize
 	}
 	// magic
@@ -262,8 +267,9 @@ func (n *Needle) ParseFooter(buf []byte) (err error) {
 
 // Parse Parse needle from buf bytes.
 func (n *Needle) Parse() (err error) {
-	var dataOffset = _headerSize + n.Size
+	var dataOffset int32
 	if err = n.ParseHeader(n.Buffer[:_headerSize]); err == nil {
+		dataOffset = _headerSize + n.Size
 		if err = n.ParseData(n.Buffer[_headerSize:dataOffset]); err == nil {
 			err = n.ParseFooter(n.Buffer[dataOffset:n.TotalSize])
 		}
@@ -283,7 +289,7 @@ func (n *Needle) WriteHeader(buf []byte) (err error) {
 	// key
 	binary.BigEndian.PutInt64(buf[_keyOffset:_flagOffset], n.Key)
 	// flag
-	buf[_flagOffset] = FlagOK
+	buf[_flagOffset] = n.Flag
 	// size
 	binary.BigEndian.PutInt32(buf[_sizeOffset:_dataOffset], n.Size)
 	return
@@ -300,7 +306,7 @@ func (n *Needle) WriteData(buf []byte) (err error) {
 
 // WriteFooter write needle header into buf bytes.
 func (n *Needle) WriteFooter(buf []byte) (err error) {
-	if len(buf) != int(_footerSize+n.PaddingSize) {
+	if len(buf) != int(n.FooterSize) {
 		return errors.ErrNeedleFooterSize
 	}
 	// magic
@@ -325,13 +331,14 @@ func (n *Needle) Write() (err error) {
 
 // WriteFrom Write needle from io.Reader into buffer.
 func (n *Needle) WriteFrom(rd io.Reader) (err error) {
-	var dataOffset = _headerSize + n.Size
+	var (
+		dataOffset = _headerSize + n.Size
+		data       = n.Buffer[_headerSize:dataOffset]
+	)
 	if err = n.WriteHeader(n.Buffer[:_headerSize]); err == nil {
-		if _, err = rd.Read(n.Buffer[_headerSize:dataOffset]); err == nil {
-			// data
-			n.Data = n.Buffer[_headerSize:dataOffset]
-			// checksum
-			n.Checksum = crc32.Update(0, _crc32Table, n.Data)
+		if _, err = rd.Read(data); err == nil {
+			n.Data = data
+			n.Checksum = crc32.Update(0, _crc32Table, data)
 			err = n.WriteFooter(n.Buffer[dataOffset:n.TotalSize])
 		}
 	}

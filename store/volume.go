@@ -299,6 +299,7 @@ func (v *Volume) Add(n *needle.Needle) (err error) {
 	}
 	if log.V(1) {
 		log.Infof("add needle, offset: %d, size: %d", offset, n.TotalSize)
+		log.Info(n)
 	}
 	if ok {
 		ooffset, _ = needle.Cache(nc)
@@ -339,6 +340,7 @@ func (v *Volume) Write(ns *needle.Needles) (err error) {
 			offset += n.IncrOffset
 			if log.V(1) {
 				log.Infof("add needle, offset: %d, size: %d", offset, n.TotalSize)
+				log.Info(n)
 			}
 		}
 	}

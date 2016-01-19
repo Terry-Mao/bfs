@@ -239,4 +239,5 @@ func TestHTTPAPI(t *testing.T) {
 	if tr.Ret != 1 {
 		t.FailNow()
 	}
+	// TODO add get
 }
