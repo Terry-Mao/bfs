@@ -1,11 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/Terry-Mao/bfs/libs/errors"
 	log "github.com/golang/glog"
 	"net/http"
 	"strconv"
 	"time"
+)
+
+const (
+	PingOk = 0
 )
 
 // StartApi start api http listen.
@@ -18,6 +23,7 @@ func StartApi(addr string, d *Directory) {
 		serveMux.Handle("/get", httpGetHandler{d: d})
 		serveMux.Handle("/upload", httpUploadHandler{d: d})
 		serveMux.Handle("/del", httpDelHandler{d: d})
+		serveMux.Handle("/directory-bfs/ping", httpPingHandler{})
 		if err = http.ListenAndServe(addr, serveMux); err != nil {
 			log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
 			return
@@ -137,6 +143,28 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		} else {
 			res.Ret = errors.RetInternalErr
 		}
+	}
+	return
+}
+
+// httpPingHandler http ping health
+type httpPingHandler struct {
+}
+
+func (h httpPingHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+	var (
+		byteJson []byte
+		res      = map[string]interface{}{"code": PingOk}
+		err      error
+	)
+	if byteJson, err = json.Marshal(res); err != nil {
+		log.Errorf("json.Marshal(\"%v\") failed (%v)", res, err)
+		return
+	}
+	wr.Header().Set("Content-Type", "application/json;charset=utf-8")
+	if _, err = wr.Write(byteJson); err != nil {
+		log.Errorf("HttpWriter Write error(%v)", err)
+		return
 	}
 	return
 }
