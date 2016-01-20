@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/libs/stat"
+	"github.com/Terry-Mao/bfs/store/volume"
 	log "github.com/golang/glog"
 	"net/http"
 	"time"
@@ -29,8 +30,8 @@ func StartStat(addr string, s *Store) {
 		var (
 			err     error
 			data    []byte
-			v       *Volume
-			volumes = make([]*Volume, 0, len(s.Volumes))
+			v       *volume.Volume
+			volumes = make([]*volume.Volume, 0, len(s.Volumes))
 			res     = map[string]interface{}{"ret": errors.RetOK}
 		)
 		for _, v = range s.Volumes {
@@ -57,7 +58,7 @@ func StartStat(addr string, s *Store) {
 // startStat stat the store.
 func startStat(s *Store, info *stat.Info) {
 	var (
-		v     *Volume
+		v     *volume.Volume
 		stat1 *stat.Stats
 		stat  = new(stat.Stats)
 	)

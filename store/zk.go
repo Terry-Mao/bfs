@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/Terry-Mao/bfs/libs/meta"
+	"github.com/Terry-Mao/bfs/store/volume"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
 	"path"
@@ -108,7 +109,7 @@ func (z *Zookeeper) volumePath(id int32) string {
 }
 
 // AddVolume add a volume data in zk.
-func (z *Zookeeper) AddVolume(v *Volume) (err error) {
+func (z *Zookeeper) AddVolume(v *volume.Volume) (err error) {
 	var vpath = z.volumePath(v.Id)
 	if _, err = z.c.Create(vpath, v.Meta(), 0, zk.WorldACL(zk.PermAll)); err != nil {
 		log.Errorf("zk.Create(\"%s\") error(%v)", vpath, err)
@@ -133,7 +134,7 @@ func (z *Zookeeper) DelVolume(id int32) (err error) {
 }
 
 // SetVolume set the data into fpath.
-func (z *Zookeeper) SetVolume(v *Volume) (err error) {
+func (z *Zookeeper) SetVolume(v *volume.Volume) (err error) {
 	var (
 		stat  *zk.Stat
 		vpath = z.volumePath(v.Id)

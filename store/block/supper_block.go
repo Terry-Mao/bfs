@@ -256,7 +256,7 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 		bso    int64
 		fi     os.FileInfo
 		fd     = r.Fd()
-		n      = &needle.Needle{}
+		n      = needle.NewNeedle(b.Options.NeedleMaxSize)
 		rd     = bufio.NewReaderSize(r, b.Options.BufferSize)
 	)
 	if offset == 0 {

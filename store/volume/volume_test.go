@@ -1,18 +1,47 @@
-package main
+package volume
 
 import (
 	"bytes"
 	//"crypto/rand"
 	//"github.com/Terry-Mao/bfs/libs/encoding/binary"
 	"github.com/Terry-Mao/bfs/libs/errors"
+	"github.com/Terry-Mao/bfs/store/block"
+	"github.com/Terry-Mao/bfs/store/index"
 	"github.com/Terry-Mao/bfs/store/needle"
 	//mrand "math/rand"
 	"os"
 	"testing"
+	"time"
 )
 
 const (
 	_16kb = 16*1024 - needle.HeaderSize - needle.FooterSize
+)
+
+var (
+	_vo = Options{
+		Debug:         true,
+		NeedleCache:   10,
+		DeleteChan:    10,
+		CheckSize:     10,
+		CheckInterval: 10,
+		SignalCount:   10,
+		SignalTime:    10 * time.Second,
+	}
+	_bo = block.Options{
+		NeedleMaxSize: _16kb,
+		BufferSize:    _16kb * 9,
+		SyncAtWrite:   10,
+		Syncfilerange: false,
+	}
+	_io = index.Options{
+		MergeAtTime:   10 * time.Second,
+		MergeAtWrite:  10,
+		RingBuffer:    10,
+		BufferSize:    _16kb,
+		SyncAtWrite:   10,
+		Syncfilerange: false,
+	}
 )
 
 func TestVolume(t *testing.T) {
@@ -20,17 +49,17 @@ func TestVolume(t *testing.T) {
 		v     *Volume
 		err   error
 		data  = []byte("test")
-		bfile = "./test/test1"
-		ifile = "./test/test1.idx"
+		bfile = "../test/test1"
+		ifile = "../test/test1.idx"
 		n     = &needle.Needle{}
-		ns    = needle.NewNeedles(3, testConf.NeedleMaxSize)
+		ns    = needle.NewNeedles(3, _bo.NeedleMaxSize)
 		buf   = &bytes.Buffer{}
 	)
 	os.Remove(bfile)
 	os.Remove(ifile)
 	defer os.Remove(bfile)
 	defer os.Remove(ifile)
-	if v, err = NewVolume(1, bfile, ifile, testConf); err != nil {
+	if v, err = NewVolume(1, bfile, ifile, _vo, _bo, _io); err != nil {
 		t.Errorf("NewVolume() error(%v)", err)
 		t.FailNow()
 	}
@@ -41,7 +70,7 @@ func TestVolume(t *testing.T) {
 		t.FailNow()
 	}
 	defer v.Close()
-	n.Buffer = make([]byte, testConf.NeedleMaxSize)
+	n.Buffer = make([]byte, _bo.NeedleMaxSize)
 	n.Init(1, 1, data)
 	n.Write()
 	if err = v.Add(n); err != nil {

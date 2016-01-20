@@ -79,10 +79,13 @@ type Index struct {
 }
 
 // parse parse buffer into indexer.
-func (i *Index) parse(buf []byte) {
+func (i *Index) parse(buf []byte) (err error) {
 	i.Key = binary.BigEndian.Int64(buf)
 	i.Offset = binary.BigEndian.Uint32(buf[_offsetOffset:])
 	i.Size = binary.BigEndian.Int32(buf[_sizeOffset:])
+	if i.Size < 0 {
+		return errors.ErrIndexSize
+	}
 	return
 }
 
@@ -308,7 +311,9 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 		if data, err = rd.Peek(_indexSize); err != nil {
 			break
 		}
-		ix.parse(data)
+		if err = ix.parse(data); err != nil {
+			break
+		}
 		if _, err = rd.Discard(_indexSize); err != nil {
 			break
 		}

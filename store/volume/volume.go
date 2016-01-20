@@ -1,4 +1,4 @@
-package main
+package volume
 
 import (
 	"fmt"
@@ -22,12 +22,12 @@ const (
 	volumeReady  = 1
 )
 
-// Uint32Slice deleted offset sort.
-type Uint32Slice []uint32
+// uint32Slice deleted offset sort.
+type uint32Slice []uint32
 
-func (p Uint32Slice) Len() int           { return len(p) }
-func (p Uint32Slice) Less(i, j int) bool { return p[i] < p[j] }
-func (p Uint32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p uint32Slice) Len() int           { return len(p) }
+func (p uint32Slice) Less(i, j int) bool { return p[i] < p[j] }
+func (p uint32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type CheckNeedle struct {
 	Key    int64 `json:"key"`
@@ -44,7 +44,7 @@ type Volume struct {
 	Block   *block.SuperBlock `json:"block"`
 	Indexer *index.Indexer    `json:"index"`
 	// data
-	conf    *Config
+	Options Options `json:"options"`
 	needles map[int64]int64
 	ch      chan uint32
 	// compact
@@ -54,46 +54,31 @@ type Volume struct {
 	compactKeys   []int64
 	// status
 	closed bool
-	Debug  bool
 	// check
-	CheckNeedles  []CheckNeedle `json:"check_needles"`
-	checkMaxIdx   int
-	checkCurIdx   int
-	check         int
-	checkInterval int
+	CheckNeedles []CheckNeedle `json:"check_needles"`
+	checkMaxIdx  int
+	checkCurIdx  int
+	check        int
 }
 
 // NewVolume new a volume and init it.
-func NewVolume(id int32, bfile, ifile string, c *Config) (v *Volume, err error) {
+func NewVolume(id int32, bfile, ifile string, vo Options, bo block.Options, io index.Options) (v *Volume, err error) {
 	v = &Volume{}
 	v.Id = id
-	v.conf = c
-	v.Debug = c.DebugVolume
+	v.Options = vo
 	v.closed = false
 	v.Stats = &stat.Stats{}
-	v.needles = make(map[int64]int64, c.VolumeNeedleCache)
-	v.ch = make(chan uint32, c.VolumeDelChan)
+	v.needles = make(map[int64]int64, vo.NeedleCache)
+	v.ch = make(chan uint32, vo.DeleteChan)
 	v.compactKeys = []int64{}
 	v.checkCurIdx = 0
-	v.checkMaxIdx = c.VolumeCheckSize - 1
+	v.checkMaxIdx = vo.CheckSize - 1
 	v.check = 0
-	v.checkInterval = c.VolumeCheckInterval
-	v.CheckNeedles = make([]CheckNeedle, c.VolumeCheckSize)
-	if v.Block, err = block.NewSuperBlock(bfile, block.Options{
-		BufferSize:    c.NeedleMaxSize * c.BatchMaxNum,
-		SyncAtWrite:   c.SuperBlockSync,
-		Syncfilerange: c.SuperBlockSyncfilerange,
-	}); err != nil {
+	v.CheckNeedles = make([]CheckNeedle, vo.CheckSize)
+	if v.Block, err = block.NewSuperBlock(bfile, bo); err != nil {
 		return nil, err
 	}
-	if v.Indexer, err = index.NewIndexer(ifile, index.Options{
-		MergeAtTime:   c.IndexMergeTime,
-		MergeAtWrite:  c.IndexMerge,
-		RingBuffer:    c.IndexRingBuffer,
-		BufferSize:    c.IndexBufferio,
-		SyncAtWrite:   c.IndexSync,
-		Syncfilerange: c.IndexSyncfilerange,
-	}); err != nil {
+	if v.Indexer, err = index.NewIndexer(ifile, io); err != nil {
 		v.Close()
 		return nil, err
 	}
@@ -114,10 +99,6 @@ func (v *Volume) init() (err error) {
 	)
 	// recovery from index
 	if err = v.Indexer.Recovery(func(ix *index.Index) error {
-		if ix.Size > int32(v.conf.NeedleMaxSize) || ix.Size < 0 {
-			log.Error("recovery index: %s error(%v)", ix, errors.ErrIndexSize)
-			return errors.ErrIndexSize
-		}
 		// must no less than last offset
 		if ix.Offset < lastOffset {
 			log.Error("recovery index: %s lastoffset: %d error(%v)", ix, lastOffset, errors.ErrIndexOffset)
@@ -137,10 +118,6 @@ func (v *Volume) init() (err error) {
 	}
 	// recovery from super block
 	if err = v.Block.Recovery(offset, func(n *needle.Needle, so, eo uint32) (err1 error) {
-		if n.TotalSize > int32(v.conf.NeedleMaxSize) || n.TotalSize < 0 {
-			log.Error("recovery needle: %s error(%v)", n, errors.ErrNeedleSize)
-			return errors.ErrNeedleSize
-		}
 		if n.Flag == needle.FlagOK {
 			if err1 = v.Indexer.Write(n.Key, so, n.TotalSize); err1 != nil {
 				return
@@ -264,7 +241,7 @@ func (v *Volume) Get(n *needle.Needle) (err error) {
 
 // addCheck add a check key for pitchfork check block health.
 func (v *Volume) addCheck(key int64, cookie int32) {
-	if v.check++; v.check >= v.checkInterval {
+	if v.check++; v.check >= v.Options.CheckInterval {
 		v.check = 0
 		if v.checkCurIdx > v.checkMaxIdx {
 			v.checkCurIdx = 0
@@ -418,16 +395,16 @@ func (v *Volume) delproc() {
 		select {
 		case offset = <-v.ch:
 			if exit = (offset == volumeFinish); !exit {
-				if offsets = append(offsets, offset); len(offsets) < v.conf.VolumeSigCnt {
+				if offsets = append(offsets, offset); len(offsets) < v.Options.SignalCount {
 					continue
 				}
 			}
-		case <-time.After(v.conf.VolumeSigTime):
+		case <-time.After(v.Options.SignalTime):
 			exit = false
 		}
 		if len(offsets) > 0 {
 			// sort let the disk seqence write
-			sort.Sort(Uint32Slice(offsets))
+			sort.Sort(uint32Slice(offsets))
 			for _, offset = range offsets {
 				now = time.Now().UnixNano()
 				if err = v.Block.Del(offset); err != nil {
@@ -452,14 +429,8 @@ func (v *Volume) delproc() {
 
 // compact compact v to new v.
 func (v *Volume) compact(nv *Volume) (err error) {
-	var buf = make([]byte, v.conf.NeedleMaxSize)
 	err = v.Block.Compact(v.CompactOffset, func(n *needle.Needle, so, eo uint32) (err1 error) {
-		if n.Size > int32(v.conf.NeedleMaxSize) || n.TotalSize < 0 {
-			err1 = errors.ErrNeedleSize
-			return
-		}
 		if n.Flag != needle.FlagDel {
-			n.Buffer = buf
 			if err1 = n.Write(); err1 == nil {
 				if err1 = nv.Add(n); err1 != nil {
 					return

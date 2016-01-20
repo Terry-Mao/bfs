@@ -192,6 +192,9 @@ func (n *Needle) ParseHeader(buf []byte) (err error) {
 	}
 	// size
 	n.Size = binary.BigEndian.Int32(buf[_sizeOffset:_dataOffset])
+	if n.Size < 0 {
+		return errors.ErrNeedleSize
+	}
 	n.calcSize()
 	return
 }

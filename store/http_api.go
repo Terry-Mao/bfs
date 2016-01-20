@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/Terry-Mao/bfs/libs/errors"
 	"github.com/Terry-Mao/bfs/store/needle"
+	"github.com/Terry-Mao/bfs/store/volume"
 	log "github.com/golang/glog"
 	"mime/multipart"
 	"net/http"
@@ -60,13 +61,13 @@ type httpGetHandler struct {
 
 func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		now              = time.Now()
-		v                *Volume
+		v                *volume.Volume
 		n                *needle.Needle
 		err              error
 		vid, key, cookie int64
 		ret              = http.StatusOK
 		params           = r.URL.Query()
+		now              = time.Now()
 	)
 	if r.Method != "GET" && r.Method != "HEAD" {
 		ret = http.StatusMethodNotAllowed
@@ -133,7 +134,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		size   int64
 		err    error
 		str    string
-		v      *Volume
+		v      *volume.Volume
 		n      *needle.Needle
 		file   multipart.File
 		res    = map[string]interface{}{}
@@ -214,7 +215,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		str     string
 		keys    []string
 		cookies []string
-		v       *Volume
+		v       *volume.Volume
 		ns      *needle.Needles
 		file    multipart.File
 		fh      *multipart.FileHeader
@@ -301,7 +302,7 @@ type httpDelHandler struct {
 
 func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		v        *Volume
+		v        *volume.Volume
 		err      error
 		key, vid int64
 		str      string
