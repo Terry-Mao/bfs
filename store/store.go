@@ -590,6 +590,7 @@ func newVolume(id int32, bfile, ifile string, c *Config) (v *volume.Volume, err 
 			Syncfilerange: c.SuperBlockSyncfilerange,
 		},
 		index.Options{
+			NeedleMaxSize: c.NeedleMaxSize,
 			MergeAtTime:   c.IndexMergeTime,
 			MergeAtWrite:  c.IndexMerge,
 			RingBuffer:    c.IndexRingBuffer,

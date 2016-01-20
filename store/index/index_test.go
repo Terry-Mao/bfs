@@ -25,6 +25,7 @@ func TestIndex(t *testing.T) {
 		RingBuffer:    10,
 		SyncAtWrite:   10,
 		Syncfilerange: true,
+		NeedleMaxSize: 4 * 1024 * 1024,
 	}); err != nil {
 		t.Errorf("NewIndexer() error(%v)", err)
 		t.FailNow()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/Terry-Mao/bfs/libs/encoding/binary"
 	"github.com/Terry-Mao/bfs/libs/errors"
+	"github.com/Terry-Mao/bfs/store/needle"
 	myos "github.com/Terry-Mao/bfs/store/os"
 	log "github.com/golang/glog"
 	"io"
@@ -107,6 +108,8 @@ func NewIndexer(file string, options Options) (i *Indexer, err error) {
 	i.closed = false
 	i.syncOffset = 0
 	i.Options = options
+	// must align size
+	i.Options.NeedleMaxSize = needle.Size(i.Options.NeedleMaxSize)
 	i.ring = NewRing(options.RingBuffer)
 	i.bn = 0
 	i.buf = make([]byte, options.BufferSize)
@@ -312,6 +315,11 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 			break
 		}
 		if err = ix.parse(data); err != nil {
+			break
+		}
+		if ix.Size > int32(i.Options.NeedleMaxSize) {
+			log.Error("scan index: %s error(%v)", ix, errors.ErrIndexSize)
+			err = errors.ErrIndexSize
 			break
 		}
 		if _, err = rd.Discard(_indexSize); err != nil {

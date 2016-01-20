@@ -30,6 +30,7 @@ func TestSuperBlock(t *testing.T) {
 		BufferSize:    4 * 1024 * 1024,
 		SyncAtWrite:   1024,
 		Syncfilerange: true,
+		NeedleMaxSize: 4 * 1024 * 1024,
 	}); err != nil {
 		t.Errorf("NewSuperBlock(\"%s\") error(%v)", file, err)
 		t.FailNow()
@@ -40,6 +41,7 @@ func TestSuperBlock(t *testing.T) {
 		BufferSize:    4 * 1024 * 1024,
 		SyncAtWrite:   1024,
 		Syncfilerange: true,
+		NeedleMaxSize: 4 * 1024 * 1024,
 	}); err != nil {
 		t.Errorf("NewSuperBlock(\"%s\") error(%v)", file, err)
 		t.FailNow()

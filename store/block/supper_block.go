@@ -285,6 +285,11 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 			}
 			break
 		}
+		if n.Size > int32(b.Options.NeedleMaxSize) {
+			log.Error("scan block: %s error(%v)", n, errors.ErrNeedleSize)
+			err = errors.ErrNeedleSize
+			break
+		}
 		if log.V(1) {
 			log.Info(n.String())
 		}

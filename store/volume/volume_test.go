@@ -35,6 +35,7 @@ var (
 		Syncfilerange: false,
 	}
 	_io = index.Options{
+		NeedleMaxSize: _16kb,
 		MergeAtTime:   10 * time.Second,
 		MergeAtWrite:  10,
 		RingBuffer:    10,

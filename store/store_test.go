@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/Terry-Mao/bfs/store/needle"
+	"github.com/Terry-Mao/bfs/store/volume"
 	"os"
 	"testing"
 	"time"
@@ -11,7 +12,7 @@ func TestStore(t *testing.T) {
 	var (
 		s       *Store
 		z       *Zookeeper
-		v       *Volume
+		v       *volume.Volume
 		err     error
 		data    = []byte("test")
 		n       = &needle.Needle{}

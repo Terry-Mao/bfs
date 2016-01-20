@@ -140,16 +140,6 @@ func (v *Volume) init() (err error) {
 	return
 }
 
-// Lock lock the volume, used in multi write needles.
-func (v *Volume) Lock() {
-	v.lock.Lock()
-}
-
-// Unlock lock the volume, used in multi write needles.
-func (v *Volume) Unlock() {
-	v.lock.Unlock()
-}
-
 // Meta get index meta data.
 func (v *Volume) Meta() []byte {
 	return []byte(fmt.Sprintf("%s,%s,%d", v.Block.File, v.Indexer.File, v.Id))

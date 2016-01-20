@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/Terry-Mao/bfs/store/volume"
 	"os"
 	"testing"
 	"time"
@@ -9,7 +10,7 @@ import (
 
 func TestZookeeper(t *testing.T) {
 	var (
-		v        *Volume
+		v        *volume.Volume
 		zk       *Zookeeper
 		err      error
 		lines    []string
@@ -29,7 +30,7 @@ func TestZookeeper(t *testing.T) {
 	}
 	zk.DelVolume(1)
 	zk.DelVolume(2)
-	if v, err = NewVolume(1, bfile, ifile, testConf); err != nil {
+	if v, err = newVolume(1, bfile, ifile, testConf); err != nil {
 		t.Errorf("NewVolume() error(%v)", err)
 		t.FailNow()
 	}
