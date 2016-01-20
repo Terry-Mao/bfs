@@ -2,23 +2,35 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/Terry-Mao/bfs/libs/errors"
 	log "github.com/golang/glog"
 	"net/http"
 	"time"
 )
 
-func HttpPostWriter(r *http.Request, wr http.ResponseWriter, start time.Time, result map[string]interface{}) {
+func HttpPostWriter(r *http.Request, wr http.ResponseWriter, start time.Time, err *error, result map[string]interface{}) {
 	var (
-		err      error
+		ok       bool
 		byteJson []byte
-		ret      = result["ret"].(int)
+		err1     error
+		uerr     errors.Error
+		ret      = errors.RetOK
 	)
-	if byteJson, err = json.Marshal(result); err != nil {
-		log.Errorf("json.Marshal(\"%v\") failed (%v)", result, err)
+	if *err != nil {
+		if uerr, ok = (*err).(errors.Error); ok {
+			ret = int(uerr)
+		} else {
+			ret = errors.RetInternalErr
+		}
+	}
+	result["ret"] = ret
+	if byteJson, err1 = json.Marshal(result); err1 != nil {
+		log.Errorf("json.Marshal(\"%v\") failed (%v)", result, err1)
 		return
 	}
 	wr.Header().Set("Content-Type", "application/json;charset=utf-8")
-	if _, err = wr.Write(byteJson); err != nil {
+	if _, err1 = wr.Write(byteJson); err1 != nil {
+		log.Errorf("http Write() error(%v)", err1)
 		return
 	}
 	log.Infof("%s path:%s(params:%s,time:%f,ret:%v)", r.Method,

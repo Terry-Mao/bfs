@@ -221,23 +221,5 @@ func TestHTTPAPI(t *testing.T) {
 	if tr.Ret != 1 {
 		t.FailNow()
 	}
-	buf.Reset()
-	buf.WriteString("vid=1&keys=22&keys=23")
-	if resp, err = http.Post("http://localhost:6062/dels", "application/x-www-form-urlencoded", buf); err != nil {
-		t.Errorf("http.Post() error(%v)", err)
-		t.FailNow()
-	}
-	defer resp.Body.Close()
-	if body, err = ioutil.ReadAll(resp.Body); err != nil {
-		t.Errorf("ioutil.ReadAll() error(%v)", err)
-		t.FailNow()
-	}
-	if err = json.Unmarshal(body, tr); err != nil {
-		t.Errorf("json.Unmarshal() error(%v)", err)
-		t.FailNow()
-	}
-	if tr.Ret != 1 {
-		t.FailNow()
-	}
 	// TODO add get
 }

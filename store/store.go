@@ -277,9 +277,7 @@ func (s *Store) Needle() *needle.Needle {
 	if n = s.np.Get(); n != nil {
 		return n.(*needle.Needle)
 	}
-	return &needle.Needle{
-		Buffer: make([]byte, needle.Size(s.conf.NeedleMaxSize)),
-	}
+	return needle.NewNeedle(s.conf.NeedleMaxSize)
 }
 
 // FreeNeedle free the needle to pool.
@@ -293,16 +291,13 @@ func (s *Store) Needles(i int) *needle.Needles {
 	if n = s.nsp[i].Get(); n != nil {
 		return n.(*needle.Needles)
 	}
-	return &needle.Needles{
-		Items:  make([]needle.Needle, i),
-		Buffer: make([]byte, needle.Size(s.conf.NeedleMaxSize)*i),
-	}
+	return needle.NewNeedles(i, s.conf.NeedleMaxSize)
 }
 
 // FreeNeedles free the needles to pool.
-func (s *Store) FreeNeedles(i int, n *needle.Needles) {
-	n.TotalSize = 0
-	s.nsp[i].Put(n)
+func (s *Store) FreeNeedles(i int, ns *needle.Needles) {
+	ns.Reset()
+	s.nsp[i].Put(ns)
 }
 
 // freeFile get volume block & index free file name.

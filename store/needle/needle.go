@@ -1,6 +1,7 @@
 package needle
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"github.com/Terry-Mao/bfs/libs/encoding/binary"
@@ -115,50 +116,6 @@ func init() {
 	return
 }
 
-// Needles is needle list.
-type Needles struct {
-	Items     []Needle
-	Buffer    []byte
-	TotalSize int32
-}
-
-// Write Write needle into buffer.
-func (ns *Needles) Write(n *Needle) (err error) {
-	var (
-		headerOffset = ns.TotalSize
-		dataOffset   = headerOffset + _headerSize
-		footerOffset = dataOffset + n.Size
-		endOffset    = footerOffset + n.FooterSize
-	)
-	if err = n.WriteHeader(ns.Buffer[headerOffset:dataOffset]); err == nil {
-		if err = n.WriteData(ns.Buffer[dataOffset:footerOffset]); err == nil {
-			err = n.WriteFooter(ns.Buffer[footerOffset:endOffset])
-		}
-	}
-	ns.TotalSize += n.TotalSize
-	return
-}
-
-// WriteFrom Write needle from io.Reader into buffer.
-func (ns *Needles) WriteFrom(n *Needle, rd io.Reader) (err error) {
-	var (
-		headerOffset = ns.TotalSize
-		dataOffset   = headerOffset + _headerSize
-		footerOffset = dataOffset + n.Size
-		endOffset    = footerOffset + n.FooterSize
-		data         = ns.Buffer[dataOffset:footerOffset]
-	)
-	if err = n.WriteHeader(ns.Buffer[headerOffset:dataOffset]); err == nil {
-		if _, err = rd.Read(data); err == nil {
-			n.Data = data
-			n.Checksum = crc32.Update(0, _crc32Table, data)
-			err = n.WriteFooter(ns.Buffer[footerOffset:endOffset])
-		}
-	}
-	ns.TotalSize += n.TotalSize
-	return
-}
-
 // Needle is a photo data stored in disk.
 type Needle struct {
 	HeaderMagic []byte
@@ -178,6 +135,13 @@ type Needle struct {
 	Buffer     []byte // needle buffer holder
 }
 
+// NewNeedle new a needle.
+func NewNeedle(size int) (n *Needle) {
+	n = new(Needle)
+	n.Buffer = make([]byte, Size(size))
+	return
+}
+
 func (n *Needle) calcSize() {
 	n.TotalSize = int32(_headerSize + n.Size + _footerSize)
 	n.PaddingSize = align(n.TotalSize) - n.TotalSize
@@ -186,8 +150,8 @@ func (n *Needle) calcSize() {
 	n.IncrOffset = NeedleOffset(int64(n.TotalSize))
 }
 
-// InitSize parse needle from specified size.
-func (n *Needle) InitSize(key int64, cookie, size int32) {
+// initSize parse needle from specified size.
+func (n *Needle) initSize(key int64, cookie, size int32) {
 	n.Size = size
 	n.calcSize()
 	n.Key = key
@@ -201,7 +165,7 @@ func (n *Needle) InitSize(key int64, cookie, size int32) {
 
 // Init parse needle from data.
 func (n *Needle) Init(key int64, cookie int32, data []byte) {
-	n.InitSize(key, cookie, int32(len(data)))
+	n.initSize(key, cookie, int32(len(data)))
 	n.Data = data
 	n.Checksum = crc32.Update(0, _crc32Table, data)
 	return
@@ -277,6 +241,40 @@ func (n *Needle) Parse() (err error) {
 	return
 }
 
+// Parse Parse needle from bufio.
+func (n *Needle) ParseFrom(rd *bufio.Reader) (err error) {
+	var data []byte
+	// header
+	if data, err = rd.Peek(HeaderSize); err != nil {
+		return
+	}
+	if err = n.ParseHeader(data); err != nil {
+		return
+	}
+	if _, err = rd.Discard(HeaderSize); err != nil {
+		return
+	}
+	// data
+	if data, err = rd.Peek(int(n.Size)); err != nil {
+		return
+	}
+	if err = n.ParseData(data); err != nil {
+		return
+	}
+	if _, err = rd.Discard(int(n.Size)); err != nil {
+		return
+	}
+	// footer
+	if data, err = rd.Peek(int(n.FooterSize)); err != nil {
+		return
+	}
+	if err = n.ParseFooter(data); err != nil {
+		return
+	}
+	_, err = rd.Discard(int(n.FooterSize))
+	return
+}
+
 // WriteHeader write needle header into buf bytes.
 func (n *Needle) WriteHeader(buf []byte) (err error) {
 	if len(buf) != int(_headerSize) {
@@ -330,11 +328,14 @@ func (n *Needle) Write() (err error) {
 }
 
 // WriteFrom Write needle from io.Reader into buffer.
-func (n *Needle) WriteFrom(rd io.Reader) (err error) {
+func (n *Needle) WriteFrom(key int64, cookie, size int32, rd io.Reader) (err error) {
 	var (
-		dataOffset = _headerSize + n.Size
-		data       = n.Buffer[_headerSize:dataOffset]
+		dataOffset int32
+		data       []byte
 	)
+	n.initSize(key, cookie, size)
+	dataOffset = _headerSize + n.Size
+	data = n.Buffer[_headerSize:dataOffset]
 	if err = n.WriteHeader(n.Buffer[:_headerSize]); err == nil {
 		if _, err = rd.Read(data); err == nil {
 			n.Data = data

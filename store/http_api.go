@@ -15,6 +15,25 @@ type sizer interface {
 	Size() int64
 }
 
+// fileSize get multipart.File size
+func fileSize(file multipart.File) (size int64, err error) {
+	var (
+		ok bool
+		sr sizer
+		fr *os.File
+		fi os.FileInfo
+	)
+	if sr, ok = file.(sizer); ok {
+		size = sr.Size()
+	} else if fr, ok = file.(*os.File); ok {
+		if fi, err = fr.Stat(); err != nil {
+			return
+		}
+		size = fi.Size()
+	}
+	return
+}
+
 // StartApi start api http listen.
 func StartApi(addr string, s *Store, c *Config) {
 	go func() {
@@ -26,7 +45,6 @@ func StartApi(addr string, s *Store, c *Config) {
 		serveMux.Handle("/upload", httpUploadHandler{s: s, c: c})
 		serveMux.Handle("/uploads", httpUploadsHandler{s: s, c: c})
 		serveMux.Handle("/del", httpDelHandler{s: s})
-		serveMux.Handle("/dels", httpDelsHandler{s: s, c: c})
 		if err = http.ListenAndServe(addr, serveMux); err != nil {
 			log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
 			return
@@ -109,7 +127,6 @@ type httpUploadHandler struct {
 
 func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
-		ok     bool
 		vid    int64
 		key    int64
 		cookie int64
@@ -119,65 +136,57 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		v      *Volume
 		n      *needle.Needle
 		file   multipart.File
-		sr     sizer
-		fr     *os.File
-		fi     os.FileInfo
-		uerr   errors.Error
-		res    = map[string]interface{}{"ret": errors.RetOK}
+		res    = map[string]interface{}{}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	defer HttpPostWriter(r, wr, time.Now(), res)
+	defer HttpPostWriter(r, wr, time.Now(), &err, res)
 	// check total content-length
 	if size, err = strconv.ParseInt(r.Header.Get("Content-Length"), 10, 64); err != nil {
-		res["ret"] = errors.RetInternalErr
+		err = errors.ErrInternal
 		return
 	}
 	if size > int64(h.c.NeedleMaxSize) {
-		res["ret"] = errors.RetNeedleTooLarge
+		err = errors.ErrNeedleTooLarge
 		return
 	}
 	str = r.FormValue("vid")
 	if vid, err = strconv.ParseInt(str, 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
-		res["ret"] = errors.RetParamErr
+		err = errors.ErrParam
 		return
 	}
 	str = r.FormValue("key")
 	if key, err = strconv.ParseInt(str, 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
-		res["ret"] = errors.RetParamErr
+		err = errors.ErrParam
 		return
 	}
 	str = r.FormValue("cookie")
 	if cookie, err = strconv.ParseInt(str, 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
-		res["ret"] = errors.RetParamErr
+		err = errors.ErrParam
 		return
 	}
 	if file, _, err = r.FormFile("file"); err != nil {
-		res["ret"] = errors.RetInternalErr
+		log.Errorf("r.FormFile() error(%v)", err)
+		err = errors.ErrInternal
 		return
 	}
 	defer file.Close()
-	if sr, ok = file.(sizer); ok {
-		size = sr.Size()
-	} else if fr, ok = file.(*os.File); ok {
-		if fi, err = fr.Stat(); err != nil {
-			res["ret"] = errors.RetInternalErr
-			return
-		}
-		size = fi.Size()
+	if size, err = fileSize(file); err != nil {
+		log.Errorf("fileSize() error(%v)", err)
+		err = errors.ErrInternal
+		return
 	}
 	if size > int64(h.c.NeedleMaxSize) {
-		res["ret"] = errors.RetNeedleTooLarge
+		err = errors.ErrNeedleTooLarge
 		return
 	}
 	n = h.s.Needle()
-	n.InitSize(key, int32(cookie), int32(size))
-	if err = n.WriteFrom(file); err == nil {
+	if err = n.WriteFrom(key, int32(cookie), int32(size), file); err == nil {
 		if v = h.s.Volumes[int32(vid)]; v != nil {
 			err = v.Add(n)
 		} else {
@@ -185,13 +194,6 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.s.FreeNeedle(n)
-	if err != nil {
-		if uerr, ok = err.(errors.Error); ok {
-			res["ret"] = int(uerr)
-		} else {
-			res["ret"] = errors.RetInternalErr
-		}
-	}
 	return
 }
 
@@ -204,7 +206,6 @@ type httpUploadsHandler struct {
 func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		i, nn   int
-		ok      bool
 		err     error
 		vid     int64
 		key     int64
@@ -213,50 +214,45 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		str     string
 		keys    []string
 		cookies []string
-		sr      sizer
-		fr      *os.File
-		fi      os.FileInfo
 		v       *Volume
-		n       *needle.Needle
 		ns      *needle.Needles
-		uerr    errors.Error
 		file    multipart.File
 		fh      *multipart.FileHeader
 		fhs     []*multipart.FileHeader
-		res     = map[string]interface{}{"ret": errors.RetOK}
+		res     = map[string]interface{}{}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	defer HttpPostWriter(r, wr, time.Now(), res)
+	defer HttpPostWriter(r, wr, time.Now(), &err, res)
 	// check total content-length
 	if size, err = strconv.ParseInt(r.Header.Get("Content-Length"), 10, 64); err != nil {
-		res["ret"] = errors.RetInternalErr
+		err = errors.ErrInternal
 		return
 	}
 	if size > int64(h.c.NeedleMaxSize*h.c.BatchMaxNum) {
-		res["ret"] = errors.RetNeedleTooLarge
+		err = errors.ErrInternal
 		return
 	}
 	str = r.FormValue("vid")
 	if vid, err = strconv.ParseInt(str, 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
-		res["ret"] = errors.RetParamErr
+		err = errors.ErrParam
 		return
 	}
 	keys = r.MultipartForm.Value["keys"]
 	cookies = r.MultipartForm.Value["cookies"]
 	if len(keys) != len(cookies) {
 		log.Errorf("param length not match, keys: %d, cookies: %d", len(keys), len(cookies))
-		res["ret"] = errors.RetParamErr
+		err = errors.ErrParam
 		return
 	}
 	fhs = r.MultipartForm.File["file"]
 	nn = len(fhs)
 	if len(keys) != nn {
 		log.Errorf("param length not match, keys: %d, cookies: %d, files: %d", len(keys), len(cookies), len(fhs))
-		res["ret"] = errors.RetParamErr
+		err = errors.ErrParam
 		return
 	}
 	ns = h.s.Needles(nn)
@@ -275,28 +271,18 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			log.Errorf("fh.Open() error(%v)", err)
 			break
 		}
+		defer file.Close()
 		// check size
-		if sr, ok = file.(sizer); ok {
-			size = sr.Size()
-		} else if fr, ok = file.(*os.File); ok {
-			if fi, err = fr.Stat(); err != nil {
-				goto failed
-			}
-			size = fi.Size()
+		if size, err = fileSize(file); err != nil {
+			break
 		}
 		if size > int64(h.c.NeedleMaxSize) {
 			err = errors.ErrNeedleTooLarge
-			goto failed
+			break
 		}
-		n = &ns.Items[i]
-		n.InitSize(key, int32(cookie), int32(size))
-		if err = ns.WriteFrom(n, file); err != nil {
-			goto failed
+		if err = ns.WriteFrom(key, int32(cookie), int32(size), file); err != nil {
+			break
 		}
-		continue
-	failed:
-		file.Close()
-		break
 	}
 	if err == nil {
 		if v = h.s.Volumes[int32(vid)]; v != nil {
@@ -306,13 +292,6 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.s.FreeNeedles(nn, ns)
-	if err != nil {
-		if uerr, ok = err.(errors.Error); ok {
-			res["ret"] = int(uerr)
-		} else {
-			res["ret"] = errors.RetInternalErr
-		}
-	}
 	return
 }
 
@@ -323,94 +302,32 @@ type httpDelHandler struct {
 func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var (
 		v        *Volume
-		ok       bool
 		err      error
 		key, vid int64
 		str      string
-		uerr     errors.Error
-		res      = map[string]interface{}{"ret": errors.RetOK}
+		res      = map[string]interface{}{}
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	defer HttpPostWriter(r, wr, time.Now(), res)
+	defer HttpPostWriter(r, wr, time.Now(), &err, res)
 	str = r.PostFormValue("key")
 	if key, err = strconv.ParseInt(str, 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
-		res["ret"] = errors.RetParamErr
+		err = errors.ErrParam
 		return
 	}
 	str = r.PostFormValue("vid")
 	if vid, err = strconv.ParseInt(str, 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
-		res["ret"] = errors.RetParamErr
+		err = errors.ErrParam
 		return
 	}
 	if v = h.s.Volumes[int32(vid)]; v != nil {
 		err = v.Del(key)
 	} else {
 		err = errors.ErrVolumeNotExist
-	}
-	if err != nil {
-		if uerr, ok = err.(errors.Error); ok {
-			res["ret"] = int(uerr)
-		} else {
-			res["ret"] = errors.RetInternalErr
-		}
-	}
-	return
-}
-
-type httpDelsHandler struct {
-	s *Store
-	c *Config
-}
-
-func (h httpDelsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
-	var (
-		v        *Volume
-		ok       bool
-		err      error
-		str      string
-		key, vid int64
-		keyStrs  []string
-		uerr     errors.Error
-		res      = map[string]interface{}{"ret": errors.RetOK}
-	)
-	if r.Method != "POST" {
-		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	defer HttpPostWriter(r, wr, time.Now(), res)
-	str = r.PostFormValue("vid")
-	if vid, err = strconv.ParseInt(str, 10, 32); err != nil {
-		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
-		res["ret"] = errors.RetParamErr
-		return
-	}
-	if keyStrs = r.PostForm["keys"]; len(keyStrs) > h.c.BatchMaxNum {
-		res["ret"] = errors.RetDelMaxFile
-		return
-	}
-	if v = h.s.Volumes[int32(vid)]; v != nil {
-		for _, str = range keyStrs {
-			if key, err = strconv.ParseInt(str, 10, 64); err == nil {
-				err = v.Del(key)
-			} else {
-				log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
-				err = errors.ErrParam
-			}
-		}
-	} else {
-		err = errors.ErrVolumeNotExist
-	}
-	if err != nil {
-		if uerr, ok = err.(errors.Error); ok {
-			res["ret"] = int(uerr)
-		} else {
-			res["ret"] = errors.RetInternalErr
-		}
 	}
 	return
 }

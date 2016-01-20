@@ -45,6 +45,7 @@ var (
 		RetNeedleDataSize:    "needle data size",
 		RetNeedleFooterSize:  "needle footer size",
 		RetNeedlePaddingSize: "needle padding size",
+		RetNeedleFull:        "needle full",
 		// ring
 		RetRingEmpty: "index ring buffer empty",
 		RetRingFull:  "index ring buffer full",

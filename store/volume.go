@@ -326,9 +326,9 @@ func (v *Volume) Write(ns *needle.Needles) (err error) {
 	)
 	v.lock.Lock()
 	offset = v.Block.Offset
-	if err = v.Block.Write(ns.Buffer[:ns.TotalSize]); err == nil {
-		for i = 0; i < len(ns.Items); i++ {
-			n = &ns.Items[i]
+	if err = v.Block.Write(ns.Buffer()); err == nil {
+		for i = 0; i < ns.Num; i++ {
+			n = ns.Needle(i)
 			if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err != nil {
 				break
 			}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	//"crypto/rand"
 	//"github.com/Terry-Mao/bfs/libs/encoding/binary"
 	"github.com/Terry-Mao/bfs/libs/errors"
@@ -22,10 +23,8 @@ func TestVolume(t *testing.T) {
 		bfile = "./test/test1"
 		ifile = "./test/test1.idx"
 		n     = &needle.Needle{}
-		ns    = &needle.Needles{
-			Items:  make([]needle.Needle, 3),
-			Buffer: make([]byte, testConf.NeedleMaxSize*3),
-		}
+		ns    = needle.NewNeedles(3, testConf.NeedleMaxSize)
+		buf   = &bytes.Buffer{}
 	)
 	os.Remove(bfile)
 	os.Remove(ifile)
@@ -65,21 +64,18 @@ func TestVolume(t *testing.T) {
 		t.Errorf("Add() error(%v)", err)
 		t.FailNow()
 	}
-	n = &ns.Items[0]
-	n.Init(4, 4, data)
-	if err = ns.Write(n); err != nil {
+	buf.Write(data)
+	if err = ns.WriteFrom(4, 4, 4, buf); err != nil {
 		t.Errorf("ns.Write() error(%v)", err)
 		t.FailNow()
 	}
-	n = &ns.Items[1]
-	n.Init(5, 5, data)
-	if err = ns.Write(n); err != nil {
+	buf.Write(data)
+	if err = ns.WriteFrom(5, 5, 4, buf); err != nil {
 		t.Errorf("ns.Write() error(%v)", err)
 		t.FailNow()
 	}
-	n = &ns.Items[2]
-	n.Init(6, 6, data)
-	if err = ns.Write(n); err != nil {
+	buf.Write(data)
+	if err = ns.WriteFrom(6, 6, 4, buf); err != nil {
 		t.Errorf("ns.Write() error(%v)", err)
 		t.FailNow()
 	}

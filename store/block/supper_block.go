@@ -252,7 +252,6 @@ func (b *SuperBlock) Del(offset uint32) (err error) {
 // Scan scan a block file.
 func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uint32, uint32) error) (err error) {
 	var (
-		data   []byte
 		so, eo uint32
 		bso    int64
 		fi     os.FileInfo
@@ -280,34 +279,10 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 		return
 	}
 	for {
-		// header
-		if data, err = rd.Peek(needle.HeaderSize); err != nil {
-			break
-		}
-		if err = n.ParseHeader(data); err != nil {
-			break
-		}
-		if _, err = rd.Discard(needle.HeaderSize); err != nil {
-			break
-		}
-		// data
-		if data, err = rd.Peek(int(n.Size)); err != nil {
-			break
-		}
-		if err = n.ParseData(data); err != nil {
-			break
-		}
-		if _, err = rd.Discard(int(n.Size)); err != nil {
-			break
-		}
-		// footer
-		if data, err = rd.Peek(int(n.FooterSize)); err != nil {
-			break
-		}
-		if err = n.ParseFooter(data); err != nil {
-			break
-		}
-		if _, err = rd.Discard(int(n.FooterSize)); err != nil {
+		if err = n.ParseFrom(rd); err != nil {
+			if err != io.EOF {
+				log.Errorf("block: parse needle from offset: %d:%d error(%v)", so, eo, err)
+			}
 			break
 		}
 		if log.V(1) {
@@ -315,6 +290,7 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 		}
 		eo += needle.NeedleOffset(int64(n.TotalSize))
 		if err = fn(n, so, eo); err != nil {
+			log.Errorf("block: callback from offset: %d:%d error(%v)", so, eo, err)
 			break
 		}
 		so = eo
