@@ -7,7 +7,7 @@
 ###3.AccessKey
 访问授权，包括AccessKeyId和AccessKeySecret。
 ##接口定义
-###1.上传(PUT)
+###1.上传
 |    |    |
 | :-----           | :---  |
 | 接口功能           | 上传  |
@@ -23,7 +23,7 @@
 | 响应头             | Connection: close<br> Code: 200<br> ETag:xxxxxxxxxx(sha1sum值)<br> Location: ${location}<br> Date: Wed,22 Feb 2016 08:32:21 GMT  |
 | 响应内容           | 无  |
 | 示例               | PUT /live/my-image.jpg HTTP/1.1<br> Host: $host<br> Date: ${GMT date}<br> Authorization:ak_live:NsPFsxwMyYwLX4cXKnN1cD_34sg=:1387948120<br> Content-Type: image/jpg<br>  |
-###2.下载(GET)
+###2.下载
 |    |    |
 | :-----           | :---  |
 | 接口功能           | 下载  |
@@ -39,7 +39,7 @@
 | 响应头             | Server: Bfs |
 | 响应内容           | data bytes  |
 | 示例               | GET /bfs/live/my-image.jpg HTTP/1.1<br> Host: $host<br> Date: ${GMT date}<br>  |
-###3.删除(DELETE)
+###3.删除
 |    |    |
 | :-----           | :---  |
 | 接口功能           | 删除  |
