@@ -20,7 +20,7 @@
 | 备注               | expire为时间戳；filename可为空，但不能带"/"，且不支持中文  |
 | 请求内容           | data bytes  |
 | 响应码             | 200  |
-| 响应头             | Connection: close<br> Code: 200<br> ETag:xxxxxxxxxx(sha1sum值)<br> Location: ${location}<br> Date: Wed,22 Feb 2016 08:32:21 GMT  |
+| 响应头             | Code: 200<br> ETag:xxxxxxxxxx(sha1sum值)<br> Location: ${location}<br> |
 | 响应内容           | 无  |
 | 示例               | PUT /live/my-image.jpg HTTP/1.1<br> Host: $host<br> Date: ${GMT date}<br> Authorization:ak_live:NsPFsxwMyYwLX4cXKnN1cD_34sg=:1387948120<br> Content-Type: image/jpg<br>  |
 ###2.下载
@@ -52,7 +52,7 @@
 | 备注               | expire为时间戳；filename可为空，但不能带"/"，且不支持中文  |
 | 请求内容           | 无  |
 | 响应码             | 200  |
-| 响应头             | Date: Wed,22 Feb 2016 08:32:21 GMT  |
+| 响应头             | Server: Bfs  |
 | 响应内容           | 无  |
 | 示例               | DELETE /live/my-image.jpg HTTP/1.1<br> Host: $host<br> Date: ${GMT date}<br> Authorization:ak_live:NsPFsxwMyYwLX4cXKnN1cD_34sg=:1387948120<br>  |
 ###4.HEAD
