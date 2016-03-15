@@ -1,6 +1,6 @@
 bfs
 ==============
-`Terry-Mao/bfs` 是基于facebook haystack 用golang实现的小文件存储系统）。
+`Terry-Mao/bfs` 是基于facebook haystack 用golang实现的小文件存储系统。
 
 ---------------------------------------
   * [特性](#特性)
@@ -26,13 +26,15 @@ bfs
  * 参考hbase官网. 安装、启动请查看[这里](https://hbase.apache.org/).
  * 参考zookeeper官网. 安装、启动请查看[这里](http://zookeeper.apache.org/).
 
-### 二、搭建golang环境
+### 二、搭建golang、python环境
 
-参考golang官网. 安装请查看[这里](https://golang.org/doc/install).
+ * 参考golang官网. 安装请查看[这里](https://golang.org/doc/install).
+ * 参考python官网. 安装请查看[这里]
+(https://www.python.org/)
 
 ### 三、安装gosnowflake
 
-参考[这里](https://github.com/Terry-Mao/gosnowflake)
+ * 参考[这里](https://github.com/Terry-Mao/gosnowflake)
 
 ### 四、部署
 1.下载bfs及依赖包
@@ -73,29 +75,26 @@ $ python runserver.py &
 
 ### 六、测试
 
-
-
-## 配置
-
-
 ## 集群
+
+![Aaron Swartz](http://i0.hdslb.com/bfs/active/bfs_server.png)
 
 ### directory
 
-xxx
+ * directory主要负责请求的均匀调度和元数据管理
 
 ### store
 
-xxx
+ * store主要负责文件的物理存储
 
 ### pitchfork
 
-xxx
+ * pitchfork负责监控store的服务状态、可用性和磁盘状态
 
 ### proxy
 
-xxx
+ * proxy作为bfs存储的代理以及bucket相关
 
 ### ops
 
-xxx
+ * ops作为bfs的后台管理界面，负责相关维护工作，如扩容、压缩等
