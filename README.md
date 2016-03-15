@@ -80,7 +80,7 @@ $ python runserver.py &
 
 ### directory
 
- * directory主要负责请求的均匀调度和元数据管理
+ * directory主要负责请求的均匀调度和元数据管理，元数据存放在hbase，由gosnowflake产生key
 
 ### store
 
