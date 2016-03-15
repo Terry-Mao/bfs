@@ -100,5 +100,5 @@ $ nohup python runserver.py &
  * ops作为bfs的后台管理界面，负责分配存储、扩容、压缩等维护工作
  
 ## API
-[api文档](https://github.com/Terry-Mao/bfs/blob/master/doc/api.md)
+[api文档](https://github.com/Terry-Mao/bfs/doc/api.md)
 ## 更多
