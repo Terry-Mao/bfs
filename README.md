@@ -1,6 +1,6 @@
 bfs
 ==============
-`Terry-Mao/bfs` 是基于facebook haystack 用golang实现的小文件存储系统。
+`bfs` 是基于facebook haystack 用golang实现的小文件存储系统。
 
 ---------------------------------------
   * [特性](#特性)
@@ -72,7 +72,8 @@ $ python runserver.py &
 ```
 
 ### 六、测试
-
+ * bfs初始化，分配存储空间，请查看[这里](https://github.com/Terry-Mao/bfs/blob/master/doc/ops.md)
+ * 请求bfs，请查看[这里](https://github.com/Terry-Mao/bfs/blob/master/doc/proxy.md)
 
 ## 集群
 
@@ -99,5 +100,5 @@ $ python runserver.py &
  * ops作为bfs的后台管理界面，负责分配存储、扩容、压缩等维护工作
  
 ## API
-[api文档](https://github.com/Terry-Mao/bfs/blob/master/doc/api.md)
+[api文档](https://github.com/Terry-Mao/bfs/blob/master/doc/proxy.md)
 ## 更多
