@@ -5,10 +5,8 @@ bfs
 ---------------------------------------
   * [特性](#特性)
   * [安装](#安装)
-  * [配置](#配置)
-  * [例子](#例子)
-  * [文档](#文档)
   * [集群](#集群)
+  * [API](#API)
   * [更多](#更多)
 
 ---------------------------------------
@@ -75,6 +73,7 @@ $ python runserver.py &
 
 ### 六、测试
 
+
 ## 集群
 
 ![Aaron Swartz](http://i0.hdslb.com/bfs/active/bfs_server.png)
@@ -93,8 +92,12 @@ $ python runserver.py &
 
 ### proxy
 
- * proxy作为bfs存储的代理以及bucket相关
+ * proxy作为bfs存储的代理以及维护bucket相关
 
 ### ops
 
- * ops作为bfs的后台管理界面，负责相关维护工作，如扩容、压缩等
+ * ops作为bfs的后台管理界面，负责分配存储、扩容、压缩等维护工作
+ 
+## API
+[api文档](https://github.com/Terry-Mao/bfs/blob/master/doc/api.md)
+## 更多
