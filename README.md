@@ -68,7 +68,7 @@ $ nohup $GOPATH/bin/store -c $GOPATH/bin/store.toml &
 $ nohup $GOPATH/bin/pitchfork -c $GOPATH/bin/pitchfork.toml &
 $ nohup $GOPATH/bin/proxy -c $GOPATH/bin/proxy.toml &
 $ cd $GOPATH/github.com/Terry-Mao/bfs/ops
-$ python runserver.py &
+$ nohup python runserver.py &
 ```
 
 ### 六、测试
