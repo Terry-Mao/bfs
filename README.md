@@ -72,8 +72,8 @@ $ nohup python runserver.py &
 ```
 
 ### 六、测试
- * bfs初始化，分配存储空间，请查看[这里](https://github.com/Terry-Mao/bfs/blob/master/doc/ops.md)
- * 请求bfs，请查看[这里](https://github.com/Terry-Mao/bfs/blob/master/doc/proxy.md)
+ * bfs初始化，分配存储空间，请查看[这里](https://github.com/Terry-Mao/bfs/doc/ops.md)
+ * 请求bfs，请查看[这里](https://github.com/Terry-Mao/bfs/doc/proxy.md)
 
 ## 集群
 
