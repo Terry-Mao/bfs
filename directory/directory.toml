@@ -1,0 +1,60 @@
+# listen
+ApiListen = "localhost:6065"
+
+#batchUpload max num of keys once upload
+MaxNum = 16
+
+# enable golang pprof
+PprofEnable = true
+
+# pprof http addr
+PprofListen = "localhost:6066"
+
+[snowflake]
+# zookeeper cluster addrs, multiple addrs split by ",".
+ZkAddrs = [
+    "localhost:2181"
+]
+
+# path
+ZkPath = "/gosnowflake-servers"
+
+# timeout
+ZkTimeout = "15s"
+
+# workid
+WorkId = 0
+
+[zookeeper]
+# zookeeper cluster addrs, multiple addrs split by ",".
+Addrs = [
+    "localhost:2181"
+]
+
+# zookeeper heartbeat timeout.
+Timeout = "15s"
+
+# zookeeper storeroot path.
+StoreRoot = "/rack"
+
+# zookeeper volumeroot path
+VolumeRoot = "/volume"
+
+# zookeeper grouproot path
+GroupRoot = "/group"
+
+# zookeeper pullinterval
+PullInterval = "10s"
+
+[hbase]
+# thrift addr localhost:9090
+Addr = "localhost:9090"
+
+# Note that you must specify a number here.
+MaxActive = 100
+
+# Note that you must specify a number here.
+MaxIdle = 100
+
+# Note that you must specify a number here.
+Timeout = "1s"

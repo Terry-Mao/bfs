@@ -1,0 +1,12 @@
+PprofEnable = true
+
+PprofListen = "localhost:2231"
+
+HttpAddr = "localhost:2232"
+
+BfsAddr = "localhost:6065"
+
+Domain = "http://localhost:2232/bfs/"
+
+MaxFileSize = 20971520
+

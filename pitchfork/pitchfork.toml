@@ -1,0 +1,28 @@
+[zookeeper]
+# zookeeper cluster addrs, multiple addrs split by ",".
+Addrs = [
+    "localhost:2181"
+]
+
+# zookeeper heartbeat timeout.
+Timeout = "1s"
+
+# zookeeper pitchfork path.
+PitchforkRoot = "/pitchfork"
+
+# zookeeper storeroot path.
+StoreRoot = "/rack"
+
+# zookeeper volumeroot path
+VolumeRoot = "/volume"
+
+
+[store]
+#check store interval
+StoreCheckInterval = "5s"
+
+#check needle interval
+NeedleCheckInterval = "60s"
+
+#rack 
+RackCheckInterval = "300s"

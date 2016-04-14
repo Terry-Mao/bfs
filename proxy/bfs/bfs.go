@@ -1,0 +1,278 @@
+package bfs
+
+import (
+	"bfs/libs/errors"
+	"bfs/libs/meta"
+	"bfs/proxy/conf"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	itime "github.com/Terry-Mao/marmot/time"
+	log "github.com/golang/glog"
+	"io"
+	"io/ioutil"
+	"mime/multipart"
+	"net"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const (
+	// api
+	_directoryGetApi    = "http://%s/get"
+	_directoryUploadApi = "http://%s/upload"
+	_directoryDelApi    = "http://%s/del"
+	_storeGetApi        = "http://%s/get"
+	_storeUploadApi     = "http://%s/upload"
+	_storeDelApi        = "http://%s/del"
+)
+
+var (
+	_timer     = itime.NewTimer(1024)
+	_transport = &http.Transport{
+		Dial: func(netw, addr string) (c net.Conn, err error) {
+			if c, err = net.DialTimeout(netw, addr, 2*time.Second); err != nil {
+				return nil, err
+			}
+			return c, nil
+		},
+	}
+	_client = &http.Client{
+		Transport: _transport,
+	}
+	_canceler = _transport.CancelRequest
+)
+
+type Bfs struct {
+	c *conf.Config
+}
+
+func NewBfs(c *conf.Config) (b *Bfs) {
+	b = &Bfs{}
+	b.c = c
+	return
+}
+
+// Get
+func (b *Bfs) Get(bucket, filename string) (content []byte, err error) {
+	var (
+		params = url.Values{}
+		host   string
+		uri    string
+		req    *http.Request
+		resp   *http.Response
+		res    meta.Response
+	)
+	params.Set("bucket", bucket)
+	params.Set("filename", filename)
+	uri = fmt.Sprintf(_directoryGetApi, b.c.BfsAddr)
+	if err = Http("GET", uri, params, nil, &res); err != nil {
+		log.Errorf("GET called Http error(%v)", err)
+		return
+	}
+	if res.Ret != errors.RetOK {
+		log.Errorf("http.Get directory res.Ret: %d %s", res.Ret, uri)
+		if res.Ret == errors.RetNeedleNotExist {
+			err = errors.ErrNeedleNotExist
+		} else {
+			err = errors.ErrInternal
+		}
+		return
+	}
+
+	params = url.Values{}
+	for _, host = range res.Stores {
+		params.Set("key", strconv.FormatInt(res.Key, 10))
+		params.Set("cookie", strconv.FormatInt(int64(res.Cookie), 10))
+		params.Set("vid", strconv.FormatInt(int64(res.Vid), 10))
+		uri = fmt.Sprintf(_storeGetApi, host) + "?" + params.Encode()
+		if req, err = http.NewRequest("GET", uri, nil); err != nil {
+			continue
+		}
+		td := _timer.Start(5*time.Second, func() {
+			_canceler(req)
+		})
+		if resp, err = _client.Do(req); err != nil {
+			log.Errorf("_client.do(%s) error(%v)", uri, err)
+			continue
+		}
+		td.Stop()
+		if resp.StatusCode != http.StatusOK {
+			continue
+		}
+		if content, err = ioutil.ReadAll(resp.Body); err != nil {
+			continue
+		}
+		resp.Body.Close()
+		break
+	}
+	return
+}
+
+// Upload
+func (b *Bfs) Upload(bucket, filename, mine, sha1 string, buf []byte) (err error) {
+	var (
+		params = url.Values{}
+		uri    string
+		host   string
+		res    meta.Response
+		sRet   meta.StoreRet
+	)
+	params.Set("bucket", bucket)
+	params.Set("filename", filename)
+	params.Set("mine", mine)
+	params.Set("sha1", sha1)
+	uri = fmt.Sprintf(_directoryUploadApi, b.c.BfsAddr)
+	if err = Http("POST", uri, params, nil, &res); err != nil {
+		return
+	}
+	if res.Ret != errors.RetOK && res.Ret != errors.RetNeedleExist {
+		log.Errorf("http.Post directory res.Ret: %d %s", res.Ret, uri)
+		err = errors.ErrInternal
+		return
+	}
+
+	params = url.Values{}
+	for _, host = range res.Stores {
+		params.Set("key", strconv.FormatInt(res.Key, 10))
+		params.Set("cookie", strconv.FormatInt(int64(res.Cookie), 10))
+		params.Set("vid", strconv.FormatInt(int64(res.Vid), 10))
+		uri = fmt.Sprintf(_storeUploadApi, host)
+		if err = Http("POST", uri, params, buf, &sRet); err != nil {
+			return
+		}
+		if sRet.Ret != 1 {
+			log.Errorf("http.Post store sRet.Ret: %d  %s %d %d %d", sRet.Ret, uri, res.Key, res.Cookie, res.Vid)
+			err = errors.ErrInternal
+			return
+		}
+	}
+	if res.Ret == errors.RetNeedleExist {
+		err = errors.ErrNeedleExist
+	}
+	return
+}
+
+// Delete
+func (b *Bfs) Delete(bucket, filename string) (err error) {
+	var (
+		params = url.Values{}
+		host   string
+		uri    string
+		res    meta.Response
+		sRet   meta.StoreRet
+	)
+	params.Set("bucket", bucket)
+	params.Set("filename", filename)
+	uri = fmt.Sprintf(_directoryDelApi, b.c.BfsAddr)
+	if err = Http("POST", uri, params, nil, &res); err != nil {
+		log.Errorf("Delete called Http error(%v)", err)
+		return
+	}
+	if res.Ret != errors.RetOK {
+		log.Errorf("http.Get directory res.Ret: %d %s", res.Ret, uri)
+		if res.Ret == errors.RetNeedleNotExist {
+			err = errors.ErrNeedleNotExist
+		} else {
+			err = errors.ErrInternal
+		}
+		return
+	}
+
+	params = url.Values{}
+	for _, host = range res.Stores {
+		params.Set("key", strconv.FormatInt(res.Key, 10))
+		params.Set("vid", strconv.FormatInt(int64(res.Vid), 10))
+		uri = fmt.Sprintf(_storeDelApi, host)
+		if err = Http("POST", uri, params, nil, &sRet); err != nil {
+			log.Errorf("Update called Http error(%v)", err)
+			return
+		}
+		if sRet.Ret != 1 {
+			log.Errorf("Delete store sRet.Ret: %d  %s", sRet.Ret, uri)
+			err = errors.ErrInternal
+			return
+		}
+	}
+	return
+}
+
+// Ping
+func (b *Bfs) Ping() error {
+	return nil
+}
+
+// Http params
+func Http(method, uri string, params url.Values, buf []byte, res interface{}) (err error) {
+	var (
+		body    []byte
+		w       *multipart.Writer
+		bw      io.Writer
+		bufdata = &bytes.Buffer{}
+		req     *http.Request
+		resp    *http.Response
+		ru      string
+		enc     string
+	)
+	enc = params.Encode()
+	if enc != "" {
+		ru = uri + "?" + enc
+	}
+	if method == "GET" {
+		if req, err = http.NewRequest("GET", ru, nil); err != nil {
+			return
+		}
+	} else {
+		if buf == nil {
+			if req, err = http.NewRequest("POST", uri, strings.NewReader(enc)); err != nil {
+				return
+			}
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		} else {
+			w = multipart.NewWriter(bufdata)
+			if bw, err = w.CreateFormFile("file", "1.jpg"); err != nil {
+				return
+			}
+			if _, err = io.WriteString(bw, string(buf)); err != nil {
+				return
+			}
+			for key, _ := range params {
+				w.WriteField(key, params.Get(key))
+			}
+			if err = w.Close(); err != nil {
+				return
+			}
+			if req, err = http.NewRequest("POST", uri, bufdata); err != nil {
+				return
+			}
+			req.Header.Set("Content-Type", w.FormDataContentType())
+		}
+	}
+	td := _timer.Start(5*time.Second, func() {
+		_canceler(req)
+	})
+	if resp, err = _client.Do(req); err != nil {
+		log.Errorf("_client.Do(%s) error(%v)", ru, err)
+		return
+	}
+	td.Stop()
+	defer resp.Body.Close()
+	if res == nil {
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		log.Errorf("_client.Do(%s) status: %d", ru, resp.StatusCode)
+		return
+	}
+	if body, err = ioutil.ReadAll(resp.Body); err != nil {
+		log.Errorf("ioutil.ReadAll(%s) uri(%s) error(%v)", body, ru, err)
+		return
+	}
+	if err = json.Unmarshal(body, res); err != nil {
+		log.Errorf("json.Unmarshal(%s) uri(%s) error(%v)", body, ru, err)
+	}
+	return
+}
