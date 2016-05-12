@@ -21,11 +21,7 @@ func Init(config *conf.Config) error {
 			log.Error("thrift.NewTSocketTimeout error(%v)", err)
 			return
 		}
-
-		if config.HBase.Framed {
-			trans = thrift.NewTFramedTransport(trans)
-		}
-
+		trans = thrift.NewTFramedTransport(trans)
 		c = hbasethrift.NewTHBaseServiceClientFactory(trans, thrift.NewTBinaryProtocolFactoryDefault())
 		if err = trans.Open(); err != nil {
 			log.Error("trans.Open error(%v)", err)

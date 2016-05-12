@@ -13,17 +13,22 @@ const (
 	_pingOk = 0
 )
 
+type server struct {
+	d *Directory
+}
+
 // StartApi start api http listen.
 func StartApi(addr string, d *Directory) {
+	var s = &server{d: d}
 	go func() {
 		var (
 			err      error
 			serveMux = http.NewServeMux()
 		)
-		serveMux.Handle("/get", httpGetHandler{d: d})
-		serveMux.Handle("/upload", httpUploadHandler{d: d})
-		serveMux.Handle("/del", httpDelHandler{d: d})
-		serveMux.Handle("/ping", httpPingHandler{})
+		serveMux.HandleFunc("/get", s.get)
+		serveMux.HandleFunc("/upload", s.upload)
+		serveMux.HandleFunc("/del", s.del)
+		serveMux.HandleFunc("/ping", s.ping)
 		if err = http.ListenAndServe(addr, serveMux); err != nil {
 			log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
 			return
@@ -32,12 +37,7 @@ func StartApi(addr string, d *Directory) {
 	return
 }
 
-// httpGetHandler http upload a file.
-type httpGetHandler struct {
-	d *Directory
-}
-
-func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *server) get(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err      error
 		n        *meta.Needle
@@ -60,7 +60,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpGetWriter(r, wr, time.Now(), &res)
-	if n, res.Stores, err = h.d.GetStores(bucket, filename); err != nil {
+	if n, res.Stores, err = s.d.GetStores(bucket, filename); err != nil {
 		log.Errorf("GetStores() error(%v)", err)
 		if uerr, ok = err.(errors.Error); ok {
 			res.Ret = int(uerr)
@@ -76,12 +76,7 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	return
 }
 
-// httpUploadHandler http upload a file.
-type httpUploadHandler struct {
-	d *Directory
-}
-
-func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *server) upload(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err    error
 		n      *meta.Needle
@@ -115,11 +110,11 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	defer HttpUploadWriter(r, wr, time.Now(), &res)
 
 	res.Ret = errors.RetOK
-	if n, res.Stores, err = h.d.UploadStores(bucket, f); err != nil {
+	if n, res.Stores, err = s.d.UploadStores(bucket, f); err != nil {
 		if err == errors.ErrNeedleExist {
 			// update file data
 			res.Ret = errors.RetNeedleExist
-			if n, res.Stores, err = h.d.GetStores(bucket, f.Filename); err != nil {
+			if n, res.Stores, err = s.d.GetStores(bucket, f.Filename); err != nil {
 				log.Errorf("GetStores() error(%v)", err)
 				if uerr, ok = err.(errors.Error); ok {
 					res.Ret = int(uerr)
@@ -144,12 +139,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	return
 }
 
-// httpDelHandler
-type httpDelHandler struct {
-	d *Directory
-}
-
-func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *server) del(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err      error
 		n        *meta.Needle
@@ -172,7 +162,7 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpDelWriter(r, wr, time.Now(), &res)
-	if n, res.Stores, err = h.d.DelStores(bucket, filename); err != nil {
+	if n, res.Stores, err = s.d.DelStores(bucket, filename); err != nil {
 		log.Errorf("DelStores() error(%v)", err)
 		if uerr, ok = err.(errors.Error); ok {
 			res.Ret = int(uerr)
@@ -188,11 +178,7 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	return
 }
 
-// httpPingHandler http ping health
-type httpPingHandler struct {
-}
-
-func (h httpPingHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *server) ping(wr http.ResponseWriter, r *http.Request) {
 	var (
 		byteJson []byte
 		res      = map[string]interface{}{"code": _pingOk}

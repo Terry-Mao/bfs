@@ -40,7 +40,6 @@ type HBase struct {
 	MaxIdle    int
 	Timeout    duration
 	LvsTimeout duration
-	Framed bool
 }
 
 // Code to implement the TextUnmarshaler interface for `duration`:

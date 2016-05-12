@@ -46,7 +46,10 @@ func (h *HBaseClient) Get(bucket, filename string) (n *meta.Needle, err error) {
 	if f, err = h.getFile(bucket, filename); err != nil {
 		return
 	}
-	n, err = h.getNeedle(f.Key)
+	if n, err = h.getNeedle(f.Key); err == errors.ErrNeedleNotExist {
+		log.Warningf("table not match: bucket: %s  filename: %s", bucket, filename)
+		h.delFile(bucket, filename)
+	}
 	return
 }
 
@@ -55,7 +58,10 @@ func (h *HBaseClient) Put(bucket string, f *meta.File, n *meta.Needle) (err erro
 	if err = h.putFile(bucket, f); err != nil {
 		return
 	}
-	err = h.putNeedle(n)
+	if err = h.putNeedle(n); err != errors.ErrNeedleExist && err != nil {
+		log.Warningf("table not match: bucket: %s  filename: %s", bucket, f.Filename)
+		h.delFile(bucket, f.Filename)
+	}
 	return
 }
 

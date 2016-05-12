@@ -58,5 +58,3 @@ MaxIdle = 100
 
 # Note that you must specify a number here.
 Timeout = "1s"
-
-Framed = false
