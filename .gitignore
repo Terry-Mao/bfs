@@ -23,8 +23,11 @@ _testmain.go
 *.test
 *.prof
 *.gitattributes
+<<<<<<< HEAD
 
 *.iml
 *.ipr
 *.iws
 .idea/
+=======
+>>>>>>> startfeng/master

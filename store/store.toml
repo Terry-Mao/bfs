@@ -71,7 +71,7 @@ ServerId  = "47E273ED-CD3A-4D6A-94CE-554BA9B195EB"
 
 # zookeeper cluster addrs
 Addrs = [
-    "192.168.1.192:2181"
+    "localhost:2181"
 ]
 
 # zookeeper heartbeat timeout.
