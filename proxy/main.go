@@ -36,7 +36,7 @@ func main() {
 	}
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	// init http
-	if _, err = Init(c); err != nil {
+	if err = StartApi(c); err != nil {
 		log.Error("http.Init() error(%v)", err)
 		panic(err)
 	}

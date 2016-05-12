@@ -4,11 +4,11 @@ import (
 	"bfs/libs/errors"
 	"bfs/proxy/auth"
 	"bfs/proxy/bfs"
+	ibucket "bfs/proxy/bucket"
 	"bfs/proxy/conf"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	log "github.com/golang/glog"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	log "github.com/golang/glog"
 )
 
 const (
@@ -23,27 +25,34 @@ const (
 	_httpServerWriteTimeout = 2 * time.Second
 )
 
-// Server  http_server
-type Server struct {
+type server struct {
 	bfs    *bfs.Bfs
+	bucket *ibucket.Bucket
 	auth   *auth.Auth
-	config *conf.Config
+	c      *conf.Config
 }
 
-// Init init the http module.
-func Init(config *conf.Config) (s *Server, err error) {
-	s = &Server{}
-	s.config = config
-	s.bfs = bfs.NewBfs(config)
-	if s.auth, err = auth.NewAuth(config); err != nil {
+// StartApi init the http module.
+func StartApi(c *conf.Config) (err error) {
+	var s = &server{}
+	s.c = c
+	s.bfs = bfs.NewBfs(c)
+	if s.bucket, err = ibucket.NewBucket(); err != nil {
+		return
+	}
+	if s.auth, err = auth.NewAuth(c); err != nil {
 		return
 	}
 	go func() {
 		mux := http.NewServeMux()
-		mux.HandleFunc("/", s.httpDo)
+		mux.HandleFunc("/", s.do)
 		mux.HandleFunc("/ping", s.ping)
-		server := &http.Server{Addr: config.HttpAddr, Handler: mux,
-			ReadTimeout: _httpServerReadTimeout, WriteTimeout: _httpServerWriteTimeout}
+		server := &http.Server{
+			Addr:         c.HttpAddr,
+			Handler:      mux,
+			ReadTimeout:  _httpServerReadTimeout,
+			WriteTimeout: _httpServerWriteTimeout,
+		}
 		if err := server.ListenAndServe(); err != nil {
 			return
 		}
@@ -51,178 +60,222 @@ func Init(config *conf.Config) (s *Server, err error) {
 	return
 }
 
-func (s *Server) httpDo(wr http.ResponseWriter, r *http.Request) {
+type handler func(*ibucket.Item, string, string, http.ResponseWriter, *http.Request)
+
+func (s *server) do(wr http.ResponseWriter, r *http.Request) {
 	var (
-		err error
+		bucket string
+		file   string
+		token  string
+		status int
+		err    error
+		h      handler
+		item   *ibucket.Item
+		upload = false
+		read   = false
 	)
-	if err = s.auth.CheckAuth(r); err != nil {
-		if uerr, ok := (err).(errors.Error); ok {
-			http.Error(wr, "auth failed", int(uerr))
-		}
+	switch r.Method {
+	case "HEAD", "GET":
+		h = s.download
+		read = true
+	case "PUT":
+		h = s.upload
+		upload = true
+	case "DELETE":
+		h = s.delete
+	default:
+		http.Error(wr, "", http.StatusMethodNotAllowed)
 		return
 	}
-	switch r.Method {
-	case "HEAD":
-		s.download(wr, r)
-	case "GET":
-		s.download(wr, r)
-	case "PUT":
-		s.upload(wr, r)
-	case "DELETE":
-		s.delete(wr, r)
+	if bucket, file, status = s.parseURI(r, upload); status != http.StatusOK {
+		http.Error(wr, "", status)
+		return
+	}
+	if item, err = s.bucket.Get(bucket); err != nil {
+		log.Errorf("bucket.Get(%s) error(%v)", bucket, err)
+		http.Error(wr, "", http.StatusNotFound)
+		return
+	}
+	// item not public must use authorize
+	if !item.Public(read) {
+		token = r.URL.Query().Get("token")
+		if token == "" {
+			token = r.Header.Get("Authorization")
+		}
+		if err = s.auth.Authorize(item, r.Method, bucket, file, token); err != nil {
+			log.Errorf("authorize(%s, %s, %s, %s) by item: %v error(%v)", r.Method, bucket, file, token, item, err)
+			http.Error(wr, "", http.StatusUnauthorized)
+			return
+		}
+	}
+	h(item, bucket, file, wr, r)
+	return
+}
+
+func httpLog(method, uri string, bucket, file *string, start time.Time, status *int, err *error) {
+	log.Infof("%s: %s, bucket: %s, file: %s, time: %f, status: %d, error(%v)",
+		method, uri, *bucket, *file, time.Now().Sub(start).Seconds(), *status, *err)
+}
+
+// set reponse header.
+func setCode(wr http.ResponseWriter, status *int) {
+	wr.Header().Set("Code", strconv.Itoa(*status))
+}
+
+// parseURI get uri's bucket and filename.
+func (s *server) parseURI(r *http.Request, upload bool) (bucket, file string, status int) {
+	var b, e int
+	status = http.StatusOK
+	if s.c.Prefix == "" {
+		// uri: /bucket/file...
+		//      [1:
+		b = 1
+	} else {
+		// uri: /prefix/bucket/file...
+		//             [len(prefix):
+		if !strings.HasPrefix(r.URL.Path, s.c.Prefix) {
+			log.Errorf("parseURI(%s) error, no prefix: %s", r.URL.Path, s.c.Prefix)
+			status = http.StatusBadRequest
+			return
+		}
+		b = len(s.c.Prefix)
+	}
+	if e = strings.Index(r.URL.Path[b:], "/"); e < 1 {
+		bucket = r.URL.Path[b:]
+		file = ""
+	} else {
+		bucket = r.URL.Path[b : b+e]
+		file = r.URL.Path[b+e+1:] // skip "/"
+	}
+	if bucket == "" || (file == "" && !upload) {
+		log.Errorf("parseURI(%s) error, bucket: %s or file: %s empty", r.URL.Path, bucket, file)
+		status = http.StatusBadRequest
 	}
 	return
 }
 
-// download
-func (s *Server) download(wr http.ResponseWriter, r *http.Request) {
-	var (
-		content  []byte
-		bucket   string
-		filename string
-		ss       []string
-		start    time.Time
-		err      error
-	)
-	start = time.Now()
-	log.Infof("download url: %s", r.URL.String())
-	if !strings.HasPrefix(r.URL.Path, "/bfs") {
-		http.Error(wr, "bad request", http.StatusBadRequest)
-		return
-	}
-	ss = strings.Split(strings.TrimPrefix(r.URL.Path, "/bfs")[1:], "/")
-	if bucket = ss[0]; bucket == "" {
-		http.Error(wr, "bad request", http.StatusBadRequest)
-		return
-	}
-	if len(ss) >= 2 {
-		filename = r.URL.Path[len(bucket)+len("/bfs")+2:]
-		if filename == "" {
-			http.Error(wr, "bad request", http.StatusBadRequest)
-			return
-		}
-	}
-	if content, err = s.bfs.Get(bucket, filename); err != nil {
-		log.Errorf("s.bfs.Get error(%v), bucket: %s, filename: %s, time long:%f", err, bucket, filename, time.Now().Sub(start).Seconds())
-		if err == errors.ErrNeedleNotExist {
-			http.Error(wr, "404", http.StatusNotFound)
-			return
-		}
-		http.Error(wr, "Internal Server error", http.StatusInternalServerError)
-		return
-	}
-	ss = strings.Split(filename, ".")
-	wr.Header().Set("Content-Type", http.DetectContentType(content))
-	wr.Header().Set("Content-Length", strconv.Itoa(len(content)))
-	wr.Header().Set("Server", "Bfs")
-	if r.Method == "GET" {
-		wr.Write(content)
-	}
-	log.Infof("download url:%s, time long:%f", r.URL.String(), time.Now().Sub(start).Seconds())
+// gentRI get uri by bucket and file.
+func (s *server) getURI(bucket, file string) (uri string) {
+	// http://domain/prefix/bucket/file
+	uri = s.c.Domain + path.Join(s.c.Prefix, bucket, file)
 	return
+}
+
+// download.
+func (s *server) download(item *ibucket.Item, bucket, file string, wr http.ResponseWriter, r *http.Request) {
+	var (
+		data   []byte
+		err    error
+		start  = time.Now()
+		status = http.StatusOK
+	)
+	defer httpLog("download", r.URL.Path, &bucket, &file, start, &status, &err)
+	if data, err = s.bfs.Get(bucket, file); err != nil {
+		if err == errors.ErrNeedleNotExist {
+			status = http.StatusNotFound
+		} else {
+			status = http.StatusInternalServerError
+		}
+		http.Error(wr, "", status)
+	} else {
+		wr.Header().Set("Content-Type", http.DetectContentType(data))
+		wr.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		wr.Header().Set("Server", "bfs")
+		if r.Method == "GET" {
+			_, err = wr.Write(data)
+		}
+	}
+	return
+}
+
+// ret reponse header.
+func retCode(wr http.ResponseWriter, status *int) {
+	wr.Header().Set("Code", strconv.Itoa(*status))
 }
 
 // upload upload file.
-func (s *Server) upload(wr http.ResponseWriter, r *http.Request) {
+func (s *server) upload(item *ibucket.Item, bucket, file string, wr http.ResponseWriter, r *http.Request) {
 	var (
+		ok       bool
 		body     []byte
-		ss       []string
-		start    time.Time
 		mine     string
-		bucket   string
-		filename string
 		location string
 		sha1sum  string
+		ext      string
 		sha      [sha1.Size]byte
 		err      error
+		uerr     errors.Error
+		status   = http.StatusOK
+		start    = time.Now()
 	)
-	start = time.Now()
-	log.Infof("upload url:%s", r.URL.String())
-	mine = r.Header.Get("Content-Type")
-	if mine == "" {
-		wr.Header().Set("Code", strconv.Itoa(http.StatusBadRequest))
+	defer httpLog("upload", r.URL.Path, &bucket, &file, start, &status, &err)
+	defer retCode(wr, &status)
+	if mine = r.Header.Get("Content-Type"); mine == "" {
+		status = http.StatusBadRequest
 		return
 	}
+	if ext = path.Base(mine); ext == "jpeg" {
+		ext = "jpg"
+	}
 	if body, err = ioutil.ReadAll(r.Body); err != nil {
+		status = http.StatusBadRequest
 		log.Errorf("ioutil.ReadAll(r.Body) error(%s)", err)
-		wr.Header().Set("Code", strconv.Itoa(http.StatusBadRequest))
 		return
 	}
 	r.Body.Close()
-	// check content length
-	if len(body) > s.config.MaxFileSize {
-		wr.Header().Set("Code", strconv.Itoa(http.StatusRequestEntityTooLarge))
+	if len(body) > s.c.MaxFileSize {
+		status = http.StatusRequestEntityTooLarge
 		return
 	}
 	sha = sha1.Sum(body)
 	sha1sum = hex.EncodeToString(sha[:])
-	ss = strings.Split(r.URL.Path[1:], "/")
-	if bucket = ss[0]; bucket == "" {
-		wr.Header().Set("Code", strconv.Itoa(http.StatusBadRequest))
-		return
+	// if empty filename or endwith "/": dir
+	if file == "" || strings.HasSuffix(file, "/") {
+		file += sha1sum + "." + ext
 	}
-	if len(ss) >= 2 {
-		filename = r.URL.Path[len(bucket)+2:]
-	}
-	if filename == "" {
-		ext := mine[strings.IndexByte(mine, '/')+1:]
-		if ext == "jpeg" {
-			ext = "jpg"
+	if err = s.bfs.Upload(bucket, file, mine, sha1sum, body); err != nil && err != errors.ErrNeedleExist {
+		if uerr, ok = (err).(errors.Error); ok {
+			status = int(uerr)
+		} else {
+			status = http.StatusInternalServerError
 		}
-		filename = sha1sum + "." + ext
-	}
-	if err = s.bfs.Upload(bucket, filename, mine, sha1sum, body); err != nil && err != errors.ErrNeedleExist {
-		log.Errorf("s.bfs.Upload error(%v), bucket: %s, filename: %s, time long:%f", err, bucket, filename, time.Now().Sub(start).Seconds())
-		wr.Header().Set("Code", strconv.Itoa(http.StatusInternalServerError))
 		return
 	}
-	location = s.config.Domain + path.Join(bucket, filename)
-	wr.Header().Set("Code", strconv.Itoa(http.StatusOK))
+	location = s.getURI(bucket, file)
 	wr.Header().Set("Location", location)
 	wr.Header().Set("ETag", sha1sum)
-	log.Infof("upload url:%s, location: %s , time long:%f", r.URL.String(), location, time.Now().Sub(start).Seconds())
 	return
 }
 
 // delete
-func (s *Server) delete(wr http.ResponseWriter, r *http.Request) {
+func (s *server) delete(item *ibucket.Item, bucket, file string, wr http.ResponseWriter, r *http.Request) {
 	var (
-		bucket   string
-		filename string
-		ss       []string
-		start    time.Time
-		err      error
+		ok     bool
+		err    error
+		uerr   errors.Error
+		status = http.StatusOK
+		start  = time.Now()
 	)
-	start = time.Now()
-	log.Infof("delete url:%s", r.URL.String())
-	ss = strings.Split(r.URL.Path[1:], "/")
-	if bucket = ss[0]; bucket == "" {
-		wr.Header().Set("Code", strconv.Itoa(http.StatusRequestEntityTooLarge))
-		return
-	}
-	if len(ss) >= 2 {
-		filename = r.URL.Path[len(bucket)+2:]
-		if filename == "" {
-			wr.Header().Set("Code", strconv.Itoa(http.StatusBadRequest))
-			return
-		}
-	}
-	if err = s.bfs.Delete(bucket, filename); err != nil {
-		log.Errorf("s.bfs.Delete error(%v), bucket: %s, filename: %s, time long:%f", err, bucket, filename, time.Now().Sub(start).Seconds())
+	defer httpLog("delete", r.URL.Path, &bucket, &file, start, &status, &err)
+	if err = s.bfs.Delete(bucket, file); err != nil {
 		if err == errors.ErrNeedleNotExist {
-			http.Error(wr, "404", http.StatusNotFound)
-			return
+			status = http.StatusNotFound
+			http.Error(wr, "", status)
+		} else {
+			if uerr, ok = (err).(errors.Error); ok {
+				status = int(uerr)
+			} else {
+				status = http.StatusInternalServerError
+			}
 		}
-		wr.Header().Set("Code", strconv.Itoa(http.StatusInternalServerError))
-		return
+	} else {
+		wr.Header().Set("Code", strconv.Itoa(status))
 	}
-	wr.Header().Set("Code", strconv.Itoa(http.StatusOK))
-	log.Infof("delete url:%s, time long:%f", r.URL.String(), time.Now().Sub(start).Seconds())
 	return
 }
 
 // monitorPing sure program now runs correctly, when return http status 200.
-func (s *Server) ping(wr http.ResponseWriter, r *http.Request) {
+func (s *server) ping(wr http.ResponseWriter, r *http.Request) {
 	var (
 		byteJson []byte
 		f        *os.File
@@ -235,7 +288,7 @@ func (s *Server) ping(wr http.ResponseWriter, r *http.Request) {
 		f.Close()
 	}
 	if err = s.bfs.Ping(); err != nil {
-		http.Error(wr, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		http.Error(wr, "", http.StatusInternalServerError)
 		res["code"] = http.StatusInternalServerError
 	}
 	if byteJson, err = json.Marshal(res); err != nil {

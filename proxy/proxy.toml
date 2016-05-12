@@ -4,9 +4,12 @@ PprofListen = "localhost:2231"
 
 HttpAddr = "localhost:2232"
 
-BfsAddr = "localhost:6065"
+BfsAddr = "localhost:2235"
 
-Domain = "http://localhost:2232/bfs/"
+Domain = "http://localhost:2232/"                                                                              
+
+Prefix = "/bfs/"
 
 MaxFileSize = 20971520
 
+PurgeMaxSize = 100000

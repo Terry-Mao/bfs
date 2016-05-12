@@ -39,6 +39,7 @@ var (
 			}
 			return c, nil
 		},
+		DisableCompression: true,
 	}
 	_client = &http.Client{
 		Transport: _transport,
@@ -153,6 +154,7 @@ func (b *Bfs) Upload(bucket, filename, mine, sha1 string, buf []byte) (err error
 	if res.Ret == errors.RetNeedleExist {
 		err = errors.ErrNeedleExist
 	}
+	log.Infof("bfs.upload bucket:%s filename:%s key:%d cookie:%d vid:%d", bucket, filename, res.Key, res.Cookie, res.Vid)
 	return
 }
 
@@ -216,6 +218,7 @@ func Http(method, uri string, params url.Values, buf []byte, res interface{}) (e
 		resp    *http.Response
 		ru      string
 		enc     string
+		ctype   string
 	)
 	enc = params.Encode()
 	if enc != "" {
@@ -236,19 +239,20 @@ func Http(method, uri string, params url.Values, buf []byte, res interface{}) (e
 			if bw, err = w.CreateFormFile("file", "1.jpg"); err != nil {
 				return
 			}
-			if _, err = io.WriteString(bw, string(buf)); err != nil {
+			if _, err = bw.Write(buf); err != nil {
 				return
 			}
 			for key, _ := range params {
 				w.WriteField(key, params.Get(key))
 			}
+			ctype = w.FormDataContentType()
 			if err = w.Close(); err != nil {
 				return
 			}
 			if req, err = http.NewRequest("POST", uri, bufdata); err != nil {
 				return
 			}
-			req.Header.Set("Content-Type", w.FormDataContentType())
+			req.Header.Set("Content-Type", ctype)
 		}
 	}
 	td := _timer.Start(5*time.Second, func() {
