@@ -36,11 +36,11 @@ type server struct {
 func StartApi(c *conf.Config) (err error) {
 	var s = &server{}
 	s.c = c
-	s.bfs = bfs.NewBfs(c)
-	if s.bucket, err = ibucket.NewBucket(); err != nil {
+	s.bfs = bfs.New(c)
+	if s.bucket, err = ibucket.New(); err != nil {
 		return
 	}
-	if s.auth, err = auth.NewAuth(c); err != nil {
+	if s.auth, err = auth.New(c); err != nil {
 		return
 	}
 	go func() {

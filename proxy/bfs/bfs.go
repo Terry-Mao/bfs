@@ -51,7 +51,7 @@ type Bfs struct {
 	c *conf.Config
 }
 
-func NewBfs(c *conf.Config) (b *Bfs) {
+func New(c *conf.Config) (b *Bfs) {
 	b = &Bfs{}
 	b.c = c
 	return

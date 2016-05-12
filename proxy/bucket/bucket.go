@@ -52,7 +52,7 @@ func (i *Item) Public(read bool) bool {
 }
 
 // NewBucket
-func NewBucket() (b *Bucket, err error) {
+func New() (b *Bucket, err error) {
 	var item *Item
 	b = new(Bucket)
 	b.data = make(map[string]*Item)

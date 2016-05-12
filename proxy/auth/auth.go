@@ -24,7 +24,7 @@ type Auth struct {
 }
 
 // NewAuth
-func NewAuth(c *conf.Config) (a *Auth, err error) {
+func New(c *conf.Config) (a *Auth, err error) {
 	a = &Auth{}
 	a.c = c
 	return
