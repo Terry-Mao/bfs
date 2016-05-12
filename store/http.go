@@ -2,6 +2,8 @@ package main
 
 import (
 	"bfs/libs/errors"
+	"bfs/libs/stat"
+	"bfs/store/conf"
 	"encoding/json"
 	log "github.com/golang/glog"
 	"mime/multipart"
@@ -10,6 +12,12 @@ import (
 	"strconv"
 	"time"
 )
+
+type Server struct {
+	store *Store
+	conf  *conf.Config
+	info  *stat.Info
+}
 
 type sizer interface {
 	Size() int64

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bfs/libs/errors"
-	"bfs/store/conf"
 	"bfs/store/needle"
 	"bfs/store/volume"
 	log "github.com/golang/glog"
@@ -13,16 +12,16 @@ import (
 )
 
 // StartApi start api http listen.
-func StartApi(addr string, s *Store, c *conf.Config) {
+func StartApi(addr string, s *Server) {
 	go func() {
 		var (
 			err      error
 			serveMux = http.NewServeMux()
 		)
-		serveMux.Handle("/get", httpGetHandler{s: s})
-		serveMux.Handle("/upload", httpUploadHandler{s: s, c: c})
-		serveMux.Handle("/uploads", httpUploadsHandler{s: s, c: c})
-		serveMux.Handle("/del", httpDelHandler{s: s})
+		serveMux.HandleFunc("/get", s.get)
+		serveMux.HandleFunc("/upload", s.upload)
+		serveMux.HandleFunc("/uploads", s.uploads)
+		serveMux.HandleFunc("/del", s.del)
 		if err = http.ListenAndServe(addr, serveMux); err != nil {
 			log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
 			return
@@ -31,12 +30,7 @@ func StartApi(addr string, s *Store, c *conf.Config) {
 	return
 }
 
-// httpGetHandler http upload a file.
-type httpGetHandler struct {
-	s *Store
-}
-
-func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *Server) get(wr http.ResponseWriter, r *http.Request) {
 	var (
 		v                *volume.Volume
 		n                *needle.Needle
@@ -67,10 +61,10 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	n = h.s.Needle()
+	n = s.store.Needle()
 	n.Key = key
 	n.Cookie = int32(cookie)
-	if v = h.s.Volumes[int32(vid)]; v != nil {
+	if v = s.store.Volumes[int32(vid)]; v != nil {
 		if err = v.Get(n); err != nil {
 			if err == errors.ErrNeedleDeleted || err == errors.ErrNeedleNotExist {
 				ret = http.StatusNotFound
@@ -93,17 +87,11 @@ func (h httpGetHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			log.Infof("get a needle: %v", n)
 		}
 	}
-	h.s.FreeNeedle(n)
+	s.store.FreeNeedle(n)
 	return
 }
 
-// httpUploadHandler http upload a file.
-type httpUploadHandler struct {
-	s *Store
-	c *conf.Config
-}
-
-func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *Server) upload(wr http.ResponseWriter, r *http.Request) {
 	var (
 		vid    int64
 		key    int64
@@ -121,7 +109,7 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpPostWriter(r, wr, time.Now(), &err, res)
-	if err = checkContentLength(r, h.c.NeedleMaxSize); err != nil {
+	if err = checkContentLength(r, s.conf.NeedleMaxSize); err != nil {
 		return
 	}
 	str = r.FormValue("vid")
@@ -147,28 +135,22 @@ func (h httpUploadHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		err = errors.ErrInternal
 		return
 	}
-	if size, err = checkFileSize(file, h.c.NeedleMaxSize); err == nil {
-		n = h.s.Needle()
+	if size, err = checkFileSize(file, s.conf.NeedleMaxSize); err == nil {
+		n = s.store.Needle()
 		if err = n.WriteFrom(key, int32(cookie), int32(size), file); err == nil {
-			if v = h.s.Volumes[int32(vid)]; v != nil {
+			if v = s.store.Volumes[int32(vid)]; v != nil {
 				err = v.Write(n)
 			} else {
 				err = errors.ErrVolumeNotExist
 			}
 		}
-		h.s.FreeNeedle(n)
+		s.store.FreeNeedle(n)
 	}
 	file.Close()
 	return
 }
 
-// httpUploads http upload files.
-type httpUploadsHandler struct {
-	s *Store
-	c *conf.Config
-}
-
-func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *Server) uploads(wr http.ResponseWriter, r *http.Request) {
 	var (
 		i, nn   int
 		err     error
@@ -191,7 +173,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpPostWriter(r, wr, time.Now(), &err, res)
-	if err = checkContentLength(r, h.c.NeedleMaxSize*h.c.BatchMaxNum); err != nil {
+	if err = checkContentLength(r, s.conf.NeedleMaxSize*s.conf.BatchMaxNum); err != nil {
 		return
 	}
 	str = r.FormValue("vid")
@@ -214,7 +196,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		err = errors.ErrParam
 		return
 	}
-	ns = h.s.Needles(nn)
+	ns = s.store.Needles(nn)
 	for i, fh = range fhs {
 		if key, err = strconv.ParseInt(keys[i], 10, 64); err != nil {
 			log.Errorf("strconv.ParseInt(\"%s\") error(%v)", keys[i], err)
@@ -230,7 +212,7 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			log.Errorf("fh.Open() error(%v)", err)
 			break
 		}
-		if size, err = checkFileSize(file, h.c.NeedleMaxSize); err == nil {
+		if size, err = checkFileSize(file, s.conf.NeedleMaxSize); err == nil {
 			err = ns.WriteFrom(key, int32(cookie), int32(size), file)
 		}
 		file.Close()
@@ -239,21 +221,17 @@ func (h httpUploadsHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err == nil {
-		if v = h.s.Volumes[int32(vid)]; v != nil {
+		if v = s.store.Volumes[int32(vid)]; v != nil {
 			err = v.Writes(ns)
 		} else {
 			err = errors.ErrVolumeNotExist
 		}
 	}
-	h.s.FreeNeedles(nn, ns)
+	s.store.FreeNeedles(nn, ns)
 	return
 }
 
-type httpDelHandler struct {
-	s *Store
-}
-
-func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *Server) del(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err      error
 		key, vid int64
@@ -278,7 +256,7 @@ func (h httpDelHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		err = errors.ErrParam
 		return
 	}
-	if v = h.s.Volumes[int32(vid)]; v != nil {
+	if v = s.store.Volumes[int32(vid)]; v != nil {
 		err = v.Delete(key)
 	} else {
 		err = errors.ErrVolumeNotExist

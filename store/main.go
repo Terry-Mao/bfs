@@ -18,6 +18,7 @@ func main() {
 	var (
 		c   *conf.Config
 		s   *Store
+		svr *Server
 		err error
 	)
 	flag.Parse()
@@ -32,9 +33,10 @@ func main() {
 		return
 	}
 	log.Infof("init http...")
-	StartStat(c.StatListen, s)
-	StartApi(c.ApiListen, s, c)
-	StartAdmin(c.AdminListen, s)
+	svr = &Server{store: s, conf: c}
+	StartStat(c.StatListen, svr)
+	StartApi(c.ApiListen, svr)
+	StartAdmin(c.AdminListen, svr)
 	if c.Pprof {
 		StartPprof(c.PprofListen)
 	}

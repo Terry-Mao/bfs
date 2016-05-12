@@ -11,17 +11,17 @@ import (
 )
 
 // StartAdmin start admin http listen.
-func StartAdmin(addr string, s *Store) {
+func StartAdmin(addr string, s *Server) {
 	go func() {
 		var (
 			err      error
 			serveMux = http.NewServeMux()
 		)
-		serveMux.Handle("/probe", httpProbeHandler{s: s})
-		serveMux.Handle("/bulk_volume", httpBulkVolumeHandler{s: s})
-		serveMux.Handle("/compact_volume", httpCompactVolumeHandler{s: s})
-		serveMux.Handle("/add_volume", httpAddVolumeHandler{s: s})
-		serveMux.Handle("/add_free_volume", httpAddFreeVolumeHandler{s: s})
+		serveMux.HandleFunc("/probe", s.probe)
+		serveMux.HandleFunc("/bulk_volume", s.bulkVolume)
+		serveMux.HandleFunc("/compact_volume", s.compactVolume)
+		serveMux.HandleFunc("/add_volume", s.addVolume)
+		serveMux.HandleFunc("/add_free_volume", s.addFreeVolume)
 		if err = http.ListenAndServe(addr, serveMux); err != nil {
 			log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
 			return
@@ -30,12 +30,7 @@ func StartAdmin(addr string, s *Store) {
 	return
 }
 
-// httpProbeHandler http upload a file.
-type httpProbeHandler struct {
-	s *Store
-}
-
-func (h httpProbeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *Server) probe(wr http.ResponseWriter, r *http.Request) {
 	var (
 		v      *volume.Volume
 		n      *needle.Needle
@@ -56,8 +51,8 @@ func (h httpProbeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	n = h.s.Needle()
-	if v = h.s.Volumes[int32(vid)]; v != nil {
+	n = s.store.Needle()
+	if v = s.store.Volumes[int32(vid)]; v != nil {
 		if err = v.Probe(n); err != nil {
 			if err == errors.ErrNeedleDeleted || err == errors.ErrNeedleNotExist {
 				ret = http.StatusNotFound
@@ -80,16 +75,11 @@ func (h httpProbeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 			log.Infof("get a needle: %v", n)
 		}
 	}
-	h.s.FreeNeedle(n)
+	s.store.FreeNeedle(n)
 	return
 }
 
-// httpBulkVolumeHandler http bulk block.
-type httpBulkVolumeHandler struct {
-	s *Store
-}
-
-func (h httpBulkVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *Server) bulkVolume(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err          error
 		vid          int64
@@ -110,18 +100,13 @@ func (h httpBulkVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request
 	}
 	go func() {
 		log.Infof("bulk volume: %d start", vid)
-		err = h.s.BulkVolume(int32(vid), bfile, ifile)
+		err = s.store.BulkVolume(int32(vid), bfile, ifile)
 		log.Infof("bulk volume: %d stop", vid)
 	}()
 	return
 }
 
-// httpCompactVolumeHandler http compact block.
-type httpCompactVolumeHandler struct {
-	s *Store
-}
-
-func (h httpCompactVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *Server) compactVolume(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err error
 		vid int64
@@ -140,7 +125,7 @@ func (h httpCompactVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 	// long time processing, not block, we can from info stat api get status.
 	go func() {
 		log.Infof("compact volume: %d start", vid)
-		if err = h.s.CompactVolume(int32(vid)); err != nil {
+		if err = s.store.CompactVolume(int32(vid)); err != nil {
 			log.Errorf("s.CompactVolume() error(%v)", err)
 		}
 		log.Infof("compact volume: %d stop", vid)
@@ -148,12 +133,7 @@ func (h httpCompactVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 	return
 }
 
-// httpAddVolumeHandler http compact block.
-type httpAddVolumeHandler struct {
-	s *Store
-}
-
-func (h httpAddVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *Server) addVolume(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err error
 		vid int64
@@ -170,16 +150,11 @@ func (h httpAddVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request)
 		return
 	}
 	log.Infof("add volume: %d", vid)
-	_, err = h.s.AddVolume(int32(vid))
+	_, err = s.store.AddVolume(int32(vid))
 	return
 }
 
-// httpAddFreeVolumeHandler http compact block.
-type httpAddFreeVolumeHandler struct {
-	s *Store
-}
-
-func (h httpAddFreeVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
+func (s *Server) addFreeVolume(wr http.ResponseWriter, r *http.Request) {
 	var (
 		err        error
 		sn         int
@@ -199,7 +174,7 @@ func (h httpAddFreeVolumeHandler) ServeHTTP(wr http.ResponseWriter, r *http.Requ
 		return
 	}
 	log.Infof("add free volume: %d", n)
-	sn, err = h.s.AddFreeVolume(int(n), bdir, idir)
+	sn, err = s.store.AddFreeVolume(int(n), bdir, idir)
 	res["succeed"] = sn
 	return
 }
