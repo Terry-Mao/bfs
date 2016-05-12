@@ -23,3 +23,8 @@ _testmain.go
 *.test
 *.prof
 *.gitattributes
+
+*.iml
+*.ipr
+*.iws
+.idea/
