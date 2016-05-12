@@ -1,8 +1,0 @@
-requests
-flask
-flask-wtf
-Flask-Login
-Flask-OAuth
-Flask-OAuthlib
-Flask-migrate
-flask-debugtoolbar
