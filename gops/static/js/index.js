@@ -13,11 +13,13 @@ var myapp = ng.module('myapp', []);
 var storeInfo = function (host) {
     window.open("http://" + host + "/info")
 }
-var initFreeVolume = function(host){
+var initFreeVolume = function(host,storeId){
     var dailog = $('#initFreeVolumeDialog');
     var scope = dailog.scope();
     var formData = {}
+
     scope.formData = formData;
+    scope.storeId = storeId
     formData.host=host;
 
 
@@ -75,6 +77,8 @@ myapp.controller('freeStore', function ($scope, $http) {
             }).success(function (data) {
                 if (data.success){
                     alert("操作成功")
+                    var dailog = $('#freeStoreDialog');
+                    dailog.modal('hide');
                 }
             })
         }
