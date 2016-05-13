@@ -69,7 +69,7 @@ func (o *Ops)LoadRacks() {
 	)
 
 	if racks, err = o.GetRack(); err != nil {
-		panic(err)
+		beego.Error(err)
 	}
 
 	global.STORES = make(map[string]*types.Store)
@@ -90,7 +90,7 @@ func (o *Ops)LoadGroups() {
 	)
 
 	if groups, err = o.GetGroup(); err != nil {
-		panic(err)
+		beego.Error(err)
 	}
 
 	global.IN_GROUP_STORES = make(map[string]*types.Store)
@@ -117,7 +117,7 @@ func (o *Ops)LoadVolumes() {
 	)
 
 	if volumes, err = o.GetVolume(); err != nil {
-		panic(err)
+		beego.Error(err)
 	}
 
 
@@ -183,7 +183,6 @@ func (o *Ops)AddGroup(stores []string, copys, racks int) (err error) {
 		return
 	}
 
-	stores = stores[0:copys]
 	groupId = global.MAX_GROUP_ID + 1
 	for _, storeId = range stores {
 		if err = o.zk.CreateGroup(groupId, storeId); err != nil {
