@@ -79,7 +79,6 @@ func (z *ZooKeeper) GetRack() (racks []*types.Rack, err error) {
 	if children, _, err = z.c.Children(_rackRoot); err != nil {
 		return
 	}
-
 	racks = make([]*types.Rack, len(children))
 	for i, child := range children {
 		rack = new(types.Rack)
@@ -99,6 +98,12 @@ func (z *ZooKeeper) GetRack() (racks []*types.Rack, err error) {
 			if err = json.Unmarshal(data, store); err != nil {
 				return
 			}
+
+			if store.Volumes , _, err = z.c.Children(_rackRoot + "/" + child  + "/" + child1); err != nil {
+				return
+			}
+
+
 			store.Ip = strings.Split(store.Stat, ":")[0]
 			rack.Stores[j] = store
 		}

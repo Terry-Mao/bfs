@@ -69,7 +69,7 @@ func (o *Ops)LoadRacks() {
 	)
 
 	if racks, err = o.GetRack(); err != nil {
-		beego.Critical(err)
+		panic(err)
 	}
 
 	global.STORES = make(map[string]*types.Store)
@@ -90,7 +90,7 @@ func (o *Ops)LoadGroups() {
 	)
 
 	if groups, err = o.GetGroup(); err != nil {
-		beego.Critical(err)
+		panic(err)
 	}
 
 	global.IN_GROUP_STORES = make(map[string]*types.Store)
@@ -111,13 +111,13 @@ func (o *Ops)LoadGroups() {
 
 func (o *Ops)LoadVolumes() {
 	var (
-		volumes []*types.Group
+		volumes []*types.Volume
 		err error
-		volume *types.Group
+		volume *types.Volume
 	)
 
-	if volumes, err = o.GetGroup(); err != nil {
-		beego.Critical(err)
+	if volumes, err = o.GetVolume(); err != nil {
+		panic(err)
 	}
 
 
@@ -178,7 +178,7 @@ func (o *Ops)AddGroup(stores []string, copys, racks int) (err error) {
 		storeId string
 	)
 
-	if len(stores) == 0 || len(stores) % copys != 0 {
+	if len(stores) == 0 {
 		err = addGroupParamsErr
 		return
 	}
@@ -209,7 +209,6 @@ func (o *Ops) AddVolume(groupId uint64, n int) (err error) {
 	for i := 0; i < n; i++ {
 
 		vid = global.MAX_VOLUME_ID + 1
-		beego.Info(vid)
 
 		for _, store = range group.Stores {
 			if err = o.store.AddVolume(store.Admin, vid); err != nil {
