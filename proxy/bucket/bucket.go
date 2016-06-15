@@ -51,7 +51,7 @@ func (i *Item) Public(read bool) bool {
 	return i.writePublic()
 }
 
-// NewBucket
+// New a bucket.
 func New() (b *Bucket, err error) {
 	var item *Item
 	b = new(Bucket)

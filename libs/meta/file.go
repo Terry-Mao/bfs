@@ -6,4 +6,5 @@ type File struct {
 	Sha1     string `json:"sha1"`
 	Mine     string `json:"mine"`
 	Status   int32  `json:"status"`
+	MTime    int64  `json:"update_time"`
 }

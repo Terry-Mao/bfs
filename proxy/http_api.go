@@ -9,6 +9,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -164,26 +165,35 @@ func (s *server) getURI(bucket, file string) (uri string) {
 // download.
 func (s *server) download(item *ibucket.Item, bucket, file string, wr http.ResponseWriter, r *http.Request) {
 	var (
-		data   []byte
-		err    error
+		mtime  int64
+		ctlen  int
+		mine   string
+		sha1   string
 		start  = time.Now()
+		src    io.ReadCloser
 		status = http.StatusOK
+		err    error
 	)
 	defer httpLog("download", r.URL.Path, &bucket, &file, start, &status, &err)
-	if data, err = s.bfs.Get(bucket, file); err != nil {
+	if src, ctlen, mtime, sha1, mine, err = s.bfs.Get(bucket, file); err == nil {
+		wr.Header().Set("Content-Length", strconv.Itoa(ctlen))
+		wr.Header().Set("Content-Type", mine)
+		wr.Header().Set("Server", "bfs")
+		wr.Header().Set("Last-Modified", time.Unix(0, mtime).Format(http.TimeFormat))
+		wr.Header().Set("Etag", sha1)
+		if src != nil {
+			if r.Method == "GET" {
+				io.Copy(wr, src)
+			}
+			src.Close()
+		}
+	} else {
 		if err == errors.ErrNeedleNotExist {
 			status = http.StatusNotFound
 		} else {
 			status = http.StatusInternalServerError
 		}
 		http.Error(wr, "", status)
-	} else {
-		wr.Header().Set("Content-Type", http.DetectContentType(data))
-		wr.Header().Set("Content-Length", strconv.Itoa(len(data)))
-		wr.Header().Set("Server", "bfs")
-		if r.Method == "GET" {
-			_, err = wr.Write(data)
-		}
 	}
 	return
 }

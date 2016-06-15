@@ -24,8 +24,6 @@ type Config struct {
 	Prefix string
 	// file
 	MaxFileSize int
-	// purge channel
-	PurgeMaxSize int
 }
 
 // Code to implement the TextUnmarshaler interface for `duration`:
@@ -55,11 +53,11 @@ func NewConfig(conf string) (c *Config, err error) {
 	if err = toml.Unmarshal(blob, c); err != nil {
 		return
 	}
-	// http://domain/ covert to http://domain
-	c.Domain = strings.TrimRight(c.Domain, "/")
 	// bfs,/bfs,/bfs/ convert to /bfs/
 	if c.Prefix != "" {
 		c.Prefix = path.Join("/", c.Prefix) + "/"
+		// http://domain/ covert to http://domain
+		c.Domain = strings.TrimRight(c.Domain, "/")
 	}
 	return
 }

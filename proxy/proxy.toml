@@ -11,5 +11,3 @@ Domain = "http://localhost:2232/"
 Prefix = "/bfs/"
 
 MaxFileSize = 20971520
-
-PurgeMaxSize = 100000

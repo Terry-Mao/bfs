@@ -11,6 +11,7 @@ import (
 	log "github.com/golang/glog"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -45,6 +46,8 @@ var (
 		Transport: _transport,
 	}
 	_canceler = _transport.CancelRequest
+	// random store node
+	_rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
 type Bfs struct {
@@ -58,14 +61,14 @@ func New(c *conf.Config) (b *Bfs) {
 }
 
 // Get
-func (b *Bfs) Get(bucket, filename string) (content []byte, err error) {
+func (b *Bfs) Get(bucket, filename string) (src io.ReadCloser, ctlen int, mtime int64, sha1, mine string, err error) {
 	var (
-		params = url.Values{}
-		host   string
-		uri    string
-		req    *http.Request
-		resp   *http.Response
-		res    meta.Response
+		i, ix, l int
+		uri      string
+		req      *http.Request
+		resp     *http.Response
+		res      meta.Response
+		params   = url.Values{}
 	)
 	params.Set("bucket", bucket)
 	params.Set("filename", filename)
@@ -83,13 +86,17 @@ func (b *Bfs) Get(bucket, filename string) (content []byte, err error) {
 		}
 		return
 	}
-
+	mtime = res.MTime
+	sha1 = res.Sha1
+	mine = res.Mine
 	params = url.Values{}
-	for _, host = range res.Stores {
+	l = len(res.Stores)
+	ix = _rand.Intn(l)
+	for i = 0; i < l; i++ {
 		params.Set("key", strconv.FormatInt(res.Key, 10))
 		params.Set("cookie", strconv.FormatInt(int64(res.Cookie), 10))
 		params.Set("vid", strconv.FormatInt(int64(res.Vid), 10))
-		uri = fmt.Sprintf(_storeGetApi, host) + "?" + params.Encode()
+		uri = fmt.Sprintf(_storeGetApi, res.Stores[(ix+i)%l]) + "?" + params.Encode()
 		if req, err = http.NewRequest("GET", uri, nil); err != nil {
 			continue
 		}
@@ -104,10 +111,8 @@ func (b *Bfs) Get(bucket, filename string) (content []byte, err error) {
 		if resp.StatusCode != http.StatusOK {
 			continue
 		}
-		if content, err = ioutil.ReadAll(resp.Body); err != nil {
-			continue
-		}
-		resp.Body.Close()
+		src = resp.Body
+		ctlen = int(resp.ContentLength)
 		break
 	}
 	return
