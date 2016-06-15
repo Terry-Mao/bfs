@@ -30,35 +30,36 @@
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span
                         aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title">请选择至少2个Store...</h4>
+                <h4 class="modal-title">Init Volume[{{storeId}}]</h4>
             </div>
             <div class="modal-body">
                 <form id="initFreeVolumeForm">
                     <input type="text" ng-model="formData.host" type="text" class="hide"/>
-                    <fieldset>
-                        <label>数据目录:</label>
+
+                    <div class="form-group">
+                        <label class="col-sm-2 control-label">Data Dir:</label>
                         <input name="bdir" ng-model="formData.bdir" type="text"/>
-                    </fieldset>
-                    <fieldset>
-                        <label>索引目录:</label>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-2 control-label">Index Dir:</label>
                         <input name="idir" ng-model="formData.idir" type="text"/>
-                    </fieldset>
-                    <fieldset>
-                        <label>卷数量&nbsp;&nbsp;&nbsp;&nbsp;:</label>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-2 control-label">Num&nbsp;&nbsp;&nbsp;&nbsp;:</label>
                         <input name="n" ng-model="formData.n" type="text"/>
-                    </fieldset>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" ng-click="processForm()">提交</button>
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" ng-click="processForm()">Submit</button>
             </div>
         </div>
     </div>
 </div>
 
 <!-- 添加分组窗口-->
-<div id="freeStore" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel"
+<div id="freeStoreDialog" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel"
      ng-controller="freeStore">
     <div class="modal-dialog modal-lg">
 
@@ -66,10 +67,10 @@
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span
                         aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title">请选择至少2个Store...</h4>
+                <h4 class="modal-title">Add Group</h4>
             </div>
             <div class="modal-body">
-                <span ng-if="items.length == 0">没有可用的store...</span>
+                <span ng-if="items.length == 0">no free store...</span>
                 <table class="table table-bordered" ng-if="items.length > 0">
                     <tr>
                         <th class="col-md-1"></th>
@@ -85,8 +86,8 @@
                 </table>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" ng-click="addGroup()">添加</button>
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" ng-click="addGroup()">Submit</button>
             </div>
         </div>
     </div>
@@ -100,20 +101,20 @@
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span
                         aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title">添加卷</h4>
+                <h4 class="modal-title">Add Volume</h4>
             </div>
             <div class="modal-body">
                 <form id="addVolumeForm">
                     <input type="text" ng-model="formData.groupId" type="text" class="hide"/>
                     <fieldset>
-                        <label>数量&nbsp;&nbsp;&nbsp;&nbsp;:</label>
+                        <label>Number&nbsp;&nbsp;&nbsp;&nbsp;:</label>
                         <input name="n" ng-model="formData.n" type="text"/>
                     </fieldset>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" ng-click="processForm()">提交</button>
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" ng-click="processForm()">Submit</button>
             </div>
         </div>
     </div>
@@ -122,29 +123,31 @@
 <div class=container>
     <div class="row">
         <div class="col-md-10">
-            <h4>机架信息</h4>
+            <h4>Racks View</h4>
         </div>
     </div>
     <div class="row" ng-controller="rack">
-        <div class="col-md-10" ng-repeat="rack in items">
-            <div class="panel panel-default" ng-repeat="group in items">
+        <div class="col-md-11" ng-repeat="rack in items|orderBy:'name'">
+            <div class="panel panel-default">
                 <div class=panel-heading><b>{{rack.name}}</b>
                 </div>
                 <div class=panel-body>
                     <table class="table table-bordered">
                         <tr>
-                            <th class="col-md-4">Store</th>
-                            <th class="col-md-4">Ip</th>
-                            <th class="col-md-2">操作</th>
+                            <th class="col-md-3">Store</th>
+                            <th class="col-md-3">Ip</th>
+                            <th class="col-md-3">Volumes</th>
+                            <th class="col-md-2">Op</th>
                         </tr>
-                        <tr ng-repeat="store in rack.stores">
+                        <tr ng-repeat="store in rack.stores|orderBy:'id'">
                             <td>{{store.id}}</td>
                             <td>{{store.ip}}</td>
+                            <td><span ng-repeat="volumeId in store.volumes|orderBy">{{volumeId}},</span></td>
                             <td>
-                                <button class="btn btn-xs btn-primary" ng-click="initFreeVolume(store.admin)">
-                                    初始化卷
+                                <button class="btn btn-xs btn-primary" ng-click="initFreeVolume(store.admin,store.id)">
+                                    Init Volume
                                 </button>
-                                <button class="btn btn-xs btn-primary" ng-click="storeInfo(store.stat)">状态</button>
+                                <button class="btn btn-xs btn-primary" ng-click="storeInfo(store.stat)">Stat</button>
                             </td>
                         </tr>
                     </table>
@@ -155,9 +158,9 @@
 
     <div class=row>
         <div class=col-md-10>
-            <h4>分组信息
-                <button type="button" class="btn btn-sm btn-default" data-toggle="modal" data-target="#freeStore">
-                    <span class="glyphicon glyphicon-plus"></span>添加分组
+            <h4>Groups View
+                <button type="button" class="btn btn-sm btn-default" data-toggle="modal" data-target="#freeStoreDialog">
+                    <span class="glyphicon glyphicon-plus"></span>Add Group
                 </button>
             </h4>
         </div>
@@ -168,32 +171,34 @@
 
 
     <div class="row" ng-controller="group">
-        <div class="col-md-10">
-            <div class="panel panel-default" ng-repeat="group in items">
+        <div class="col-md-11">
+            <div class="panel panel-default" ng-repeat="group in items|orderBy:'id'">
                 <div class=panel-heading><b>group_{{ group.id }}</b>
 
                     <div class="btn-group btn-group-sm pull-right">
                         <button class="btn btn-sm btn-default" ng-click="openDailog(group.id)"
                                 title="Add Redis Server"><span class="glyphicon glyphicon-plus"></span>
-                            添加卷
+                            Add Volume
                         </button>
                     </div>
                 </div>
                 <div class=panel-body>
                     <table class="table table-bordered">
                         <tr>
-                            <th class="col-md-4">Store</th>
-                            <th class="col-md-4">Ip</th>
-                            <th class="col-md-2">操作</th>
+                            <th class="col-md-3">Store</th>
+                            <th class="col-md-3">Ip</th>
+                            <th class="col-md-3">Volumes</th>
+                            <th class="col-md-2">Op</th>
                         </tr>
-                        <tr ng-repeat="store in group.stores">
+                        <tr ng-repeat="store in group.stores|orderBy:'id'">
                             <td>{{store.id}}</td>
                             <td>{{store.ip}}</td>
+                            <td><span ng-repeat="volumeId in store.volumes|orderBy">{{volumeId}},</span></td>
                             <td>
-                                <button class="btn btn-xs btn-primary" ng-click="initFreeVolume(store.admin)">
-                                    初始化卷
+                                <button class="btn btn-xs btn-primary" ng-click="initFreeVolume(store.admin,store.id)">
+                                    Init Volume
                                 </button>
-                                <button class="btn btn-xs btn-primary" ng-click="storeInfo(store.stat)">状态</button>
+                                <button class="btn btn-xs btn-primary" ng-click="storeInfo(store.stat)">Stat</button>
                             </td>
                         </tr>
                     </table>

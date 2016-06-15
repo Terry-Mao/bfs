@@ -101,4 +101,7 @@ $ nohup python runserver.py &
  
 ## API
 [api文档](https://github.com/Terry-Mao/bfs/blob/master/doc/api.md)
+
 ## 更多
+
+ * [bfs-image-server](github.com/YonkaFang/bfs-image-server) 

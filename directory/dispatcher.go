@@ -70,6 +70,7 @@ func (d *Dispatcher) Update(group map[int][]string,
 		if !write {
 			continue
 		}
+
 		// calc score
 		for _, sid = range stores {
 			totalAdd, totalAddDelay, restSpace, minScore = 0, 0, 0, 0

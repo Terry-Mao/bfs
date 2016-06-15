@@ -8,6 +8,7 @@ type Store struct {
 	Admin  string `json:"admin"`
 	Rack   string `json:"rack"`
 	Status int `json:"status"`
+	Volumes []string `json:"volumes"`
 }
 
 type Rack struct {
