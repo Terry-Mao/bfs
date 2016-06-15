@@ -125,7 +125,9 @@ func (v *Volume) init() (err error) {
 	}
 	// recheck offset, keep size and offset consistency
 	if v.Block.Size != needle.BlockOffset(v.Block.Offset) {
-		log.Error("block: %s size: %d, offset: %d (%d size) not consistency", v.Block.File, v.Block.Size, v.Block.Offset, needle.BlockOffset(v.Block.Offset))
+		log.Errorf("block: %s [real size: %d, offset: %d] but [size: %d, offset: %d] not consistency",
+			v.Block.File, v.Block.Size, needle.NeedleOffset(v.Block.Size),
+			needle.BlockOffset(v.Block.Offset), v.Block.Offset)
 		return errors.ErrSuperBlockOffset
 	}
 	// flush index
@@ -164,32 +166,15 @@ func (v *Volume) IsClosed() bool {
 	return v.closed
 }
 
-func (v *Volume) get(n *needle.Needle) (err error) {
+func (v *Volume) read(n *needle.Needle) (err error) {
 	var (
-		ok     bool
-		nc     int64
-		offset uint32
-		size   int32
-		key    = n.Key
-		now    = time.Now().UnixNano()
+		key  = n.Key
+		size = n.TotalSize
+		now  = time.Now().UnixNano()
 	)
-	// pread syscall is atomic, so use rlock
-	v.lock.RLock()
-	if nc, ok = v.needles[key]; ok {
-		if offset, size = needle.Cache(nc); offset != needle.CacheDelOffset {
-			n.TotalSize = size
-			err = v.Block.ReadAt(offset, n)
-		} else {
-			err = errors.ErrNeedleDeleted
-		}
-	} else {
-		err = errors.ErrNeedleNotExist
-	}
-	v.lock.RUnlock()
-	if err != nil {
-		return
-	}
-	if err = n.Parse(); err != nil {
+	// TODO iops limit
+	// pread syscall is atomic, no lock
+	if err = v.Block.ReadAt(n); err != nil {
 		return
 	}
 	if n.Key != key {
@@ -199,7 +184,7 @@ func (v *Volume) get(n *needle.Needle) (err error) {
 		return errors.ErrNeedleSize
 	}
 	if log.V(1) {
-		log.Infof("get needle key: %d, cookie: %d, offset: %d, size: %d", n.Key, n.Cookie, offset, size)
+		log.Infof("get needle key: %d, cookie: %d, offset: %d, size: %d", n.Key, n.Cookie, n.Offset, size)
 		log.Infof("%v\n", n)
 	}
 	// needles map may be out-dated, recheck
@@ -216,117 +201,136 @@ func (v *Volume) get(n *needle.Needle) (err error) {
 	return
 }
 
-// Get get a needle by key and cookie.
-func (v *Volume) Get(n *needle.Needle) (err error) {
+// Read get a needle by key and cookie and write to wr.
+func (v *Volume) Read(key int64, cookie int32) (n *needle.Needle, err error) {
 	var (
-		cookie = n.Cookie
+		ok bool
+		nc int64
 	)
-	if err = v.get(n); err != nil {
-		return
+	v.lock.RLock()
+	if nc, ok = v.needles[key]; !ok {
+		err = errors.ErrNeedleNotExist
 	}
-	if n.Cookie != cookie {
-		return errors.ErrNeedleCookie
+	v.lock.RUnlock()
+	if err == nil {
+		if n = needle.NewReader(key, nc); n.Offset != needle.CacheDelOffset {
+			if err = v.read(n); err == nil {
+				if n.Cookie != cookie {
+					err = errors.ErrNeedleCookie
+				}
+			}
+		} else {
+			err = errors.ErrNeedleDeleted
+		}
+		if err != nil {
+			n.Close()
+			n = nil
+		}
 	}
 	return
 }
 
-// Probe probe a needle by key.
-func (v *Volume) Probe(n *needle.Needle) (err error) {
-	var key int64
+// Probe probe a needle.
+func (v *Volume) Probe() (err error) {
+	var (
+		ok  bool
+		nc  int64
+		key int64
+		n   *needle.Needle
+	)
 	v.lock.RLock()
 	// get a rand key
 	for key, _ = range v.needles {
 		break
 	}
+	if nc, ok = v.needles[key]; !ok {
+		err = errors.ErrNeedleNotExist
+	}
 	v.lock.RUnlock()
-	n.Key = key
-	if err = v.get(n); err != nil {
-		return
+	if err == nil {
+		if n = needle.NewReader(key, nc); n.Offset != needle.CacheDelOffset {
+			err = v.read(n)
+		} else {
+			err = errors.ErrNeedleDeleted
+		}
+		n.Close()
 	}
 	return
 }
 
-// Write add a needles, if key exists append to super block, then update
+// Write add a needle, if key exists append to super block, then update
 // needle cache offset to new offset.
 func (v *Volume) Write(n *needle.Needle) (err error) {
 	var (
-		ok      bool
-		nc      int64
-		offset  uint32
-		ooffset uint32
-		now     = time.Now().UnixNano()
+		ok     bool
+		nc     int64
+		offset uint32
+		now    = time.Now().UnixNano()
 	)
 	v.lock.Lock()
-	offset = v.Block.Offset
+	n.Offset = v.Block.Offset
 	if err = v.Block.Write(n); err == nil {
-		if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err == nil {
+		if err = v.Indexer.Add(n.Key, n.Offset, n.TotalSize); err == nil {
 			nc, ok = v.needles[n.Key]
-			v.needles[n.Key] = needle.NewCache(offset, n.TotalSize)
+			v.needles[n.Key] = needle.NewCache(n.Offset, n.TotalSize)
 		}
 	}
 	v.lock.Unlock()
-	if err != nil {
-		return
+	if err == nil {
+		if log.V(1) {
+			log.Infof("add needle, offset: %d, size: %d", n.Offset, n.TotalSize)
+			log.Info(n)
+		}
+		if ok {
+			offset, _ = needle.Cache(nc)
+			v.del(offset)
+		}
+		atomic.AddUint64(&v.Stats.TotalWriteProcessed, 1)
+		atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(n.TotalSize))
+		atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 	}
-	if log.V(1) {
-		log.Infof("add needle, offset: %d, size: %d", offset, n.TotalSize)
-		log.Info(n)
-	}
-	if ok {
-		ooffset, _ = needle.Cache(nc)
-		err = v.del(ooffset)
-		log.Warningf("same key: %d, old offset: %d, new offset: %d", n.Key, ooffset, offset)
-	}
-	atomic.AddUint64(&v.Stats.TotalWriteProcessed, 1)
-	atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(n.TotalSize))
-	atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 	return
 }
 
-// Writes write needles, if key exists append to super block, then update
+// Writes add needles, if key exists append to super block, then update
 // needle cache offset to new offset.
 func (v *Volume) Writes(ns *needle.Needles) (err error) {
 	var (
-		i       int
-		ok      bool
-		nc      int64
-		ncs     []int64
-		offset  uint32
-		ooffset uint32
-		n       *needle.Needle
-		now     = time.Now().UnixNano()
+		ok     bool
+		nc     int64
+		ncs    []int64
+		offset uint32
+		n      *needle.Needle
+		now    = time.Now().UnixNano()
 	)
 	v.lock.Lock()
-	offset = v.Block.Offset
-	if err = v.Block.Writes(ns); err == nil {
-		for i = 0; i < ns.Num; i++ {
-			n = ns.Needle(i)
-			if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err != nil {
-				break
-			}
-			if nc, ok = v.needles[n.Key]; ok {
-				ncs = append(ncs, nc)
-			}
-			v.needles[n.Key] = needle.NewCache(offset, n.TotalSize)
-			offset += n.IncrOffset
-			if log.V(1) {
-				log.Infof("add needle, offset: %d, size: %d", offset, n.TotalSize)
-				log.Info(n)
-			}
+	for n = ns.Next(); n != nil; n = ns.Next() {
+		offset = v.Block.Offset
+		if err = v.Block.Write(n); err != nil {
+			break
+		}
+		if err = v.Indexer.Add(n.Key, offset, n.TotalSize); err != nil {
+			break
+		}
+		if nc, ok = v.needles[n.Key]; ok {
+			ncs = append(ncs, nc)
+		}
+		v.needles[n.Key] = needle.NewCache(offset, n.TotalSize)
+		if log.V(1) {
+			log.Infof("add needle, offset: %d, size: %d", offset, n.TotalSize)
+			log.Info(n)
 		}
 	}
 	v.lock.Unlock()
-	if err != nil {
-		return
+	if err == nil {
+		for _, nc = range ncs {
+			offset, _ = needle.Cache(nc)
+			v.del(offset)
+		}
+		atomic.AddUint64(&v.Stats.TotalWriteProcessed, uint64(ns.Num))
+		atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(ns.TotalSize))
+		atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 	}
-	for _, nc = range ncs {
-		ooffset, _ = needle.Cache(nc)
-		err = v.del(ooffset)
-		log.Warningf("same key: %d, old offset: %d, new offset: %d", n.Key, ooffset, offset)
-	}
-	atomic.AddUint64(&v.Stats.TotalWriteProcessed, uint64(ns.Num))
-	atomic.AddUint64(&v.Stats.TotalWriteBytes, uint64(ns.TotalSize))
-	atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
 	return
 }
 
@@ -405,7 +409,7 @@ func (v *Volume) delproc() {
 				}
 				atomic.AddUint64(&v.Stats.TotalDelProcessed, 1)
 				atomic.AddUint64(&v.Stats.TotalWriteBytes, 1)
-				atomic.AddUint64(&v.Stats.TotalWriteDelay, uint64(time.Now().UnixNano()-now))
+				atomic.AddUint64(&v.Stats.TotalDelDelay, uint64(time.Now().UnixNano()-now))
 			}
 			offsets = offsets[:0]
 		}

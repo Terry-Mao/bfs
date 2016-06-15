@@ -61,21 +61,21 @@ func (s *Server) stat(wr http.ResponseWriter, r *http.Request) {
 // startStat stat the store.
 func (s *Server) startStat() {
 	var (
-		v     *volume.Volume
-		stat1 *stat.Stats
-		stat  = new(stat.Stats)
+		v    *volume.Volume
+		olds *stat.Stats
+		news = new(stat.Stats)
 	)
 	for {
-		*stat = *(s.info.Stats)
-		stat1 = s.info.Stats
-		s.info.Stats = stat
-		stat1.Reset()
+		olds = s.info.Stats
+		*news = *olds
+		s.info.Stats = news // use news instead, for current display
+		olds.Reset()
 		for _, v = range s.store.Volumes {
 			v.Stats.Calc()
-			stat1.Merge(v.Stats)
+			olds.Merge(v.Stats)
 		}
-		stat1.Calc()
-		s.info.Stats = stat1
+		olds.Calc()
+		s.info.Stats = olds
 		time.Sleep(statDuration)
 	}
 }

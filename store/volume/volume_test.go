@@ -43,12 +43,12 @@ var (
 func TestVolume(t *testing.T) {
 	var (
 		v     *Volume
+		n     *needle.Needle
 		err   error
 		data  = []byte("test")
 		bfile = "../test/test1"
 		ifile = "../test/test1.idx"
-		n     = needle.NewBufferNeedle(_c.NeedleMaxSize)
-		ns    = needle.NewBufferNeedles(3, _c.NeedleMaxSize)
+		ns    = needle.NewNeedles(3)
 		buf   = &bytes.Buffer{}
 	)
 	os.Remove(bfile)
@@ -71,7 +71,9 @@ func TestVolume(t *testing.T) {
 		t.Errorf("buf.Write() error(%v)", err)
 		t.FailNow()
 	}
-	if err = n.WriteFrom(1, 1, 4, buf); err != nil {
+	n = needle.NewWriter(1, 1, 4)
+	defer n.Close()
+	if err = n.ReadFrom(buf); err != nil {
 		t.Errorf("n.Write() error(%v)", err)
 		t.FailNow()
 	}
@@ -83,7 +85,9 @@ func TestVolume(t *testing.T) {
 		t.Errorf("buf.Write() error(%v)", err)
 		t.FailNow()
 	}
-	if err = n.WriteFrom(2, 2, 4, buf); err != nil {
+	n = needle.NewWriter(2, 2, 4)
+	defer n.Close()
+	if err = n.ReadFrom(buf); err != nil {
 		t.Errorf("n.Write() error(%v)", err)
 		t.FailNow()
 	}
@@ -95,7 +99,9 @@ func TestVolume(t *testing.T) {
 		t.Errorf("buf.Write() error(%v)", err)
 		t.FailNow()
 	}
-	if err = n.WriteFrom(3, 3, 4, buf); err != nil {
+	n = needle.NewWriter(3, 3, 4)
+	defer n.Close()
+	if err = n.ReadFrom(buf); err != nil {
 		t.Errorf("n.Write() error(%v)", err)
 		t.FailNow()
 	}
@@ -107,7 +113,7 @@ func TestVolume(t *testing.T) {
 		t.Errorf("buf.Write() error(%v)", err)
 		t.FailNow()
 	}
-	if err = ns.WriteFrom(4, 4, 4, buf); err != nil {
+	if err = ns.ReadFrom(4, 4, 4, buf); err != nil {
 		t.Errorf("ns.Write() error(%v)", err)
 		t.FailNow()
 	}
@@ -115,7 +121,7 @@ func TestVolume(t *testing.T) {
 		t.Errorf("buf.Write() error(%v)", err)
 		t.FailNow()
 	}
-	if err = ns.WriteFrom(5, 5, 4, buf); err != nil {
+	if err = ns.ReadFrom(5, 5, 4, buf); err != nil {
 		t.Errorf("ns.Write() error(%v)", err)
 		t.FailNow()
 	}
@@ -123,7 +129,7 @@ func TestVolume(t *testing.T) {
 		t.Errorf("buf.Write() error(%v)", err)
 		t.FailNow()
 	}
-	if err = ns.WriteFrom(6, 6, 4, buf); err != nil {
+	if err = ns.ReadFrom(6, 6, 4, buf); err != nil {
 		t.Errorf("ns.Write() error(%v)", err)
 		t.FailNow()
 	}
@@ -135,9 +141,7 @@ func TestVolume(t *testing.T) {
 		t.Errorf("Del error(%v)", err)
 		t.FailNow()
 	}
-	n.Key = 3
-	n.Cookie = 3
-	if err = v.Get(n); err != errors.ErrNeedleDeleted {
+	if _, err = v.Read(3, 3); err != errors.ErrNeedleDeleted {
 		t.Error("err must be ErrNeedleDeleted")
 		t.FailNow()
 	} else {

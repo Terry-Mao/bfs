@@ -33,7 +33,7 @@ func main() {
 		return
 	}
 	log.Infof("init http...")
-	svr = &Server{store: s, conf: c}
+	svr = NewServer(s, c)
 	StartStat(c.StatListen, svr)
 	StartApi(c.ApiListen, svr)
 	StartAdmin(c.AdminListen, svr)

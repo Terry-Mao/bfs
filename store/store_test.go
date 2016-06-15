@@ -14,8 +14,8 @@ func TestStore(t *testing.T) {
 		s   *Store
 		z   *zk.Zookeeper
 		v   *volume.Volume
+		n   *needle.Needle
 		err error
-		n   = needle.NewBufferNeedle(40)
 		buf = &bytes.Buffer{}
 	)
 	os.Remove(testConf.Store.VolumeIndex)
@@ -75,15 +75,17 @@ func TestStore(t *testing.T) {
 		t.FailNow()
 	}
 	buf.WriteString("test")
-	n.WriteFrom(1, 1, 4, buf)
+	n = needle.NewWriter(1, 1, 4)
+	if err = n.ReadFrom(buf); err != nil {
+		t.Errorf("n.ReadFrom() error(%v)", err)
+		t.FailNow()
+	}
 	if err = v.Write(n); err != nil {
 		t.Errorf("v.Add(1) error(%v)", err)
 		t.FailNow()
 	}
-	n.Key = 1
-	n.Cookie = 1
-	if err = v.Get(n); err != nil {
-		t.Errorf("v.Get(1) error(%v)", err)
+	if _, err = v.Read(1, 1); err != nil {
+		t.Errorf("v.WriteTo(1) error(%v)", err)
 		t.FailNow()
 	}
 	if err = s.BulkVolume(2, "./test/block_store_1", "./test/block_store_1.idx"); err != nil {
@@ -94,15 +96,21 @@ func TestStore(t *testing.T) {
 		t.Error("Volume(2) not exist")
 		t.FailNow()
 	}
+	buf.WriteString("test")
+	n = needle.NewWriter(1, 1, 4)
+	if err = n.ReadFrom(buf); err != nil {
+		t.Errorf("n.ReadFrom() error(%v)", err)
+		t.FailNow()
+	}
 	if err = v.Write(n); err != nil {
 		t.Errorf("v.Add() error(%v)", err)
 		t.FailNow()
 	}
-	n.Key = 1
-	n.Cookie = 1
-	if err = v.Get(n); err != nil {
-		t.Errorf("v.Get(1) error(%v)", err)
+	if n, err = v.Read(1, 1); err != nil {
+		t.Errorf("v.WriteTo(1) error(%v)", err)
 		t.FailNow()
+	} else {
+		n.Close()
 	}
 	if err = s.CompactVolume(1); err != nil {
 		t.Errorf("Compress(1) error(%v)", err)
@@ -112,11 +120,11 @@ func TestStore(t *testing.T) {
 		t.Error("Volume(1) not exist")
 		t.FailNow()
 	}
-	n.Key = 1
-	n.Cookie = 1
-	if err = v.Get(n); err != nil {
-		t.Errorf("v.Get(1) error(%v)", err)
+	if n, err = v.Read(1, 1); err != nil {
+		t.Errorf("v.WriteTo(1) error(%v)", err)
 		t.FailNow()
+	} else {
+		n.Close()
 	}
 	s.DelVolume(1)
 	if v = s.Volumes[1]; v != nil {

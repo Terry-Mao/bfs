@@ -24,12 +24,12 @@ var (
 func TestSuperBlock(t *testing.T) {
 	var (
 		b                  *SuperBlock
+		n                  *needle.Needle
 		offset, v2, v3, v4 uint32
 		err                error
 		buf                = &bytes.Buffer{}
 		needles            = make(map[int64]int64)
 		data               = []byte("test")
-		n                  = needle.NewBufferNeedle(4)
 		file               = "../test/test.block"
 		ifile              = "../test/test.idx"
 		//indexer *Indexer
@@ -61,10 +61,9 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("buf.Write() error(%v)", err)
 		t.FailNow()
 	}
-	if err = n.WriteFrom(1, 1, 4, buf); err != nil {
-		t.Errorf("n.Write() error(%v)", err)
-		t.FailNow()
-	}
+	n = needle.NewWriter(1, 1, 4)
+	defer n.Close()
+	n.ReadFrom(buf)
 	if err = b.Write(n); err != nil {
 		t.Errorf("b.Write() error(%v)", err)
 		t.FailNow()
@@ -76,7 +75,8 @@ func TestSuperBlock(t *testing.T) {
 	offset = b.Offset
 	v2 = b.Offset
 	// test get
-	if err = b.ReadAt(1, n); err != nil {
+	n.Offset = 1
+	if err = b.ReadAt(n); err != nil {
 		t.Errorf("b.ReadAt() error(%v)", err)
 		t.FailNow()
 	}
@@ -89,10 +89,9 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("buf.Write() error(%v)", err)
 		t.FailNow()
 	}
-	if err = n.WriteFrom(2, 2, 4, buf); err != nil {
-		t.Errorf("n.Write() error(%v)", err)
-		t.FailNow()
-	}
+	n = needle.NewWriter(2, 2, 4)
+	defer n.Close()
+	n.ReadFrom(buf)
 	if err = b.Write(n); err != nil {
 		t.Errorf("b.Write() error(%v)", err)
 		t.FailNow()
@@ -103,7 +102,8 @@ func TestSuperBlock(t *testing.T) {
 	}
 	offset = b.Offset
 	v3 = b.Offset
-	if err = b.ReadAt(6, n); err != nil {
+	n.Offset = 6
+	if err = b.ReadAt(n); err != nil {
 		t.Errorf("b.ReadAt() error(%v)", err)
 		t.FailNow()
 	}
@@ -116,10 +116,9 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("buf.Write() error(%v)", err)
 		t.FailNow()
 	}
-	if err = n.WriteFrom(3, 3, 4, buf); err != nil {
-		t.Errorf("n.Write() error(%v)", err)
-		t.FailNow()
-	}
+	n = needle.NewWriter(3, 3, 4)
+	defer n.Close()
+	n.ReadFrom(buf)
 	if err = b.Write(n); err != nil {
 		t.Errorf("b.Write() error(%v)", err)
 		t.FailNow()
@@ -131,10 +130,9 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("buf.Write() error(%v)", err)
 		t.FailNow()
 	}
-	if err = n.WriteFrom(4, 4, 4, buf); err != nil {
-		t.Errorf("n.Write() error(%v)", err)
-		t.FailNow()
-	}
+	n = needle.NewWriter(4, 4, 4)
+	defer n.Close()
+	n.ReadFrom(buf)
 	if err = b.Write(n); err != nil {
 		t.Errorf("b.Write() error(%v)", err)
 		t.FailNow()
@@ -147,7 +145,8 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("compareTestOffset() error(%v)", err)
 		t.FailNow()
 	}
-	if err = b.ReadAt(11, n); err != nil {
+	n.Offset = 11
+	if err = b.ReadAt(n); err != nil {
 		t.Errorf("Get() error(%v)", err)
 		t.FailNow()
 	}
@@ -155,7 +154,8 @@ func TestSuperBlock(t *testing.T) {
 		t.Error("compareTestNeedle(3)")
 		t.FailNow()
 	}
-	if err = b.ReadAt(16, n); err != nil {
+	n.Offset = 16
+	if err = b.ReadAt(n); err != nil {
 		t.Errorf("Get() error(%v)", err)
 		t.FailNow()
 	}
@@ -169,21 +169,24 @@ func TestSuperBlock(t *testing.T) {
 		t.FailNow()
 	}
 	// test get
-	if err = b.ReadAt(1, n); err != nil {
+	n.Offset = 1
+	if err = b.ReadAt(n); err != nil {
 		t.Errorf("Get() error(%v)", err)
 		t.FailNow()
 	}
 	if err = compareTestNeedle(t, 1, 1, needle.FlagDel, n, data); err != nil {
 		t.FailNow()
 	}
-	if err = b.ReadAt(11, n); err != nil {
+	n.Offset = 11
+	if err = b.ReadAt(n); err != nil {
 		t.Errorf("Get() error(%v)", err)
 		t.FailNow()
 	}
 	if err = compareTestNeedle(t, 3, 3, needle.FlagOK, n, data); err != nil {
 		t.FailNow()
 	}
-	if err = b.ReadAt(16, n); err != nil {
+	n.Offset = 16
+	if err = b.ReadAt(n); err != nil {
 		t.Errorf("b.Get() error(%v)", err)
 		t.FailNow()
 	}
@@ -256,15 +259,15 @@ func TestSuperBlock(t *testing.T) {
 		t.Errorf("buf.Write() error(%v)", err)
 		t.FailNow()
 	}
-	if err = n.WriteFrom(3, 3, 4, buf); err != nil {
-		t.Errorf("n.Write() error(%v)", err)
-		t.FailNow()
-	}
+	n = needle.NewWriter(3, 3, 4)
+	defer n.Close()
+	n.ReadFrom(buf)
 	if err = b.WriteAt(v3, n); err != nil {
 		t.Errorf("b.Repair(3) error(%v)", err)
 		t.FailNow()
 	}
-	if err = b.ReadAt(v3, n); err != nil {
+	n.Offset = v3
+	if err = b.ReadAt(n); err != nil {
 		t.Errorf("b.Get() error(%v)", err)
 		t.FailNow()
 	}
@@ -303,10 +306,6 @@ func TestSuperBlock(t *testing.T) {
 }
 
 func compareTestNeedle(t *testing.T, key int64, cookie int32, flag byte, n *needle.Needle, data []byte) (err error) {
-	if err = n.Parse(); err != nil {
-		t.Error(err)
-		return
-	}
 	if !bytes.Equal(n.Data, data) {
 		err = fmt.Errorf("data: %s not match", n.Data)
 		t.Error(err)

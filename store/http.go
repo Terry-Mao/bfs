@@ -6,6 +6,7 @@ import (
 	"bfs/store/conf"
 	"encoding/json"
 	log "github.com/golang/glog"
+	"golang.org/x/time/rate"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -17,6 +18,21 @@ type Server struct {
 	store *Store
 	conf  *conf.Config
 	info  *stat.Info
+
+	rl *rate.Limiter
+	wl *rate.Limiter
+	dl *rate.Limiter
+}
+
+func NewServer(s *Store, c *conf.Config) *Server {
+	svr := &Server{
+		store: s,
+		conf:  c,
+		rl:    rate.NewLimiter(rate.Limit(c.Limit.Read.Rate), c.Limit.Read.Brust),
+		wl:    rate.NewLimiter(rate.Limit(c.Limit.Write.Rate), c.Limit.Write.Brust),
+		dl:    rate.NewLimiter(rate.Limit(c.Limit.Delete.Rate), c.Limit.Delete.Brust),
+	}
+	return svr
 }
 
 type sizer interface {

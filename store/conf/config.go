@@ -23,6 +23,7 @@ type Config struct {
 	Volume    *Volume
 	Block     *Block
 	Index     *Index
+	Limit     *Limit
 	Zookeeper *Zookeeper
 }
 
@@ -57,6 +58,17 @@ type Zookeeper struct {
 	ServerId string
 	Addrs    []string
 	Timeout  Duration
+}
+
+type Rate struct {
+	Rate  float64
+	Brust int
+}
+
+type Limit struct {
+	Read   *Rate
+	Write  *Rate
+	Delete *Rate
 }
 
 // Code to implement the TextUnmarshaler interface for `Duration`:

@@ -23,11 +23,13 @@ func TestNeedle(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	n = NewBufferNeedle(4)
-	if err = n.WriteFrom(3, 3, 4, buf); err != nil {
+	n = NewWriter(3, 3, 4)
+	defer n.Close()
+	if err = n.ReadFrom(buf); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
+	t.Log(n)
 	tn = new(Needle)
 	tn.buffer = n.Buffer()
 	// Parse
@@ -35,10 +37,12 @@ func TestNeedle(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
+	t.Log(n)
 	compareNeedle(t, tn, 3, 3, data1, FlagOK, checksum1)
 	buf.Write(data2)
-	n = NewBufferNeedle(4)
-	if err = n.WriteFrom(4, 4, 4, buf); err != nil {
+	n = NewWriter(4, 4, 4)
+	defer n.Close()
+	if err = n.ReadFrom(buf); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -60,6 +64,7 @@ func TestNeedle(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
+	t.Log(tn)
 	compareNeedle(t, tn, 4, 4, data2, FlagOK, checksum2)
 }
 

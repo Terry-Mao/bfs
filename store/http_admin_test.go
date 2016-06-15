@@ -61,7 +61,7 @@ func TestHTTPAdmin(t *testing.T) {
 		t.FailNow()
 	}
 	defer s.Close()
-	StartAdmin("localhost:6063", s)
+	StartAdmin("localhost:6063", &Server{store: s, conf: testConf})
 	time.Sleep(1 * time.Second)
 	// AddFreeVolume
 	buf.Reset()
@@ -123,6 +123,7 @@ func TestHTTPAdmin(t *testing.T) {
 		t.Errorf("compact_volume: %d", tr.Ret)
 		t.FailNow()
 	}
+	time.Sleep(_compactSleep * 2)
 	// BulkVolume
 	buf.Reset()
 	buf.WriteString("vid=2&bfile=./test/block_admin_1&ifile=./test/block_admin_1.idx")

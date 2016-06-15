@@ -2,7 +2,6 @@ package main
 
 import (
 	"bfs/libs/errors"
-	"bfs/store/needle"
 	"bfs/store/volume"
 	log "github.com/golang/glog"
 	"net/http"
@@ -33,14 +32,13 @@ func StartAdmin(addr string, s *Server) {
 func (s *Server) probe(wr http.ResponseWriter, r *http.Request) {
 	var (
 		v      *volume.Volume
-		n      *needle.Needle
 		err    error
 		vid    int64
 		ret    = http.StatusOK
 		params = r.URL.Query()
 		now    = time.Now()
 	)
-	if r.Method != "GET" && r.Method != "HEAD" {
+	if r.Method != "HEAD" {
 		ret = http.StatusMethodNotAllowed
 		http.Error(wr, "method not allowed", ret)
 		return
@@ -51,9 +49,8 @@ func (s *Server) probe(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	n = s.store.Needle()
 	if v = s.store.Volumes[int32(vid)]; v != nil {
-		if err = v.Probe(n); err != nil {
+		if err = v.Probe(); err != nil {
 			if err == errors.ErrNeedleDeleted || err == errors.ErrNeedleNotExist {
 				ret = http.StatusNotFound
 			} else {
@@ -64,18 +61,6 @@ func (s *Server) probe(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusNotFound
 		err = errors.ErrVolumeNotExist
 	}
-	if err == nil {
-		if r.Method == "GET" {
-			if _, err = wr.Write(n.Data); err != nil {
-				log.Errorf("wr.Write() error(%v)", err)
-				ret = http.StatusInternalServerError
-			}
-		}
-		if log.V(1) {
-			log.Infof("get a needle: %v", n)
-		}
-	}
-	s.store.FreeNeedle(n)
 	return
 }
 

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"sync"
+	"syscall"
 )
 
 // Needle stored int super block, aligned to 8bytes.
@@ -93,7 +95,7 @@ const (
 	FlagDel = byte(1)
 
 	// display
-	displayData = 16
+	_displayData = 16
 )
 
 var (
@@ -105,6 +107,13 @@ var (
 	_footerMagic = []byte{0x87, 0x65, 0x43, 0x21}
 	// flag
 	FlagDelBytes = []byte{FlagDel}
+
+	_pageSize = syscall.Getpagesize()
+	_bufPool  = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, _pageSize) // 4kb
+		},
+	}
 )
 
 // init the padding table
@@ -132,14 +141,62 @@ type Needle struct {
 	FooterSize  int32
 	// used in peek
 	IncrOffset uint32
+	Offset     uint32
 	buffer     []byte // needle buffer holder
 }
 
-// NewBufferNeedle new a needle, allocate inner buffer.
-func NewBufferNeedle(size int) (n *Needle) {
-	n = new(Needle)
-	n.buffer = make([]byte, Size(size))
-	return
+// NewWriter new a read needle.
+func NewWriter(key int64, cookie, size int32) *Needle {
+	var n = new(Needle)
+	n.Key = key
+	n.Cookie = cookie
+	n.Size = size
+	n.init()
+	n.newBuffer()
+	return n
+}
+
+func (n *Needle) InitWriter(key int64, cookie, size int32) {
+	n.Key = key
+	n.Cookie = cookie
+	n.Size = size
+	n.init()
+	n.newBuffer()
+}
+
+// NewReader new a write needle.
+func NewReader(key, nc int64) *Needle {
+	var n = new(Needle)
+	n.Key = key
+	n.Offset, n.TotalSize = Cache(nc)
+	n.newBuffer()
+	return n
+}
+
+// Close close a needle.
+func (n *Needle) Close() {
+	n.freeBuffer()
+}
+
+// newBuffer new a needle buffer by needle totalsize.
+func (n *Needle) newBuffer() {
+	if n.TotalSize <= int32(_pageSize) {
+		n.buffer = _bufPool.Get().([]byte)
+	} else {
+		n.buffer = make([]byte, n.TotalSize)
+	}
+}
+
+// free free needle buffer.
+func (n *Needle) freeBuffer() {
+	if n.buffer != nil && len(n.buffer) <= _pageSize {
+		_bufPool.Put(n.buffer)
+	}
+}
+
+// Buffer get needle buffer, usually call after WriteFrom.
+func (n *Needle) Buffer() []byte {
+	return n.buffer[:n.TotalSize]
 }
 
 // calcSize calc the needle meta size.
@@ -151,12 +208,9 @@ func (n *Needle) calcSize() {
 	n.IncrOffset = NeedleOffset(int64(n.TotalSize))
 }
 
-// initSize parse needle from specified size.
-func (n *Needle) initSize(key int64, cookie, size int32) {
-	n.Size = size
+// Init parse needle from specified size.
+func (n *Needle) init() {
 	n.calcSize()
-	n.Key = key
-	n.Cookie = cookie
 	n.Flag = FlagOK
 	n.HeaderMagic = _headerMagic
 	n.FooterMagic = _footerMagic
@@ -243,17 +297,6 @@ func (n *Needle) writeHeader(buf []byte) (err error) {
 	return
 }
 
-/*
-// writeData write needle data into buf bytes.
-func (n *Needle) writeData(buf []byte) (err error) {
-	if len(buf) != int(n.Size) {
-		return errors.ErrNeedleDataSize
-	}
-	copy(buf, n.Data)
-	return
-}
-*/
-
 // writeFooter write needle header into buf bytes.
 func (n *Needle) writeFooter(buf []byte) (err error) {
 	if len(buf) != int(n.FooterSize) {
@@ -303,7 +346,7 @@ func (n *Needle) ParseFrom(rd *bufio.Reader) (err error) {
 	return
 }
 
-// Parse Parse needle from inner buffer, usually call after ReadAt.
+// parse Parse needle from inner buffer, usually call after ReadAt.
 func (n *Needle) Parse() (err error) {
 	var dataOffset int32
 	if err = n.parseHeader(n.buffer[:_headerSize]); err == nil {
@@ -315,30 +358,12 @@ func (n *Needle) Parse() (err error) {
 	return
 }
 
-// ReadAt read file at specified offset.
-func (n *Needle) ReadAt(offset uint32, rd io.ReaderAt) (err error) {
-	_, err = rd.ReadAt(n.buffer[:n.TotalSize], BlockOffset(offset))
-	return
-}
-
-// WriteAt write file at specified offset.
-func (n *Needle) WriteAt(offset uint32, wr io.WriterAt) (err error) {
-	_, err = wr.WriteAt(n.buffer[:n.TotalSize], BlockOffset(offset))
-	return
-}
-
-// Buffer get needle buffer, usually call after WriteFrom.
-func (n *Needle) Buffer() []byte {
-	return n.buffer[:n.TotalSize]
-}
-
-// WriteFrom read from io.Reader and write into needle buffer.
-func (n *Needle) WriteFrom(key int64, cookie, size int32, rd io.Reader) (err error) {
+// ReadFrom read from io.Reader and write into needle buffer.
+func (n *Needle) ReadFrom(rd io.Reader) (err error) {
 	var (
 		dataOffset int32
 		data       []byte
 	)
-	n.initSize(key, cookie, size)
 	dataOffset = _headerSize + n.Size
 	data = n.buffer[_headerSize:dataOffset]
 	if err = n.writeHeader(n.buffer[:_headerSize]); err == nil {
@@ -352,7 +377,7 @@ func (n *Needle) WriteFrom(key int64, cookie, size int32, rd io.Reader) (err err
 }
 
 func (n *Needle) String() string {
-	var dn = displayData
+	var dn = _displayData
 	if len(n.Data) < dn {
 		dn = len(n.Data)
 	}

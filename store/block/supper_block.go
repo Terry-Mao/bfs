@@ -178,26 +178,6 @@ func (b *SuperBlock) Write(n *needle.Needle) (err error) {
 	return
 }
 
-// Writes write needles to the block.
-func (b *SuperBlock) Writes(ns *needle.Needles) (err error) {
-	if b.LastErr != nil {
-		return b.LastErr
-	}
-	if _maxOffset-ns.IncrOffset < b.Offset {
-		err = errors.ErrSuperBlockNoSpace
-		return
-	}
-	if _, err = b.w.Write(ns.Buffer()); err == nil {
-		err = b.flush(false)
-	} else {
-		b.LastErr = err
-		return
-	}
-	b.Offset += ns.IncrOffset
-	b.Size += int64(ns.TotalSize)
-	return
-}
-
 // flush flush writer buffer.
 func (b *SuperBlock) flush(force bool) (err error) {
 	var (
@@ -239,19 +219,23 @@ func (b *SuperBlock) WriteAt(offset uint32, n *needle.Needle) (err error) {
 	if b.LastErr != nil {
 		return b.LastErr
 	}
-	err = n.WriteAt(offset, b.w)
-	b.LastErr = err
+	if _, err = b.w.WriteAt(n.Buffer(), needle.BlockOffset(offset)); err != nil {
+		b.LastErr = err
+	}
 	return
 }
 
 // ReadAt read a needle by specified offset, before call it, must set needle
 // TotalSize.
-func (b *SuperBlock) ReadAt(offset uint32, n *needle.Needle) (err error) {
+func (b *SuperBlock) ReadAt(n *needle.Needle) (err error) {
 	if b.LastErr != nil {
 		return b.LastErr
 	}
-	err = n.ReadAt(offset, b.r)
-	b.LastErr = err
+	if _, err = b.r.ReadAt(n.Buffer(), needle.BlockOffset(n.Offset)); err == nil {
+		err = n.Parse()
+	} else {
+		b.LastErr = err
+	}
 	return
 }
 
@@ -261,8 +245,10 @@ func (b *SuperBlock) Delete(offset uint32) (err error) {
 		return b.LastErr
 	}
 	// WriteAt won't update the file offset.
-	_, err = b.w.WriteAt(needle.FlagDelBytes, needle.BlockOffset(offset)+needle.FlagOffset)
-	b.LastErr = err
+	if _, err = b.w.WriteAt(needle.FlagDelBytes,
+		needle.BlockOffset(offset)+needle.FlagOffset); err != nil {
+		b.LastErr = err
+	}
 	return
 }
 

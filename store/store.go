@@ -4,7 +4,6 @@ import (
 	"bfs/libs/errors"
 	"bfs/libs/meta"
 	"bfs/store/conf"
-	"bfs/store/needle"
 	myos "bfs/store/os"
 	"bfs/store/volume"
 	myzk "bfs/store/zk"
@@ -16,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Store get all volume meta data from a index file. index contains volume id,
@@ -42,13 +42,15 @@ const (
 	volumeFreeId     = -1
 )
 
+var (
+	_compactSleep = time.Second * 10
+)
+
 // Store save volumes.
 type Store struct {
 	vf          *os.File
 	fvf         *os.File
 	FreeId      int32
-	np          sync.Pool                // needle pool
-	nsp         []sync.Pool              // needles pool
 	Volumes     map[int32]*volume.Volume // split volumes lock
 	FreeVolumes []*volume.Volume
 	zk          *myzk.Zookeeper
@@ -65,7 +67,6 @@ func NewStore(c *conf.Config) (s *Store, err error) {
 	}
 	s.conf = c
 	s.FreeId = 0
-	s.nsp = make([]sync.Pool, c.BatchMaxNum+1)
 	s.Volumes = make(map[int32]*volume.Volume)
 	if s.vf, err = os.OpenFile(c.Store.VolumeIndex, os.O_RDWR|os.O_CREATE|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", c.Store.VolumeIndex, err)
@@ -306,35 +307,6 @@ func (s *Store) SetZookeeper() (err error) {
 	return
 }
 
-// Needle get a needle from sync.Pool.
-func (s *Store) Needle() *needle.Needle {
-	var n interface{}
-	if n = s.np.Get(); n != nil {
-		return n.(*needle.Needle)
-	}
-	return needle.NewBufferNeedle(s.conf.NeedleMaxSize)
-}
-
-// FreeNeedle free the needle to pool.
-func (s *Store) FreeNeedle(n *needle.Needle) {
-	s.np.Put(n)
-}
-
-// Needles get needles from sync.Pool.
-func (s *Store) Needles(i int) *needle.Needles {
-	var n interface{}
-	if n = s.nsp[i].Get(); n != nil {
-		return n.(*needle.Needles)
-	}
-	return needle.NewBufferNeedles(i, s.conf.NeedleMaxSize)
-}
-
-// FreeNeedles free the needles to pool.
-func (s *Store) FreeNeedles(i int, ns *needle.Needles) {
-	ns.Reset()
-	s.nsp[i].Put(ns)
-}
-
 // freeFile get volume block & index free file name.
 func (s *Store) freeFile(id int32, bdir, idir string) (bfile, ifile string) {
 	var file = fmt.Sprintf("%s%d", freeVolumePrefix, id)
@@ -568,7 +540,7 @@ func (s *Store) CompactVolume(id int32) (err error) {
 	if nv, err = s.freeVolume(id); err != nil {
 		return
 	}
-	log.Infof("compact volume: (%d) %s to %s", id, v.Block.File, nv.Block.File)
+	log.Infof("start compact volume: (%d) %s to %s", id, v.Block.File, nv.Block.File)
 	// no lock here, Compact is no side-effect
 	if err = v.StartCompact(nv); err != nil {
 		nv.Destroy()
@@ -577,6 +549,7 @@ func (s *Store) CompactVolume(id int32) (err error) {
 	}
 	s.vlock.Lock()
 	if v = s.Volumes[id]; v != nil {
+		log.Infof("stop compact volume: (%d) %s to %s", id, v.Block.File, nv.Block.File)
 		if err = v.StopCompact(nv); err == nil {
 			// WARN no need update volumes map, use same object, only update
 			// zookeeper the local index cause the block and index file changed.
@@ -594,6 +567,8 @@ func (s *Store) CompactVolume(id int32) (err error) {
 	}
 	s.vlock.Unlock()
 	// WARN if failed, nv is free volume, if succeed nv replace with v.
+	// Sleep untill anyone had old volume variables all processed.
+	time.Sleep(_compactSleep)
 	nv.Destroy()
 	if err == nil {
 		bdir, idir = filepath.Dir(nv.Block.File), filepath.Dir(nv.Indexer.File)

@@ -46,6 +46,10 @@ func (s *Server) get(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpGetWriter(r, wr, now, &err, &ret)
+	if !s.rl.Allow() {
+		ret = http.StatusServiceUnavailable
+		return
+	}
 	if vid, err = strconv.ParseInt(params.Get("vid"), 10, 32); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", params.Get("vid"), err)
 		ret = http.StatusBadRequest
@@ -61,11 +65,15 @@ func (s *Server) get(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusBadRequest
 		return
 	}
-	n = s.store.Needle()
-	n.Key = key
-	n.Cookie = int32(cookie)
 	if v = s.store.Volumes[int32(vid)]; v != nil {
-		if err = v.Get(n); err != nil {
+		if n, err = v.Read(key, int32(cookie)); err == nil {
+			wr.Header().Set("Content-Length", strconv.Itoa(len(n.Data)))
+			if _, err = wr.Write(n.Data); err != nil {
+				log.Errorf("wr.Write() error(%v)", err)
+				err = nil // avoid HttpGetWriter write header twice
+			}
+			n.Close()
+		} else {
 			if err == errors.ErrNeedleDeleted || err == errors.ErrNeedleNotExist {
 				ret = http.StatusNotFound
 			} else {
@@ -76,18 +84,6 @@ func (s *Server) get(wr http.ResponseWriter, r *http.Request) {
 		ret = http.StatusNotFound
 		err = errors.ErrVolumeNotExist
 	}
-	if err == nil {
-		if r.Method == "GET" {
-			if _, err = wr.Write(n.Data); err != nil {
-				log.Errorf("wr.Write() error(%v)", err)
-				ret = http.StatusInternalServerError
-			}
-		}
-		if log.V(1) {
-			log.Infof("get a needle: %v", n)
-		}
-	}
-	s.store.FreeNeedle(n)
 	return
 }
 
@@ -109,6 +105,10 @@ func (s *Server) upload(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpPostWriter(r, wr, time.Now(), &err, res)
+	if !s.wl.Allow() {
+		err = errors.ErrServiceUnavailable
+		return
+	}
 	if err = checkContentLength(r, s.conf.NeedleMaxSize); err != nil {
 		return
 	}
@@ -136,15 +136,15 @@ func (s *Server) upload(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if size, err = checkFileSize(file, s.conf.NeedleMaxSize); err == nil {
-		n = s.store.Needle()
-		if err = n.WriteFrom(key, int32(cookie), int32(size), file); err == nil {
-			if v = s.store.Volumes[int32(vid)]; v != nil {
+		if v = s.store.Volumes[int32(vid)]; v != nil {
+			n = needle.NewWriter(key, int32(cookie), int32(size))
+			if err = n.ReadFrom(file); err == nil {
 				err = v.Write(n)
-			} else {
-				err = errors.ErrVolumeNotExist
 			}
+			n.Close()
+		} else {
+			err = errors.ErrVolumeNotExist
 		}
-		s.store.FreeNeedle(n)
 	}
 	file.Close()
 	return
@@ -162,10 +162,10 @@ func (s *Server) uploads(wr http.ResponseWriter, r *http.Request) {
 		keys    []string
 		cookies []string
 		v       *volume.Volume
-		ns      *needle.Needles
 		file    multipart.File
 		fh      *multipart.FileHeader
 		fhs     []*multipart.FileHeader
+		ns      *needle.Needles
 		res     = map[string]interface{}{}
 	)
 	if r.Method != "POST" {
@@ -173,7 +173,8 @@ func (s *Server) uploads(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpPostWriter(r, wr, time.Now(), &err, res)
-	if err = checkContentLength(r, s.conf.NeedleMaxSize*s.conf.BatchMaxNum); err != nil {
+	if !s.wl.Allow() {
+		err = errors.ErrServiceUnavailable
 		return
 	}
 	str = r.FormValue("vid")
@@ -196,7 +197,7 @@ func (s *Server) uploads(wr http.ResponseWriter, r *http.Request) {
 		err = errors.ErrParam
 		return
 	}
-	ns = s.store.Needles(nn)
+	ns = needle.NewNeedles(nn)
 	for i, fh = range fhs {
 		if key, err = strconv.ParseInt(keys[i], 10, 64); err != nil {
 			log.Errorf("strconv.ParseInt(\"%s\") error(%v)", keys[i], err)
@@ -213,7 +214,7 @@ func (s *Server) uploads(wr http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if size, err = checkFileSize(file, s.conf.NeedleMaxSize); err == nil {
-			err = ns.WriteFrom(key, int32(cookie), int32(size), file)
+			err = ns.ReadFrom(key, int32(cookie), int32(size), file)
 		}
 		file.Close()
 		if err != nil {
@@ -227,7 +228,7 @@ func (s *Server) uploads(wr http.ResponseWriter, r *http.Request) {
 			err = errors.ErrVolumeNotExist
 		}
 	}
-	s.store.FreeNeedles(nn, ns)
+	ns.Close()
 	return
 }
 
@@ -244,6 +245,10 @@ func (s *Server) del(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpPostWriter(r, wr, time.Now(), &err, res)
+	if !s.dl.Allow() {
+		err = errors.ErrServiceUnavailable
+		return
+	}
 	str = r.PostFormValue("key")
 	if key, err = strconv.ParseInt(str, 10, 64); err != nil {
 		log.Errorf("strconv.ParseInt(\"%s\") error(%v)", str, err)
