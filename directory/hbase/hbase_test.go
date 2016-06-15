@@ -12,7 +12,7 @@ func TestHbase(t *testing.T) {
 		err  error
 		m, n *meta.Needle
 	)
-	if err = Init("localhost:9090", 5*time.Second, 10, 10); err != nil {
+	if err = Init("172.16.13.90:9090", 5*time.Second, 10, 10); err != nil {
 		t.Errorf("Init failed")
 		t.FailNow()
 	}

@@ -47,8 +47,8 @@ GroupRoot = "/group"
 PullInterval = "10s"
 
 [hbase]
-# thrift addr localhost:9090
-Addr = "localhost:9090"
+# addr 172.16.13.90:9090
+Addr = "172.16.13.90:9090"
 
 # Note that you must specify a number here.
 MaxActive = 100

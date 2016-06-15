@@ -233,14 +233,14 @@ func (d *Directory) cookie() (cookie int32) {
 }
 
 // GetStores get readable stores for http get
-func (d *Directory) GetStores(bucket, filename string) (n *meta.Needle, stores []string, err error) {
+func (d *Directory) GetStores(bucket, filename string) (n *meta.Needle, f *meta.File, stores []string, err error) {
 	var (
 		store     string
 		svrs      []string
 		storeMeta *meta.Store
 		ok        bool
 	)
-	if n, err = d.hBase.Get(bucket, filename); err != nil {
+	if n, f, err = d.hBase.Get(bucket, filename); err != nil {
 		log.Errorf("hBase.Get error(%v)", err)
 		if err != errors.ErrNeedleNotExist {
 			err = errors.ErrHBase
@@ -324,7 +324,7 @@ func (d *Directory) DelStores(bucket, filename string) (n *meta.Needle, stores [
 		svrs      []string
 		storeMeta *meta.Store
 	)
-	if n, err = d.hBase.Get(bucket, filename); err != nil {
+	if n, _, err = d.hBase.Get(bucket, filename); err != nil {
 		log.Errorf("hBase.Get error(%v)", err)
 		if err != errors.ErrNeedleNotExist {
 			err = errors.ErrHBase

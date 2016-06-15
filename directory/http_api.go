@@ -39,13 +39,14 @@ func StartApi(addr string, d *Directory) {
 
 func (s *server) get(wr http.ResponseWriter, r *http.Request) {
 	var (
-		err      error
-		n        *meta.Needle
+		ok       bool
 		bucket   string
 		filename string
 		res      meta.Response
-		ok       bool
+		n        *meta.Needle
+		f        *meta.File
 		uerr     errors.Error
+		err      error
 	)
 	if r.Method != "GET" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
@@ -60,7 +61,7 @@ func (s *server) get(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer HttpGetWriter(r, wr, time.Now(), &res)
-	if n, res.Stores, err = s.d.GetStores(bucket, filename); err != nil {
+	if n, f, res.Stores, err = s.d.GetStores(bucket, filename); err != nil {
 		log.Errorf("GetStores() error(%v)", err)
 		if uerr, ok = err.(errors.Error); ok {
 			res.Ret = int(uerr)
@@ -73,6 +74,13 @@ func (s *server) get(wr http.ResponseWriter, r *http.Request) {
 	res.Key = n.Key
 	res.Cookie = n.Cookie
 	res.Vid = n.Vid
+	res.Mine = f.Mine
+	if f.MTime != 0 {
+		res.MTime = f.MTime
+	} else {
+		res.MTime = n.MTime
+	}
+	res.Sha1 = f.Sha1
 	return
 }
 
@@ -114,7 +122,7 @@ func (s *server) upload(wr http.ResponseWriter, r *http.Request) {
 		if err == errors.ErrNeedleExist {
 			// update file data
 			res.Ret = errors.RetNeedleExist
-			if n, res.Stores, err = s.d.GetStores(bucket, f.Filename); err != nil {
+			if n, _, res.Stores, err = s.d.GetStores(bucket, f.Filename); err != nil {
 				log.Errorf("GetStores() error(%v)", err)
 				if uerr, ok = err.(errors.Error); ok {
 					res.Ret = int(uerr)

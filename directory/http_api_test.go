@@ -29,7 +29,7 @@ func TestHTTPAPI(t *testing.T) {
 		t.FailNow()
 	}
 
-	if zk, err = NewZookeeper([]string{"localhost:2181"}, time.Second*15, "/rack", "/volume", "/group"); err != nil {
+	if zk, err = NewZookeeper([]string{"123.56.108.22:2181"}, time.Second*15, "/rack", "/volume", "/group"); err != nil {
 		t.Errorf("NewZookeeper() error(%v)", err)
 		t.FailNow()
 	}
@@ -41,7 +41,7 @@ func TestHTTPAPI(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	buf.Reset()
 	buf.WriteString("num=1")
-	if resp, err = http.Post("http://localhost:6065/upload", "application/x-www-form-urlencoded", buf); err != nil {
+	if resp, err = http.Post("http://172.16.13.86:6065/upload", "application/x-www-form-urlencoded", buf); err != nil {
 		t.Errorf("http.Post error(%v)", err)
 		t.FailNow()
 	}
@@ -62,7 +62,7 @@ func TestHTTPAPI(t *testing.T) {
 	cookie = res.Cookie
 	fmt.Println("put vid:", res.Vid)
 	buf.Reset()
-	url = fmt.Sprintf("http://localhost:6065/get?key=%d&cookie=%d", key, cookie)
+	url = fmt.Sprintf("http://172.16.13.86:6065/get?key=%d&cookie=%d", key, cookie)
 	if resp, err = http.Get(url); err != nil {
 		t.Errorf("http ERROR error(%v)", err)
 		t.FailNow()
@@ -82,7 +82,7 @@ func TestHTTPAPI(t *testing.T) {
 	fmt.Println("get vid:", res.Vid)
 	buf.Reset()
 	buf.WriteString(fmt.Sprintf("key=%d&cookie=%d", key, cookie))
-	if resp, err = http.Post("http://localhost:6065/del", "application/x-www-form-urlencoded", buf); err != nil {
+	if resp, err = http.Post("http://172.16.13.86:6065/del", "application/x-www-form-urlencoded", buf); err != nil {
 		t.Errorf("http.Post error(%v)", err)
 		t.FailNow()
 	}

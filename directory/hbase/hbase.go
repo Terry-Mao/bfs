@@ -28,6 +28,7 @@ var (
 	_columnSha1   = []byte("sha1")
 	_columnMine   = []byte("mine")
 	_columnStatus = []byte("status")
+	// _columnUpdateTime = []byte("update_time")
 )
 
 type HBaseClient struct {
@@ -39,10 +40,7 @@ func NewHBaseClient() *HBaseClient {
 }
 
 // Get get needle from hbase
-func (h *HBaseClient) Get(bucket, filename string) (n *meta.Needle, err error) {
-	var (
-		f *meta.File
-	)
+func (h *HBaseClient) Get(bucket, filename string) (n *meta.Needle, f *meta.File, err error) {
 	if f, err = h.getFile(bucket, filename); err != nil {
 		return
 	}
@@ -113,6 +111,8 @@ func (h *HBaseClient) getNeedle(key int64) (n *meta.Needle, err error) {
 				n.Vid = int32(binary.BigEndian.Uint32(cv.Value))
 			} else if bytes.Equal(cv.Qualifier, _columnCookie) {
 				n.Cookie = int32(binary.BigEndian.Uint32(cv.Value))
+			} else if bytes.Equal(cv.Qualifier, _columnUpdateTime) {
+				n.MTime = int64(binary.BigEndian.Uint64(cv.Value))
 			}
 		}
 	}
@@ -125,6 +125,7 @@ func (h *HBaseClient) putNeedle(n *meta.Needle) (err error) {
 		ks    []byte
 		vbuf  = make([]byte, 4)
 		cbuf  = make([]byte, 4)
+		ubuf  = make([]byte, 8)
 		exist bool
 		c     *hbasethrift.THBaseServiceClient
 	)
@@ -143,6 +144,7 @@ func (h *HBaseClient) putNeedle(n *meta.Needle) (err error) {
 	}
 	binary.BigEndian.PutUint32(vbuf, uint32(n.Vid))
 	binary.BigEndian.PutUint32(cbuf, uint32(n.Cookie))
+	binary.BigEndian.PutUint64(ubuf, uint64(time.Now().UnixNano()))
 	if err = c.Put(_table, &hbasethrift.TPut{
 		Row: ks,
 		ColumnValues: []*hbasethrift.TColumnValue{
@@ -155,6 +157,11 @@ func (h *HBaseClient) putNeedle(n *meta.Needle) (err error) {
 				Family:    _familyBasic,
 				Qualifier: _columnCookie,
 				Value:     cbuf,
+			},
+			&hbasethrift.TColumnValue{
+				Family:    _familyBasic,
+				Qualifier: _columnUpdateTime,
+				Value:     ubuf,
 			},
 		},
 	}); err != nil {
@@ -228,11 +235,13 @@ func (h *HBaseClient) getFile(bucket, filename string) (f *meta.File, err error)
 			if bytes.Equal(cv.Qualifier, _columnKey) {
 				f.Key = int64(binary.BigEndian.Uint64(cv.Value))
 			} else if bytes.Equal(cv.Qualifier, _columnSha1) {
-				f.Sha1 = cv.String()
+				f.Sha1 = string(cv.GetValue())
 			} else if bytes.Equal(cv.Qualifier, _columnMine) {
-				f.Mine = cv.String()
+				f.Mine = string(cv.GetValue())
 			} else if bytes.Equal(cv.Qualifier, _columnStatus) {
 				f.Status = int32(binary.BigEndian.Uint32(cv.Value))
+			} else if bytes.Equal(cv.Qualifier, _columnUpdateTime) {
+				f.MTime = int64(binary.BigEndian.Uint64(cv.Value))
 			}
 		}
 	}
@@ -259,7 +268,8 @@ func (h *HBaseClient) putFile(bucket string, f *meta.File) (err error) {
 		return
 	}
 	if exist {
-		hbasePool.Put(c, false)
+		err = h.updateFile(c, bucket, f.Filename, f.Sha1)
+		hbasePool.Put(c, err != nil)
 		return errors.ErrNeedleExist
 	}
 	binary.BigEndian.PutUint64(kbuf, uint64(f.Key))
@@ -299,6 +309,32 @@ func (h *HBaseClient) putFile(bucket string, f *meta.File) (err error) {
 		return
 	}
 	hbasePool.Put(c, false)
+	return
+}
+
+// updateFile overwriting is bug,  banned
+func (h *HBaseClient) updateFile(c *hbasethrift.THBaseServiceClient, bucket, filename, sha1 string) (err error) {
+	var (
+		ks   []byte
+		ubuf = make([]byte, 8)
+	)
+	ks = []byte(filename)
+	binary.BigEndian.PutUint64(ubuf, uint64(time.Now().UnixNano()))
+	err = c.Put(h.tableName(bucket), &hbasethrift.TPut{
+		Row: ks,
+		ColumnValues: []*hbasethrift.TColumnValue{
+			&hbasethrift.TColumnValue{
+				Family:    _familyFile,
+				Qualifier: _columnSha1,
+				Value:     []byte(sha1),
+			},
+			&hbasethrift.TColumnValue{
+				Family:    _familyFile,
+				Qualifier: _columnUpdateTime,
+				Value:     ubuf,
+			},
+		},
+	})
 	return
 }
 

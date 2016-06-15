@@ -15,7 +15,7 @@ func BenchmarkHbasePut(b *testing.B) {
 		t   int64
 	)
 	ch := make(chan int64, 1000000)
-	if err = Init("localhost:9090", 5*time.Second, 200, 200); err != nil {
+	if err = Init("172.16.13.90:9090", 5*time.Second, 200, 200); err != nil {
 		b.Errorf("Init failed")
 		b.FailNow()
 	}
@@ -43,7 +43,7 @@ func BenchmarkHbaseGet(b *testing.B) {
 		t   int64
 		r   *rand.Rand
 	)
-	if err = Init("localhost:9090", 5*time.Second, 200, 200); err != nil {
+	if err = Init("172.16.13.90:9090", 5*time.Second, 200, 200); err != nil {
 		b.Errorf("Init failed")
 		b.FailNow()
 	}
