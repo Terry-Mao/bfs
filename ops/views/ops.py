@@ -6,15 +6,7 @@ import httplib
 from commons import *
 from commons.global_var import *
 
-
 from flask import request,render_template,jsonify,session,redirect,url_for,abort
-#from bfsOps.decorates import login_required
-
-@app.route('/')
-@app.route('/index.html')
-#@login_required
-def home():
-	return render_template('index.html')
 
 
 @app.route('/bfsops/initialization', methods = ["POST"])
@@ -178,7 +170,7 @@ def bfsopsGroupsGet():
 def bfsopsVolumesPost():
 	if not request.json:
 		abort(400)
-	groups = list(set(request.json['groups']))
+	groups = list(set(request.json['groups'].split(',')))
 	for group_id in groups:
 		if not GROUP_STORE.has_key(group_id.encode('utf-8')):
 			abort(400)
@@ -188,7 +180,7 @@ def bfsopsVolumesPost():
 	resp['errorMsg'] = ""
 	
 	need_break = False
-	global MAX_VOLUME_ID
+    global MAX_VOLUME_ID
 	for group_id_u in groups:
 		group_id = group_id_u.encode('utf-8')
 		stores = GROUP_STORE[group_id]
@@ -225,8 +217,3 @@ def bfsopsVolumesPost():
 	resp_str = json.dumps(resp)
 	logger.info("bfsopsVolumesPost() called, success, resp: %s", resp_str)
 	return resp_str
-
-@app.route('/bfsops/volumes', methods = ["GET"])
-#@login_required
-def bfsopsVolumesGet():
-	pass

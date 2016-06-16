@@ -22,6 +22,7 @@ class HttpConnection:
     def request(self, method, url, body=None, headers={}):
         '''return [True|False], status, data'''
         try:
+            print url,body
             if self.http_conn is None:
                 self.http_conn = httplib.HTTPConnection(self.host, self.port, timeout=HttpConnection.DEFAULT_TIMEOUT)
 
@@ -60,7 +61,7 @@ def genStoreConn(store_ip, store_port):
 def storeAddFreeVolume(store_ip, base_dir, num_volumes):
     if num_volumes <= 0:
         return None
-        
+    print store_ip    
     store_conn = genStoreConn(store_ip, config.store_admin_port)
     url = "/add_free_volume"
     value = {}
