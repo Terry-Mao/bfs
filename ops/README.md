@@ -1,7 +1,7 @@
 # bfsops
 The background management interface of BFS.
 
-## 初始化流程：
+## 初始化流程(请参照test/ops_initialization.py)：
 
 ###step 1
 启动store、directory、proxy、pitchfork
