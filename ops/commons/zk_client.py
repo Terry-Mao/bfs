@@ -84,6 +84,8 @@ def getAllVolume():
 				if not STORE_VOLUME.has_key(store_id):
 					STORE_VOLUME[store_id] = []
 				STORE_VOLUME[store_id].append(volume_id)
+                        print "max:",MAX_VOLUME_ID
+                        logger.error("你好")
 		return True
 	except Exception as ex:
 		logger.error("getAllVolume() called   error: %s", str(ex))
@@ -124,6 +126,7 @@ def getAllGroup():
 				if not GROUP_STORE.has_key(group_id):
 					GROUP_STORE[group_id] = []
 				GROUP_STORE[group_id].append(store_id)
+                print GROUP_STORE
 		return True
 	except Exception as ex:
 		logger.error("getAllGroup() called   error: %s", str(ex))	
