@@ -581,6 +581,7 @@ func (s *Store) CompactVolume(id int32) (err error) {
 // WARN the global variable store must first set nil and reject any other
 // requests then safty close.
 func (s *Store) Close() {
+	log.Info("store close")
 	var v *volume.Volume
 	if s.vf != nil {
 		s.vf.Close()
@@ -588,10 +589,9 @@ func (s *Store) Close() {
 	if s.fvf != nil {
 		s.fvf.Close()
 	}
-	if s.Volumes != nil {
-		for _, v = range s.Volumes {
-			v.Close()
-		}
+	for _, v = range s.Volumes {
+		log.Infof("volume[%d] close", v.Id)
+		v.Close()
 	}
 	if s.zk != nil {
 		s.zk.Close()

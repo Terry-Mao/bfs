@@ -8,11 +8,10 @@ import (
 
 // StartPprof start a golang pprof.
 func StartPprof(addr string) {
-	go func() {
-		var err error
-		if err = http.ListenAndServe(addr, nil); err != nil {
-			log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
-			return
-		}
-	}()
+	var err error
+	if err = http.ListenAndServe(addr, nil); err != nil {
+		log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
+		panic(err)
+		return
+	}
 }

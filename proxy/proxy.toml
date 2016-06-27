@@ -11,3 +11,11 @@ Domain = "http://localhost:2232/"
 Prefix = "/bfs/"
 
 MaxFileSize = 20971520
+
+AliyunKeyId = "xxxxx"
+AliyunKeySecret = "xxxxx"
+
+NetUserName = "xxxx"
+NetPasswd = "xxxx"
+
+PurgeMaxSize = 100000

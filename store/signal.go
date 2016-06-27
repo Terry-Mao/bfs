@@ -8,7 +8,7 @@ import (
 )
 
 // StartSignal register signals handler.
-func StartSignal() {
+func StartSignal(store *Store, server *Server) {
 	var (
 		c chan os.Signal
 		s os.Signal
@@ -22,6 +22,8 @@ func StartSignal() {
 		log.Infof("get a signal %s", s.String())
 		switch s {
 		case syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGSTOP, syscall.SIGINT:
+			server.Close()
+			store.Close()
 			return
 		case syscall.SIGHUP:
 			// TODO reload

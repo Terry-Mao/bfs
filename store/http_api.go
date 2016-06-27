@@ -11,22 +11,25 @@ import (
 	"time"
 )
 
-// StartApi start api http listen.
-func StartApi(addr string, s *Server) {
-	go func() {
-		var (
-			err      error
-			serveMux = http.NewServeMux()
-		)
-		serveMux.HandleFunc("/get", s.get)
-		serveMux.HandleFunc("/upload", s.upload)
-		serveMux.HandleFunc("/uploads", s.uploads)
-		serveMux.HandleFunc("/del", s.del)
-		if err = http.ListenAndServe(addr, serveMux); err != nil {
-			log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
-			return
+// startApi start api http listen.
+func (s *Server) startApi() {
+	var (
+		err      error
+		serveMux = http.NewServeMux()
+		server   = &http.Server{
+			Addr:    s.conf.ApiListen,
+			Handler: serveMux,
+			// TODO read/write timeout
 		}
-	}()
+	)
+	serveMux.HandleFunc("/get", s.get)
+	serveMux.HandleFunc("/upload", s.upload)
+	serveMux.HandleFunc("/uploads", s.uploads)
+	serveMux.HandleFunc("/del", s.del)
+	if err = server.Serve(s.apiSvr); err != nil {
+		log.Errorf("server.Serve() error(%v)", err)
+	}
+	log.Info("http api stop")
 	return
 }
 

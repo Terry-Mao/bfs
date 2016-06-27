@@ -190,6 +190,8 @@ func (s *server) download(item *ibucket.Item, bucket, file string, wr http.Respo
 	} else {
 		if err == errors.ErrNeedleNotExist {
 			status = http.StatusNotFound
+		} else if err == errors.ErrStoreNotAvailable {
+			status = http.StatusServiceUnavailable
 		} else {
 			status = http.StatusInternalServerError
 		}

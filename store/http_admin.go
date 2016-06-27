@@ -9,23 +9,26 @@ import (
 	"time"
 )
 
-// StartAdmin start admin http listen.
-func StartAdmin(addr string, s *Server) {
-	go func() {
-		var (
-			err      error
-			serveMux = http.NewServeMux()
-		)
-		serveMux.HandleFunc("/probe", s.probe)
-		serveMux.HandleFunc("/bulk_volume", s.bulkVolume)
-		serveMux.HandleFunc("/compact_volume", s.compactVolume)
-		serveMux.HandleFunc("/add_volume", s.addVolume)
-		serveMux.HandleFunc("/add_free_volume", s.addFreeVolume)
-		if err = http.ListenAndServe(addr, serveMux); err != nil {
-			log.Errorf("http.ListenAndServe(\"%s\") error(%v)", addr, err)
-			return
+// startAdmin start admin http listen.
+func (s *Server) startAdmin() {
+	var (
+		err      error
+		serveMux = http.NewServeMux()
+		server   = &http.Server{
+			Addr:    s.conf.AdminListen,
+			Handler: serveMux,
+			// TODO read/write timeout
 		}
-	}()
+	)
+	serveMux.HandleFunc("/probe", s.probe)
+	serveMux.HandleFunc("/bulk_volume", s.bulkVolume)
+	serveMux.HandleFunc("/compact_volume", s.compactVolume)
+	serveMux.HandleFunc("/add_volume", s.addVolume)
+	serveMux.HandleFunc("/add_free_volume", s.addFreeVolume)
+	if err = server.Serve(s.adminSvr); err != nil {
+		log.Errorf("server.Serve() error(%v)", err)
+	}
+	log.Info("http admin stop")
 	return
 }
 

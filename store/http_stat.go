@@ -14,19 +14,28 @@ const (
 	statDuration = 1 * time.Second
 )
 
-func StartStat(addr string, s *Server) {
-	var info = &stat.Info{
+func (s *Server) startStat() {
+	var (
+		err      error
+		serveMux = http.NewServeMux()
+		server   = &http.Server{
+			Addr:    s.conf.StatListen,
+			Handler: serveMux,
+			// TODO read/write timeout
+		}
+	)
+	s.info = &stat.Info{
 		Ver:       Ver,
 		GitSHA1:   GitSHA1,
 		StartTime: time.Now(),
 		Stats:     &stat.Stats{},
 	}
-	s.info = info
-	go s.startStat()
-	http.HandleFunc("/info", s.stat)
-	go func() {
-		http.ListenAndServe(addr, nil)
-	}()
+	go s.statproc()
+	serveMux.HandleFunc("/info", s.stat)
+	if err = server.Serve(s.statSvr); err != nil {
+		log.Errorf("server.Serve() error(%v)", err)
+	}
+	log.Info("http stat stop")
 	return
 }
 
@@ -58,8 +67,8 @@ func (s *Server) stat(wr http.ResponseWriter, r *http.Request) {
 	return
 }
 
-// startStat stat the store.
-func (s *Server) startStat() {
+// statproc stat the store.
+func (s *Server) statproc() {
 	var (
 		v    *volume.Volume
 		olds *stat.Stats

@@ -123,13 +123,6 @@ func (v *Volume) init() (err error) {
 	}); err != nil {
 		return
 	}
-	// recheck offset, keep size and offset consistency
-	if v.Block.Size != needle.BlockOffset(v.Block.Offset) {
-		log.Errorf("block: %s [real size: %d, offset: %d] but [size: %d, offset: %d] not consistency",
-			v.Block.File, v.Block.Size, needle.NeedleOffset(v.Block.Size),
-			needle.BlockOffset(v.Block.Offset), v.Block.Offset)
-		return errors.ErrSuperBlockOffset
-	}
 	// flush index
 	err = v.Indexer.Flush()
 	return
@@ -172,7 +165,6 @@ func (v *Volume) read(n *needle.Needle) (err error) {
 		size = n.TotalSize
 		now  = time.Now().UnixNano()
 	)
-	// TODO iops limit
 	// pread syscall is atomic, no lock
 	if err = v.Block.ReadAt(n); err != nil {
 		return
@@ -404,6 +396,9 @@ func (v *Volume) delproc() {
 			sort.Sort(uint32Slice(offsets))
 			for _, offset = range offsets {
 				now = time.Now().UnixNano()
+				// NOTE Modify no lock here, canuse only a atomic write
+				// operation but when Compact must finish the job, the cached
+				// offset is a old block owner.
 				if err = v.Block.Delete(offset); err != nil {
 					break
 				}
@@ -415,12 +410,11 @@ func (v *Volume) delproc() {
 		}
 		// signal exit
 		if exit {
-			log.Warningf("signal volume: %d del job exit", v.Id)
 			break
 		}
 	}
 	v.wg.Done()
-	log.Warningf("volume: %d del job exit", v.Id)
+	log.Warningf("volume[%d] del job exit", v.Id)
 	return
 }
 
@@ -477,10 +471,17 @@ func (v *Volume) StopCompact(nv *Volume) (err error) {
 				goto free
 			}
 		}
+		// NOTE MUST wait old block finish async delete operations.
+		v.ch <- _finish
+		v.wg.Wait()
+		// then replace old & new block/index/needles variables
 		v.Block, nv.Block = nv.Block, v.Block
 		v.Indexer, nv.Indexer = nv.Indexer, v.Indexer
 		v.needles, nv.needles = nv.needles, v.needles
 		atomic.AddUint64(&v.Stats.TotalCompactDelay, uint64(time.Now().UnixNano()-v.CompactTime))
+		// NOTE MUST restart delproc job
+		v.wg.Add(1)
+		go v.delproc()
 	}
 free:
 	v.Compact = false

@@ -64,15 +64,15 @@ Syncfilerange = true
 # 
 # limit read iops speed
 [Limit.Read]
-Rate = 150
+Rate = 150.0
 Brust = 50
 # limit write iops speed
 [Limit.Write]
-Rate = 150
+Rate = 150.0
 Brust = 50
 # limit delete iops speed
 [Limit.Delete]
-Rate = 150
+Rate = 150.0
 Brust = 50
 
 [Zookeeper]

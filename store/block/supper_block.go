@@ -319,6 +319,7 @@ func (b *SuperBlock) Scan(r *os.File, offset uint32, fn func(*needle.Needle, uin
 
 // Recovery recovery needles map from super block.
 func (b *SuperBlock) Recovery(offset uint32, fn func(*needle.Needle, uint32, uint32) error) (err error) {
+	var rsize int64
 	// WARN block may be no left data, must update block offset first
 	if offset == 0 {
 		offset = needle.NeedleOffset(_headerOffset)
@@ -340,9 +341,21 @@ func (b *SuperBlock) Recovery(offset uint32, fn func(*needle.Needle, uint32, uin
 		log.Errorf("block: %s Fadvise() error(%v)", b.File)
 		return
 	}
+	rsize = needle.BlockOffset(b.Offset)
 	// reset b.w offset, discard left space which can't parse to a needle
-	if _, err = b.w.Seek(needle.BlockOffset(b.Offset), os.SEEK_SET); err != nil {
+	if _, err = b.w.Seek(rsize, os.SEEK_SET); err != nil {
 		log.Errorf("block: %s Seek() error(%v)", b.File, err)
+		return
+	}
+	// recheck offset, keep size and offset consistency
+	if b.Size != rsize {
+		log.Warningf("block: %s [real size: %d, offset: %d] but [size: %d, offset: %d] not consistency, truncate file for force recovery, this may lost data",
+			b.File, b.Size, needle.NeedleOffset(b.Size),
+			rsize, b.Offset)
+		// truncate file
+		if err = b.w.Truncate(rsize); err != nil {
+			log.Errorf("block: %s Truncate() error(%v)", b.File, err)
+		}
 	}
 	return
 }

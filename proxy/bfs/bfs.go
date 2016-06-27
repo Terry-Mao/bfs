@@ -109,11 +109,15 @@ func (b *Bfs) Get(bucket, filename string) (src io.ReadCloser, ctlen int, mtime 
 		}
 		td.Stop()
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			continue
 		}
 		src = resp.Body
 		ctlen = int(resp.ContentLength)
 		break
+	}
+	if err == nil && resp.StatusCode == http.StatusServiceUnavailable {
+		err = errors.ErrStoreNotAvailable
 	}
 	return
 }
@@ -138,6 +142,11 @@ func (b *Bfs) Upload(bucket, filename, mine, sha1 string, buf []byte) (err error
 	if res.Ret != errors.RetOK && res.Ret != errors.RetNeedleExist {
 		log.Errorf("http.Post directory res.Ret: %d %s", res.Ret, uri)
 		err = errors.ErrInternal
+		return
+	}
+	// same sha1sum.
+	if strings.HasPrefix(filename, sha1) && res.Ret == errors.RetNeedleExist {
+		err = errors.ErrNeedleExist
 		return
 	}
 

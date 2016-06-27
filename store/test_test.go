@@ -8,6 +8,10 @@ import (
 
 var (
 	testConf = &conf.Config{
+		Pprof:         false,
+		AdminListen:   "localhost:6063",
+		ApiListen:     "localhost:6064",
+		StatListen:    "localhost:6065",
 		NeedleMaxSize: 4 * 1024 * 1024,
 		BlockMaxSize:  needle.Size(4 * 1024 * 1024),
 		BatchMaxNum:   16,
@@ -38,6 +42,20 @@ var (
 			RingBuffer:    10,
 			SyncWrite:     10,
 			Syncfilerange: true,
+		},
+		Limit: &conf.Limit{
+			Read: &conf.Rate{
+				Rate:  150.0,
+				Brust: 200,
+			},
+			Write: &conf.Rate{
+				Rate:  150.0,
+				Brust: 200,
+			},
+			Delete: &conf.Rate{
+				Rate:  150.0,
+				Brust: 200,
+			},
 		},
 	}
 )

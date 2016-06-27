@@ -8,6 +8,7 @@ import (
 	log "github.com/golang/glog"
 	"golang.org/x/time/rate"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,21 +19,56 @@ type Server struct {
 	store *Store
 	conf  *conf.Config
 	info  *stat.Info
-
+	// server
+	statSvr  net.Listener
+	adminSvr net.Listener
+	apiSvr   net.Listener
+	// limit
 	rl *rate.Limiter
 	wl *rate.Limiter
 	dl *rate.Limiter
 }
 
-func NewServer(s *Store, c *conf.Config) *Server {
-	svr := &Server{
+func NewServer(s *Store, c *conf.Config) (svr *Server, err error) {
+	svr = &Server{
 		store: s,
 		conf:  c,
 		rl:    rate.NewLimiter(rate.Limit(c.Limit.Read.Rate), c.Limit.Read.Brust),
 		wl:    rate.NewLimiter(rate.Limit(c.Limit.Write.Rate), c.Limit.Write.Brust),
 		dl:    rate.NewLimiter(rate.Limit(c.Limit.Delete.Rate), c.Limit.Delete.Brust),
 	}
-	return svr
+	if svr.statSvr, err = net.Listen("tcp", c.StatListen); err != nil {
+		log.Errorf("net.Listen(%s) error(%v)", c.StatListen, err)
+		return
+	}
+	if svr.apiSvr, err = net.Listen("tcp", c.ApiListen); err != nil {
+		log.Errorf("net.Listen(%s) error(%v)", c.ApiListen, err)
+		return
+	}
+	if svr.adminSvr, err = net.Listen("tcp", c.AdminListen); err != nil {
+		log.Errorf("net.Listen(%s) error(%v)", c.AdminListen, err)
+		return
+	}
+	go svr.startStat()
+	go svr.startApi()
+	go svr.startAdmin()
+	if c.Pprof {
+		go StartPprof(c.PprofListen)
+	}
+	return
+}
+
+func (s *Server) Close() {
+	if s.statSvr != nil {
+		s.statSvr.Close()
+	}
+	if s.adminSvr != nil {
+		s.adminSvr.Close()
+	}
+	if s.apiSvr != nil {
+		s.apiSvr.Close()
+	}
+	return
 }
 
 type sizer interface {
