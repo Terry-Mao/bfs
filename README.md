@@ -104,4 +104,4 @@ $ nohup python runserver.py &
 
 ## 更多
 
- * [bfs-image-server](github.com/YonkaFang/bfs-image-server) 
+ * [bfs-image-server](https://github.com/YonkaFang/bfs-image-server) 
