@@ -17,7 +17,7 @@
 package snowflake
 
 import (
-	log "github.com/alecthomas/log4go"
+	log "github.com/golang/glog"
 	"encoding/json"
 	"errors"
 	myrpc "github.com/Terry-Mao/gosnowflake/rpc"
