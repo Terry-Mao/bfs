@@ -157,8 +157,18 @@ func (s *server) parseURI(r *http.Request, upload bool) (bucket, file string, st
 
 // gentRI get uri by bucket and file.
 func (s *server) getURI(bucket, file string) (uri string) {
+	var (
+		item   *ibucket.Item
+		domain string
+	)
 	// http://domain/prefix/bucket/file
-	uri = s.c.Domain + path.Join(s.c.Prefix, bucket, file)
+	item, _ = s.bucket.Get(bucket)
+	if item.Domain != "" {
+		domain = item.Domain
+	} else {
+		domain = s.c.Domain
+	}
+	uri = domain + path.Join(s.c.Prefix, bucket, file)
 	return
 }
 
@@ -235,8 +245,14 @@ func (s *server) upload(item *ibucket.Item, bucket, file string, wr http.Respons
 		return
 	}
 	r.Body.Close()
-	if len(body) > s.c.MaxFileSize {
+	length := len(body)
+	if length > s.c.MaxFileSize {
 		status = http.StatusRequestEntityTooLarge
+		return
+	}
+	if length == 0 {
+		status = http.StatusBadRequest
+		log.Errorf("file size equals 0")
 		return
 	}
 	sha = sha1.Sum(body)
