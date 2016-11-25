@@ -7,6 +7,7 @@ import (
 	log "github.com/golang/glog"
 	"io/ioutil"
 	"net/http"
+	"time"
 )
 
 const (
@@ -25,6 +26,15 @@ const (
 	statAPI  = "http://%s/info"
 	getAPI   = "http://%s/get?key=%d&cookie=%d&vid=%d"
 	probeAPI = "http://%s/probe?vid=%d"
+)
+
+var (
+	_client = &http.Client{
+		Transport: &http.Transport{
+			DisableCompression: true,
+		},
+		Timeout: 2 * time.Second,
+	}
 )
 
 type StoreList []*Store
@@ -83,12 +93,17 @@ func (s *Store) probeAPI(vid int32) string {
 func (s *Store) Info() (vs []*Volume, err error) {
 	var (
 		body []byte
+		req  *http.Request
 		resp *http.Response
 		data = new(Volumes)
 		url  = s.statAPI()
 	)
-	if resp, err = http.Get(url); err != nil {
-		log.Warningf("http.Get(\"%s\") error(%v)", url, err)
+	if req, err = http.NewRequest("GET", url, nil); err != nil {
+		log.Info("http.NewRequest(GET,%s) error(%v)", url, err)
+		return
+	}
+	if resp, err = _client.Do(req); err != nil {
+		log.Errorf("_client.do(%s) error(%v)", url, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -111,13 +126,20 @@ func (s *Store) Info() (vs []*Volume, err error) {
 // Head send a head request to store.
 func (s *Store) Head(vid int32) (err error) {
 	var (
+		req  *http.Request
 		resp *http.Response
 		url  string
 	)
 	url = s.probeAPI(vid)
-	if resp, err = http.Head(url); err != nil {
+	if req, err = http.NewRequest("HEAD", url, nil); err != nil {
+		log.Info("http.NewRequest(GET,%s) error(%v)", url, err)
 		return
 	}
+	if resp, err = _client.Do(req); err != nil {
+		log.Errorf("_client.do(%s) error(%v)", url, err)
+		return
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusInternalServerError {
 		err = errors.ErrInternal
 	}

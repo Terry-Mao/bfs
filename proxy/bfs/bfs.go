@@ -116,8 +116,12 @@ func (b *Bfs) Get(bucket, filename string) (src io.ReadCloser, ctlen int, mtime 
 		ctlen = int(resp.ContentLength)
 		break
 	}
-	if err == nil && resp.StatusCode == http.StatusServiceUnavailable {
-		err = errors.ErrStoreNotAvailable
+	if err == nil {
+		if resp.StatusCode == http.StatusServiceUnavailable {
+			err = errors.ErrStoreNotAvailable
+		} else if resp.StatusCode == http.StatusNotFound {
+			err = errors.ErrNeedleNotExist
+		}
 	}
 	return
 }
