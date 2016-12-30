@@ -25,6 +25,7 @@ type Item struct {
 	Name      string
 	KeyId     string
 	KeySecret string
+	Domain    string
 	PurgeCDN  bool
 
 	// property   第0位：读 (0表示共有，1表示私有)  第1位：写 (0表示共有，1表示私有)
