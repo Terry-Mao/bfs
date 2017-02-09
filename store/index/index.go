@@ -348,6 +348,7 @@ func (i *Indexer) Scan(r *os.File, fn func(*Index) error) (err error) {
 // Recovery recovery needle cache meta data in memory, index file  will stop
 // at the right parse data offset.
 func (i *Indexer) Recovery(fn func(*Index) error) (err error) {
+	i.Offset = 0
 	if i.Scan(i.f, func(ix *Index) (err1 error) {
 		if err1 = fn(ix); err1 == nil {
 			i.Offset += int64(_indexSize)
@@ -399,6 +400,7 @@ func (i *Indexer) Close() {
 			log.Errorf("index: %s Close() error(%v)", i.File, err)
 		}
 	}
+	i.Offset = 0
 	i.closed = true
 	i.LastErr = errors.ErrIndexClosed
 	return
