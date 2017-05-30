@@ -1,5 +1,6 @@
 package meta
 
+// File meta info.
 type File struct {
 	Filename string `json:"filename"`
 	Key      int64  `json:"key"`

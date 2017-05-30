@@ -112,34 +112,84 @@ store use yaml as a config file.
 config file:
 
 ```yaml
-# pprof
-pprof:
-  # enable golang pprof
-  enable: true
-  # pprof http addr
-  addr: localhost:6060
+# This is a TOML document. Boom.
 
-# stat http addr
-# stat api: http://http_stat_addr/stat
-stat: localhost:6061
+# store golang pprof
+Pprof = true
+PprofListen  = "localhost:6060"
 
-# api http addr
-# upload: http://http_api_addr/upload
-api: 10.240.135.203:6062
+# store stat listen
+StatListen   = "localhost:6061"
 
-# store index for find volumes
-index: /tmp/hijohn.idx
+# api listen, get/upload/delete
+ApiListen    = "localhost:6062"
 
-# serverid for store server, must unique in cluster, ie. linux shell uuidgen 
-# can get one.
-server_id: 47E273ED-CD3A-4D6A-94CE-554BA9B195EB
+# admin listen, add/del volume
+AdminListen  = "localhost:6063"
 
-# zookeeper
-zookeeper:
-  addrs : ["localhost:2181"]
-  timeout: 1s
-  # /rack/your_machine_rack/
-  root: /rack/bfs-1/
+# needle(pic) max size
+NeedleMaxSize  = 10485760
+
+# max batch upload 
+BatchMaxNum    = 9
+
+[Store]
+# volume meta index
+VolumeIndex      = "/tmp/volume.idx"
+
+# free volume meta index
+FreeVolumeIndex  = "/tmp/free_volume.idx"
+
+[Volume]
+# sync delete operation after N delete
+SyncDelete  = 1024
+
+# sync delete delay duration
+SyncDeleteDelay  = "10s"
+
+[Block]
+# sync write operation after N write
+SyncWrite      = 1
+
+# use new kernel syscall syncfilerange
+Syncfilerange  = true
+
+[Index]
+# index bufio size
+BufferSize = 4096
+
+# merge delay duration
+MergeDelay  =  "10s"
+
+# merge write after N write
+MergeWrite  = 1024
+
+# ring buffer cache
+RingBuffer  = 10240
+
+# sync write operation after N write
+SyncWrite   = 1024
+
+# use new kernel syscall syncfilerange
+Syncfilerange = true
+
+[Zookeeper]
+# zookeeper root path.
+Root  =  "/rack"
+
+# store machine in which rack.
+Rack  =  "bfs-test"
+
+# serverid for store server, must unique in cluster
+ServerId  = "47E273ED-CD3A-4D6A-94CE-554BA9B195EB"
+
+# zookeeper cluster addrs
+Addrs = [
+    "localhost:2181"
+]
+
+# zookeeper heartbeat timeout.
+Timeout = "1s"
 
 ```
 

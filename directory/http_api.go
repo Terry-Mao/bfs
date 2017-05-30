@@ -4,9 +4,12 @@ import (
 	"bfs/libs/errors"
 	"bfs/libs/meta"
 	"encoding/json"
-	log "github.com/golang/glog"
 	"net/http"
 	"time"
+
+	"strconv"
+
+	log "github.com/golang/glog"
 )
 
 const (
@@ -86,13 +89,14 @@ func (s *server) get(wr http.ResponseWriter, r *http.Request) {
 
 func (s *server) upload(wr http.ResponseWriter, r *http.Request) {
 	var (
-		err    error
-		n      *meta.Needle
-		f      *meta.File
-		bucket string
-		res    meta.Response
-		ok     bool
-		uerr   errors.Error
+		err      error
+		n        *meta.Needle
+		f        *meta.File
+		bucket   string
+		res      meta.Response
+		ok       bool
+		uerr     errors.Error
+		mtimeStr string
 	)
 	if r.Method != "POST" {
 		http.Error(wr, "method not allowed", http.StatusMethodNotAllowed)
@@ -112,6 +116,14 @@ func (s *server) upload(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if f.Mine = r.FormValue("mine"); f.Mine == "" {
+		http.Error(wr, "bad request", http.StatusBadRequest)
+		return
+	}
+	if mtimeStr = r.FormValue("mtime"); mtimeStr == "" {
+		http.Error(wr, "bad request", http.StatusBadRequest)
+		return
+	}
+	if f.MTime, err = strconv.ParseInt(mtimeStr, 10, 64); err != nil {
 		http.Error(wr, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -144,6 +156,10 @@ func (s *server) upload(wr http.ResponseWriter, r *http.Request) {
 	res.Key = n.Key
 	res.Cookie = n.Cookie
 	res.Vid = n.Vid
+	res.MTime = n.MTime
+	if f.MTime > 0 {
+		res.MTime = f.MTime
+	}
 	return
 }
 

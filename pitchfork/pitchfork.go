@@ -1,14 +1,16 @@
 package main
 
 import (
+	"bfs/libs/errors"
 	"bfs/libs/meta"
 	"bfs/pitchfork/conf"
 	myzk "bfs/pitchfork/zk"
 	"encoding/json"
-	log "github.com/golang/glog"
-	"github.com/samuel/go-zookeeper/zk"
 	"sort"
 	"time"
+
+	log "github.com/golang/glog"
+	"github.com/samuel/go-zookeeper/zk"
 )
 
 const (
@@ -16,13 +18,14 @@ const (
 	_retryCount = 3
 )
 
+// Pitchfork struct
 type Pitchfork struct {
-	Id     string
+	ID     string
 	config *conf.Config
 	zk     *myzk.Zookeeper
 }
 
-// NewPitchfork
+// NewPitchfork new pitchfork.
 func NewPitchfork(config *conf.Config) (p *Pitchfork, err error) {
 	var id string
 	p = &Pitchfork{}
@@ -35,7 +38,7 @@ func NewPitchfork(config *conf.Config) (p *Pitchfork, err error) {
 		log.Errorf("NewPitchfork failed error(%v)", err)
 		return
 	}
-	p.Id = id
+	p.ID = id
 	return
 }
 
@@ -126,8 +129,6 @@ func (p *Pitchfork) Probe() {
 		}
 		close(stop)
 	}
-
-	return
 }
 
 // divide a set of stores between a set of pitchforks.
@@ -163,12 +164,13 @@ func (p *Pitchfork) divide(pitchforks []string, stores []*meta.Store) []*meta.St
 		}
 		first = last
 	}
-	return sm[p.Id]
+	return sm[p.ID]
 }
 
 // checkHealth check the store health.
-func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err error) {
+func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) {
 	var (
+		err       error
 		status, i int
 		volume    *meta.Volume
 		volumes   []*meta.Volume
@@ -215,12 +217,12 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) (err erro
 			}
 		}
 	}
-	return
 }
 
 // checkNeedles check the store health.
-func (p *Pitchfork) checkNeedles(store *meta.Store, stop chan struct{}) (err error) {
+func (p *Pitchfork) checkNeedles(store *meta.Store, stop chan struct{}) {
 	var (
+		err     error
 		status  int
 		volume  *meta.Volume
 		volumes []*meta.Volume
@@ -241,9 +243,11 @@ func (p *Pitchfork) checkNeedles(store *meta.Store, stop chan struct{}) (err err
 		status = store.Status
 		for _, volume = range volumes {
 			if err = volume.Block.LastErr; err != nil {
+				// ignore volume error
 				break
 			}
-			if err = store.Head(volume.Id); err != nil {
+			// ignore timeout
+			if err = store.Head(volume.Id); err == errors.ErrInternal {
 				store.Status = meta.StoreStatusFail
 				goto failed
 			}
@@ -256,5 +260,4 @@ func (p *Pitchfork) checkNeedles(store *meta.Store, stop chan struct{}) (err err
 			}
 		}
 	}
-	return
 }

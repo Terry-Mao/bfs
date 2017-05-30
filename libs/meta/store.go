@@ -4,10 +4,11 @@ import (
 	"bfs/libs/errors"
 	"encoding/json"
 	"fmt"
-	log "github.com/golang/glog"
 	"io/ioutil"
 	"net/http"
 	"time"
+
+	log "github.com/golang/glog"
 )
 
 const (
@@ -33,7 +34,7 @@ var (
 		Transport: &http.Transport{
 			DisableCompression: true,
 		},
-		Timeout: 2 * time.Second,
+		Timeout: 10 * time.Second,
 	}
 )
 
@@ -62,7 +63,7 @@ type Store struct {
 }
 
 func (s *Store) String() string {
-	return fmt.Sprintf(`	
+	return fmt.Sprintf(`
 -----------------------------
 Id:     %s
 Stat:   %s

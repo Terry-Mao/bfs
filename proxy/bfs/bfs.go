@@ -1,14 +1,9 @@
 package bfs
 
 import (
-	"bfs/libs/errors"
-	"bfs/libs/meta"
-	"bfs/proxy/conf"
 	"bytes"
 	"encoding/json"
 	"fmt"
-	itime "github.com/Terry-Mao/marmot/time"
-	log "github.com/golang/glog"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -19,6 +14,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"bfs/libs/errors"
+	"bfs/libs/meta"
+	"bfs/proxy/conf"
+
+	itime "github.com/Terry-Mao/marmot/time"
+	log "github.com/golang/glog"
 )
 
 const (
@@ -127,7 +129,7 @@ func (b *Bfs) Get(bucket, filename string) (src io.ReadCloser, ctlen int, mtime 
 }
 
 // Upload
-func (b *Bfs) Upload(bucket, filename, mine, sha1 string, buf []byte) (err error) {
+func (b *Bfs) Upload(bucket, filename, mine, sha1 string, mtime int64, buf []byte) (err error) {
 	var (
 		params = url.Values{}
 		uri    string
@@ -139,6 +141,7 @@ func (b *Bfs) Upload(bucket, filename, mine, sha1 string, buf []byte) (err error
 	params.Set("filename", filename)
 	params.Set("mine", mine)
 	params.Set("sha1", sha1)
+	params.Set("mtime", strconv.FormatInt(mtime, 10))
 	uri = fmt.Sprintf(_directoryUploadApi, b.c.BfsAddr)
 	if err = Http("POST", uri, params, nil, &res); err != nil {
 		return
@@ -171,6 +174,9 @@ func (b *Bfs) Upload(bucket, filename, mine, sha1 string, buf []byte) (err error
 	}
 	if res.Ret == errors.RetNeedleExist {
 		err = errors.ErrNeedleExist
+	}
+	if res.MTime > 0 {
+		mtime = res.MTime
 	}
 	log.Infof("bfs.upload bucket:%s filename:%s key:%d cookie:%d vid:%d", bucket, filename, res.Key, res.Cookie, res.Vid)
 	return

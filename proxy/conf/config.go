@@ -1,11 +1,10 @@
 package conf
 
 import (
-	"io/ioutil"
-	"os"
+	"bfs/libs/memcache"
+	"bfs/libs/time"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -24,33 +23,34 @@ type Config struct {
 	Prefix string
 	// file
 	MaxFileSize int
+	// aliyun
+	AliyunKeyId     string
+	AliyunKeySecret string
+	// netcenter
+	NetUserName string
+	NetPasswd   string
+	// qcloud
+	QcloudKeyID     string
+	QcloudKeySecret string
+	// purge channel
+	PurgeMaxSize int
+	// memcache
+	ExpireMc time.Duration
+	Mc       *memcache.Config
+	// limit rate
+	Limit *Limit
 }
 
-// Code to implement the TextUnmarshaler interface for `duration`:
-type duration struct {
-	time.Duration
-}
-
-func (d *duration) UnmarshalText(text []byte) error {
-	var err error
-	d.Duration, err = time.ParseDuration(string(text))
-	return err
+// Limit limit rate
+type Limit struct {
+	Rate  float64
+	Brust int
 }
 
 // NewConfig new a config.
 func NewConfig(conf string) (c *Config, err error) {
-	var (
-		file *os.File
-		blob []byte
-	)
 	c = new(Config)
-	if file, err = os.Open(conf); err != nil {
-		return
-	}
-	if blob, err = ioutil.ReadAll(file); err != nil {
-		return
-	}
-	if err = toml.Unmarshal(blob, c); err != nil {
+	if _, err = toml.DecodeFile(conf, c); err != nil {
 		return
 	}
 	// bfs,/bfs,/bfs/ convert to /bfs/

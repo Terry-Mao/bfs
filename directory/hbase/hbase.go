@@ -7,8 +7,9 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/binary"
-	log "github.com/golang/glog"
 	"time"
+
+	log "github.com/golang/glog"
 )
 
 const (
@@ -144,7 +145,7 @@ func (h *HBaseClient) putNeedle(n *meta.Needle) (err error) {
 	}
 	binary.BigEndian.PutUint32(vbuf, uint32(n.Vid))
 	binary.BigEndian.PutUint32(cbuf, uint32(n.Cookie))
-	binary.BigEndian.PutUint64(ubuf, uint64(time.Now().UnixNano()))
+	binary.BigEndian.PutUint64(ubuf, uint64(n.MTime))
 	if err = c.Put(_table, &hbasethrift.TPut{
 		Row: ks,
 		ColumnValues: []*hbasethrift.TColumnValue{
@@ -185,16 +186,6 @@ func (h *HBaseClient) delNeedle(key int64) (err error) {
 	ks = h.key(key)
 	if err = c.DeleteSingle(_table, &hbasethrift.TDelete{
 		Row: ks,
-		Columns: []*hbasethrift.TColumn{
-			&hbasethrift.TColumn{
-				Family:    _familyBasic,
-				Qualifier: _columnVid,
-			},
-			&hbasethrift.TColumn{
-				Family:    _familyBasic,
-				Qualifier: _columnCookie,
-			},
-		},
 	}); err != nil {
 		hbasePool.Put(c, true)
 		return
@@ -274,7 +265,7 @@ func (h *HBaseClient) putFile(bucket string, f *meta.File) (err error) {
 	}
 	binary.BigEndian.PutUint64(kbuf, uint64(f.Key))
 	binary.BigEndian.PutUint32(stbuf, uint32(f.Status))
-	binary.BigEndian.PutUint64(ubuf, uint64(time.Now().UnixNano()))
+	binary.BigEndian.PutUint64(ubuf, uint64(f.MTime))
 	if err = c.Put(h.tableName(bucket), &hbasethrift.TPut{
 		Row: ks,
 		ColumnValues: []*hbasethrift.TColumnValue{
@@ -351,28 +342,6 @@ func (h *HBaseClient) delFile(bucket, filename string) (err error) {
 	ks = []byte(filename)
 	if err = c.DeleteSingle(h.tableName(bucket), &hbasethrift.TDelete{
 		Row: ks,
-		Columns: []*hbasethrift.TColumn{
-			&hbasethrift.TColumn{
-				Family:    _familyFile,
-				Qualifier: _columnKey,
-			},
-			&hbasethrift.TColumn{
-				Family:    _familyFile,
-				Qualifier: _columnSha1,
-			},
-			&hbasethrift.TColumn{
-				Family:    _familyFile,
-				Qualifier: _columnMine,
-			},
-			&hbasethrift.TColumn{
-				Family:    _familyFile,
-				Qualifier: _columnStatus,
-			},
-			&hbasethrift.TColumn{
-				Family:    _familyFile,
-				Qualifier: _columnUpdateTime,
-			},
-		},
 	}); err != nil {
 		hbasePool.Put(c, true)
 		return
