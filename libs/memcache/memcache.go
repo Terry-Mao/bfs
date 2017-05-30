@@ -5,7 +5,7 @@ import (
 
 	xtime "bfs/libs/time"
 
-	"golang/gomemcache/memcache"
+	"libs/memcache/gomemcache/memcache"
 )
 
 const (

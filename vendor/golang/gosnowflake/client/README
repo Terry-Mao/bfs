@@ -1,1 +1,0 @@
-go test -conf=./test-examples.conf
