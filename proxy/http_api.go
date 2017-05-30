@@ -241,7 +241,6 @@ func retCode(wr http.ResponseWriter, status *int) {
 func (s *server) upload(item *ibucket.Item, bucket, file string, wr http.ResponseWriter, r *http.Request) {
 	var (
 		ok       bool
-		nofile   bool
 		body     []byte
 		mine     string
 		location string
@@ -282,7 +281,6 @@ func (s *server) upload(item *ibucket.Item, bucket, file string, wr http.Respons
 	sha1sum = hex.EncodeToString(sha[:])
 	// if empty filename or endwith "/": dir
 	if file == "" || strings.HasSuffix(file, "/") {
-		nofile = true
 		file += sha1sum + "." + ext
 	}
 	if err = s.srv.Upload(bucket, file, mine, sha1sum, body); err != nil && err != errors.ErrNeedleExist {
