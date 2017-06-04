@@ -1,14 +1,10 @@
 package main
 
 import (
-	"bfs/libs/errors"
-	"bfs/proxy/auth"
-	"bfs/proxy/bfs"
-	ibucket "bfs/proxy/bucket"
-	"bfs/proxy/conf"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -18,12 +14,22 @@ import (
 	"strings"
 	"time"
 
+	"bfs/libs/errors"
+	"bfs/proxy/auth"
+	"bfs/proxy/bfs"
+	ibucket "bfs/proxy/bucket"
+	"bfs/proxy/conf"
+
 	log "github.com/golang/glog"
 )
 
 const (
 	_httpServerReadTimeout  = 5 * time.Second
 	_httpServerWriteTimeout = 2 * time.Second
+
+	_expires = 20 * 365 * 24 * 3600
+
+	_maxFileNameLength = 100
 )
 
 type server struct {
@@ -31,11 +37,14 @@ type server struct {
 	bucket *ibucket.Bucket
 	auth   *auth.Auth
 	c      *conf.Config
+	srv    *Service
 }
 
-// StartApi init the http module.
-func StartApi(c *conf.Config) (err error) {
-	var s = &server{}
+// StartAPI init the http module.
+func StartAPI(c *conf.Config) (err error) {
+	var s = &server{
+		srv: NewService(c),
+	}
 	s.c = c
 	s.bfs = bfs.New(c)
 	if s.bucket, err = ibucket.New(); err != nil {
@@ -90,6 +99,10 @@ func (s *server) do(wr http.ResponseWriter, r *http.Request) {
 	}
 	if bucket, file, status = s.parseURI(r, upload); status != http.StatusOK {
 		http.Error(wr, "", status)
+		return
+	}
+	if len(file) > _maxFileNameLength {
+		http.Error(wr, "", http.StatusRequestEntityTooLarge)
 		return
 	}
 	if item, err = s.bucket.Get(bucket); err != nil {
@@ -175,22 +188,31 @@ func (s *server) getURI(bucket, file string) (uri string) {
 // download.
 func (s *server) download(item *ibucket.Item, bucket, file string, wr http.ResponseWriter, r *http.Request) {
 	var (
-		mtime  int64
-		ctlen  int
-		mine   string
-		sha1   string
-		start  = time.Now()
-		src    io.ReadCloser
-		status = http.StatusOK
-		err    error
+		mtime      int64
+		ctlen      int
+		mine       string
+		sha1       string
+		start      = time.Now()
+		src        io.ReadCloser
+		status     = http.StatusOK
+		err        error
+		bucketItem *ibucket.Item
 	)
 	defer httpLog("download", r.URL.Path, &bucket, &file, start, &status, &err)
-	if src, ctlen, mtime, sha1, mine, err = s.bfs.Get(bucket, file); err == nil {
+	if src, ctlen, mtime, sha1, mine, err = s.srv.Get(bucket, file); err == nil {
 		wr.Header().Set("Content-Length", strconv.Itoa(ctlen))
 		wr.Header().Set("Content-Type", mine)
 		wr.Header().Set("Server", "bfs")
 		wr.Header().Set("Last-Modified", time.Unix(0, mtime).Format(http.TimeFormat))
 		wr.Header().Set("Etag", sha1)
+		bucketItem, err = s.bucket.Get(bucket)
+		if err == nil && bucketItem.Header != nil {
+			wr.Header().Set("Cache-Control", fmt.Sprintf("max-age=%v", bucketItem.Header.CacheControl))
+			wr.Header().Set("Expires", time.Unix(bucketItem.Header.CacheControl, time.Now().UnixNano()).Format(http.TimeFormat))
+		} else {
+			wr.Header().Set("Cache-Control", "max-age=315360000")
+			wr.Header().Set("Expires", time.Unix(_expires, mtime).Format(http.TimeFormat))
+		}
 		if src != nil {
 			if r.Method == "GET" {
 				io.Copy(wr, src)
@@ -205,7 +227,7 @@ func (s *server) download(item *ibucket.Item, bucket, file string, wr http.Respo
 		} else {
 			status = http.StatusInternalServerError
 		}
-		http.Error(wr, "", status)
+		http.Error(wr, err.Error(), status)
 	}
 	return
 }
@@ -261,7 +283,7 @@ func (s *server) upload(item *ibucket.Item, bucket, file string, wr http.Respons
 	if file == "" || strings.HasSuffix(file, "/") {
 		file += sha1sum + "." + ext
 	}
-	if err = s.bfs.Upload(bucket, file, mine, sha1sum, body); err != nil && err != errors.ErrNeedleExist {
+	if err = s.srv.Upload(bucket, file, mine, sha1sum, body); err != nil && err != errors.ErrNeedleExist {
 		if uerr, ok = (err).(errors.Error); ok {
 			status = int(uerr)
 		} else {
@@ -285,7 +307,7 @@ func (s *server) delete(item *ibucket.Item, bucket, file string, wr http.Respons
 		start  = time.Now()
 	)
 	defer httpLog("delete", r.URL.Path, &bucket, &file, start, &status, &err)
-	if err = s.bfs.Delete(bucket, file); err != nil {
+	if err = s.srv.Delete(bucket, file); err != nil {
 		if err == errors.ErrNeedleNotExist {
 			status = http.StatusNotFound
 			http.Error(wr, "", status)
@@ -305,7 +327,7 @@ func (s *server) delete(item *ibucket.Item, bucket, file string, wr http.Respons
 // monitorPing sure program now runs correctly, when return http status 200.
 func (s *server) ping(wr http.ResponseWriter, r *http.Request) {
 	var (
-		byteJson []byte
+		byteJSON []byte
 		f        *os.File
 		res      = map[string]interface{}{"code": 0}
 		err      error
@@ -315,15 +337,15 @@ func (s *server) ping(wr http.ResponseWriter, r *http.Request) {
 		res["code"] = http.StatusInternalServerError
 		f.Close()
 	}
-	if err = s.bfs.Ping(); err != nil {
+	if err = s.srv.Ping(); err != nil {
 		http.Error(wr, "", http.StatusInternalServerError)
 		res["code"] = http.StatusInternalServerError
 	}
-	if byteJson, err = json.Marshal(res); err != nil {
+	if byteJSON, err = json.Marshal(res); err != nil {
 		return
 	}
 	wr.Header().Set("Content-Type", "application/json;charset=utf-8")
-	if _, err = wr.Write(byteJson); err != nil {
+	if _, err = wr.Write(byteJSON); err != nil {
 		return
 	}
 	return

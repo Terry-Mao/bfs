@@ -8,10 +8,11 @@ import (
 	"bfs/libs/errors"
 	"bfs/libs/meta"
 	"encoding/json"
-	log "github.com/golang/glog"
-	"github.com/samuel/go-zookeeper/zk"
 	"strconv"
 	"time"
+
+	log "github.com/golang/glog"
+	"github.com/samuel/go-zookeeper/zk"
 )
 
 const (
@@ -306,6 +307,7 @@ func (d *Directory) UploadStores(bucket string, f *meta.File) (n *meta.Needle, s
 	n.Key = key
 	n.Vid = vid
 	n.Cookie = d.cookie()
+	n.MTime = f.MTime
 	f.Key = key
 	if err = d.hBase.Put(bucket, f, n); err != nil {
 		if err != errors.ErrNeedleExist {

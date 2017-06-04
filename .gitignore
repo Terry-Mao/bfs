@@ -24,7 +24,7 @@ _testmain.go
 *.prof
 *.gitattributes
 
-*.iml
-*.ipr
-*.iws
-.idea/
+directory/directory
+pitchfork/pitchfork
+proxy/proxy
+store/store

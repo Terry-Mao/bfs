@@ -1,8 +1,9 @@
 package bucket
 
 import (
-	"bfs/libs/errors"
 	"fmt"
+
+	"bfs/libs/errors"
 )
 
 const (
@@ -21,19 +22,23 @@ type Bucket struct {
 	data map[string]*Item
 }
 
+type Header struct {
+	CacheControl int64
+}
+
 type Item struct {
 	Name      string
 	KeyId     string
 	KeySecret string
 	Domain    string
 	PurgeCDN  bool
-
+	Header    *Header
 	// property   第0位：读 (0表示共有，1表示私有)  第1位：写 (0表示共有，1表示私有)
 	property int
 }
 
 func (i *Item) String() string {
-	return fmt.Sprintf("{name: %s, purge: %s, property: %d}", i.Name, i.PurgeCDN, i.property)
+	return fmt.Sprintf("{name: %s, purge: %v, property: %d}", i.Name, i.PurgeCDN, i.property)
 }
 
 func (i *Item) writePublic() bool {

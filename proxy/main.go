@@ -1,13 +1,15 @@
 package main
 
 import (
-	"bfs/proxy/conf"
 	"flag"
-	log "github.com/golang/glog"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
+
+	"bfs/proxy/conf"
+
+	log "github.com/golang/glog"
 )
 
 const (
@@ -36,8 +38,8 @@ func main() {
 	}
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	// init http
-	if err = StartApi(c); err != nil {
-		log.Error("http.Init() error(%v)", err)
+	if err = StartAPI(c); err != nil {
+		log.Errorf("http.Init() error(%v)", err)
 		panic(err)
 	}
 	if c.PprofEnable {

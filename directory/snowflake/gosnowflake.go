@@ -17,7 +17,7 @@
 package snowflake
 
 import (
-	log "github.com/golang/glog"
+	log "code.google.com/p/log4go"
 	"encoding/json"
 	"errors"
 	myrpc "github.com/Terry-Mao/gosnowflake/rpc"
@@ -174,7 +174,7 @@ func (c *Client) client() (*rpc.Client, error) {
 // watchWorkerId watch the zk node change.
 func (c *Client) watchWorkerId(workerId int64, workerIdStr string) {
 	workerIdPath := path.Join(zkPath, workerIdStr)
-	//log.Debug("workerIdPath: %s", workerIdPath)
+	log.Debug("workerIdPath: %s", workerIdPath)
 	for {
 		rpcs, _, watch, err := zkConn.ChildrenW(workerIdPath)
 		if err != nil {
