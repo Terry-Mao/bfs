@@ -111,7 +111,9 @@ func NewIndexer(file string, conf *conf.Config) (i *Indexer, err error) {
 	// must align size
 	i.ring = NewRing(conf.Index.RingBuffer)
 	i.bn = 0
-	i.buf = make([]byte, conf.Index.BufferSize)
+	if conf.Index.BufferSize < _indexSize {
+		i.buf = make([]byte, _indexSize)
+	}
 	if i.f, err = os.OpenFile(file, os.O_RDWR|os.O_CREATE|myos.O_NOATIME, 0664); err != nil {
 		log.Errorf("os.OpenFile(\"%s\") error(%v)", file, err)
 		return nil, err
