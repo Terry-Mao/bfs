@@ -3,18 +3,20 @@ package main
 import (
 	"bfs/libs/errors"
 	"bfs/libs/meta"
-	log "github.com/golang/glog"
 	"math/rand"
 	"sync"
 	"time"
+
+	log "github.com/golang/glog"
 )
 
-// Dispatcher
+// Dispatcher ,
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gids  []int // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
-	rand  *rand.Rand
-	rlock sync.Mutex
+	gids    []int            // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
+	wrtVids map[string]int32 // choose most suitable written volume, always order by rest space.
+	rand    *rand.Rand
+	rlock   sync.Mutex
 }
 
 const (
@@ -23,9 +25,10 @@ const (
 	spaceBenchmark    = meta.MaxBlockOffset // 1 volume
 	addDelayBenchmark = 100                 // 100ms   <100ms means no load, -Score==0
 	baseAddDelay      = 100                 // 1s score:   -(1000/baseAddDelay)*addDelayBenchmark == -1000
+	minFreeSpace      = 10 * 1024 * 1024    // 10M * PaddingSize every volume must have 80M left. PaddingSize:8
 )
 
-// NewDispatcher
+// NewDispatcher .
 func NewDispatcher() (d *Dispatcher) {
 	d = new(Dispatcher)
 	d.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -41,6 +44,7 @@ func (d *Dispatcher) Update(group map[int][]string,
 		i                          int
 		vid                        int32
 		gids                       []int
+		wrtVids                    map[string]int32
 		sid                        string
 		stores                     []string
 		restSpace, minScore, score int
@@ -50,6 +54,7 @@ func (d *Dispatcher) Update(group map[int][]string,
 		volumeState                *meta.VolumeState
 	)
 	gids = []int{}
+	wrtVids = map[string]int32{}
 	for gid, stores = range group {
 		write = true
 		// check all stores can writeable by the group.
@@ -83,6 +88,12 @@ func (d *Dispatcher) Update(group map[int][]string,
 				totalAdd = totalAdd + volumeState.TotalWriteProcessed
 				restSpace = restSpace + int(volumeState.FreeSpace)
 				totalAddDelay = totalAddDelay + volumeState.TotalWriteDelay
+				// cacl most suitable written vid
+				if volumeState.FreeSpace > minFreeSpace {
+					if value, ok := wrtVids[sid]; !ok || vid < value {
+						wrtVids[sid] = vid
+					}
+				}
 			}
 			score = d.calScore(int(totalAdd), int(totalAddDelay), restSpace)
 			if score < minScore || minScore == 0 {
@@ -94,6 +105,7 @@ func (d *Dispatcher) Update(group map[int][]string,
 		}
 	}
 	d.gids = gids
+	d.wrtVids = wrtVids
 	return
 }
 
@@ -116,13 +128,11 @@ func (d *Dispatcher) calScore(totalAdd, totalAddDelay, restSpace int) (score int
 	return
 }
 
-// VolumeId get a volume id.
-func (d *Dispatcher) VolumeId(group map[int][]string, storeVolume map[string][]int32) (vid int32, err error) {
+// VolumeID get a volume id.
+func (d *Dispatcher) VolumeID(group map[int][]string, storeVolume map[string][]int32) (vid int32, err error) {
 	var (
-		sid    string
 		stores []string
 		gid    int
-		vids   []int32
 	)
 	if len(d.gids) == 0 {
 		err = errors.ErrStoreNotAvailable
@@ -136,8 +146,6 @@ func (d *Dispatcher) VolumeId(group map[int][]string, storeVolume map[string][]i
 		err = errors.ErrZookeeperDataError
 		return
 	}
-	sid = stores[0]
-	vids = storeVolume[sid]
-	vid = vids[d.rand.Intn(len(vids))]
+	vid = d.wrtVids[stores[0]]
 	return
 }

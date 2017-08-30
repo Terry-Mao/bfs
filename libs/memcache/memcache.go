@@ -5,7 +5,7 @@ import (
 
 	xtime "bfs/libs/time"
 
-	"libs/memcache/gomemcache/memcache"
+	"bfs/libs/memcache/gomemcache/memcache"
 )
 
 const (
@@ -102,8 +102,13 @@ func (c *Conn) Get(cmd string, cb func(*memcache.Reply), keys ...string) (err er
 }
 
 // Get2 sends a command to the server for gets data.
-func (c *Conn) Get2(cmd string, key string) (res *memcache.Reply, err error) {
+func (c *Conn) Get2(cmd string, key string) (bs []byte, err error) {
+	var res *memcache.Reply
 	res, err = c.c.Get(cmd, key)
+	if err != nil {
+		return
+	}
+	bs = res.Value
 	return
 }
 

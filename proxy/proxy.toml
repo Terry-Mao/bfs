@@ -27,12 +27,17 @@ rate = 150.0
 Brust = 50
 
 [mc]
-name = "kvo"
+name = "bfs"
 proto = "tcp"
-addr = "172.16.33.54:11213"
+addr = "localhost:11213"
 idle = 5
 active = 10
 dialTimeout = "1s"
 readTimeout = "1s"
 writeTimeout = "1s"
 idleTimeout = "80s"
+
+[Ats]
+AtsServerList = [ "http://localhost:8080" ]
+
+

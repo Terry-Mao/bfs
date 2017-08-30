@@ -1,13 +1,12 @@
 package main
 
 import (
+	"bfs/proxy/conf"
 	"flag"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
-
-	"bfs/proxy/conf"
 
 	log "github.com/golang/glog"
 )

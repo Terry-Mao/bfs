@@ -8,32 +8,37 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"bfs/directory/conf"
+	dzk "bfs/directory/zk"
+	"bfs/libs/meta"
 )
 
 func TestHTTPAPI(t *testing.T) {
 	var (
 		err    error
-		config *Config
-		zk     *Zookeeper
+		config *conf.Config
+		zk     *dzk.Zookeeper
 		d      *Directory
 		key    int64
 		cookie int32
 		body   []byte
 		url    string
 		resp   *http.Response
-		res    Response
+		res    meta.Response
 		buf    = &bytes.Buffer{}
 	)
-	if config, err = NewConfig("./directory.conf"); err != nil {
+	if config, err = conf.NewConfig("./directory.toml"); err != nil {
 		t.Errorf("NewConfig() error(%v)", err)
 		t.FailNow()
 	}
 
-	if zk, err = NewZookeeper([]string{"123.56.108.22:2181"}, time.Second*15, "/rack", "/volume", "/group"); err != nil {
+	if zk, err = dzk.NewZookeeper(config); err != nil {
 		t.Errorf("NewZookeeper() error(%v)", err)
 		t.FailNow()
 	}
-	if d, err = NewDirectory(config, zk); err != nil {
+	defer zk.Close()
+	if d, err = NewDirectory(config); err != nil {
 		t.Errorf("NewDirectory() error(%v)", err)
 		t.FailNow()
 	}
@@ -58,7 +63,7 @@ func TestHTTPAPI(t *testing.T) {
 		t.Errorf("json.Unmarshal error(%v)", err)
 		t.FailNow()
 	}
-	key = res.Keys[0]
+	key = res.Key
 	cookie = res.Cookie
 	fmt.Println("put vid:", res.Vid)
 	buf.Reset()

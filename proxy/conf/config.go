@@ -32,6 +32,8 @@ type Config struct {
 	// qcloud
 	QcloudKeyID     string
 	QcloudKeySecret string
+	// ats server list
+	Ats *Ats
 	// purge channel
 	PurgeMaxSize int
 	// memcache
@@ -39,6 +41,10 @@ type Config struct {
 	Mc       *memcache.Config
 	// limit rate
 	Limit *Limit
+}
+
+type Ats struct {
+	AtsServerList []string
 }
 
 // Limit limit rate

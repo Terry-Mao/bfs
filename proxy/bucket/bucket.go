@@ -68,7 +68,7 @@ func New() (b *Bucket, err error) {
 	item.property = _privateWrite
 	item.KeyId = "221bce6492eba70f"
 	item.KeySecret = "6eb80603e85842542f9736eb13b7e3"
-	item.PurgeCDN = false
+	item.PurgeCDN = true
 	b.data[item.Name] = item
 	return
 }

@@ -23,7 +23,7 @@ ZkPath = "/gosnowflake-servers"
 ZkTimeout = "15s"
 
 # workid
-WorkId = 0
+WorkId = 1
 
 [zookeeper]
 # zookeeper cluster addrs, multiple addrs split by ",".
@@ -47,14 +47,14 @@ GroupRoot = "/group"
 PullInterval = "10s"
 
 [hbase]
-# addr 172.16.13.90:9090
-Addr = "172.16.13.90:9090"
-
-# Note that you must specify a number here.
-MaxActive = 100
-
-# Note that you must specify a number here.
-MaxIdle = 100
-
-# Note that you must specify a number here.
-Timeout = "1s"
+master = ""
+meta = ""
+dialTimeout = "1s"
+readTimeout = "10s"
+readsTimeout = "10s"
+writeTimeout = "10s"
+writesTimeout = "10s"
+    [hbase.zookeeperHbase]
+    root = ""
+    addrs = ["localhost:2181"]
+    timeout = "30s"
