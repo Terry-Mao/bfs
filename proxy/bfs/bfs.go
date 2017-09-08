@@ -1,6 +1,9 @@
 package bfs
 
 import (
+	"bfs/libs/errors"
+	"bfs/libs/meta"
+	"bfs/proxy/conf"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -14,10 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"bfs/libs/errors"
-	"bfs/libs/meta"
-	"bfs/proxy/conf"
 
 	itime "github.com/Terry-Mao/marmot/time"
 	log "github.com/golang/glog"

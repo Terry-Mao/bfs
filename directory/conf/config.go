@@ -1,10 +1,13 @@
 package conf
 
 import (
-	"github.com/BurntSushi/toml"
 	"io/ioutil"
 	"os"
 	"time"
+
+	xtime "bfs/libs/time"
+
+	"github.com/BurntSushi/toml"
 )
 
 type Config struct {
@@ -34,12 +37,24 @@ type Zookeeper struct {
 	GroupRoot    string
 }
 
+// HBase config.
 type HBase struct {
-	Addr       string
-	MaxActive  int
-	MaxIdle    int
-	Timeout    duration
-	LvsTimeout duration
+	ZookeeperHbase *ZookeeperHbase
+	// default "" means use default hbase zk path. It should correspond to server config
+	Master        string
+	Meta          string
+	TestRowKey    string
+	DialTimeout   xtime.Duration // 0 means no dial timeout
+	ReadTimeout   xtime.Duration
+	ReadsTimeout  xtime.Duration
+	WriteTimeout  xtime.Duration
+	WritesTimeout xtime.Duration
+}
+
+type ZookeeperHbase struct {
+	Root    string
+	Addrs   []string
+	Timeout xtime.Duration
 }
 
 // Code to implement the TextUnmarshaler interface for `duration`:

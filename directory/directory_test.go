@@ -2,26 +2,30 @@ package main
 
 import (
 	"testing"
-	"time"
+	// "time"
+
+	"bfs/directory/conf"
+	dzk "bfs/directory/zk"
 )
 
 func TestDirectory(t *testing.T) {
 	var (
 		err    error
-		config *Config
-		zk     *Zookeeper
+		config *conf.Config
+		zk     *dzk.Zookeeper
 		d      *Directory
 	)
-	if config, err = NewConfig("./directory.conf"); err != nil {
+	if config, err = conf.NewConfig("./directory.toml"); err != nil {
 		t.Errorf("NewConfig() error(%v)", err)
 		t.FailNow()
 	}
 
-	if zk, err = NewZookeeper([]string{"localhost:2181"}, time.Second*1, "/rack", "/volume", "/group"); err != nil {
+	if zk, err = dzk.NewZookeeper(config); err != nil {
 		t.Errorf("NewZookeeper() error(%v)", err)
 		t.FailNow()
 	}
-	if d, err = NewDirectory(config, zk); err != nil {
+	defer zk.Close()
+	if d, err = NewDirectory(config); err != nil {
 		t.Errorf("NewDirectory() error(%v)", err)
 		t.FailNow()
 	}
@@ -29,7 +33,7 @@ func TestDirectory(t *testing.T) {
 		t.Errorf("syncStores() error(%v)", err)
 		t.FailNow()
 	}
-	if _, err = d.syncGroups(); err != nil {
+	if err = d.syncGroups(); err != nil {
 		t.Errorf("syncGroups() error(%v)", err)
 		t.FailNow()
 	}

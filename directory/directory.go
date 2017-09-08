@@ -19,7 +19,7 @@ const (
 	retrySleep = time.Second * 1
 )
 
-// Directory
+// Directory .
 // id means store serverid; vid means volume id; gid means group id
 type Directory struct {
 	// STORE
@@ -34,15 +34,15 @@ type Directory struct {
 	volume      map[int32]*meta.VolumeState // volume_id:volume_state
 	volumeStore map[int32][]string          // volume_id:store_server_id
 
-	genkey     *snowflake.Genkey  // snowflake client for gen key
-	hBase      *hbase.HBaseClient // hBase client
-	dispatcher *Dispatcher        // dispatch for write or read reqs
+	genkey     *snowflake.Genkey // snowflake client for gen key
+	hBase      *hbase.Client     // hBase client
+	dispatcher *Dispatcher       // dispatch for write or read reqs
 
 	config *conf.Config
 	zk     *myzk.Zookeeper
 }
 
-// NewDirectory
+// NewDirectory .
 func NewDirectory(config *conf.Config) (d *Directory, err error) {
 	d = &Directory{}
 	d.config = config
@@ -52,10 +52,8 @@ func NewDirectory(config *conf.Config) (d *Directory, err error) {
 	if d.genkey, err = snowflake.NewGenkey(config.Snowflake.ZkAddrs, config.Snowflake.ZkPath, config.Snowflake.ZkTimeout.Duration, config.Snowflake.WorkId); err != nil {
 		return
 	}
-	if err = hbase.Init(config); err != nil {
-		return
-	}
-	d.hBase = hbase.NewHBaseClient()
+
+	d.hBase = hbase.NewClient(config.HBase)
 	d.dispatcher = NewDispatcher()
 	go d.SyncZookeeper()
 	return
@@ -259,7 +257,7 @@ func (d *Directory) GetStores(bucket, filename string) (n *meta.Needle, f *meta.
 	stores = make([]string, 0, len(svrs))
 	for _, store = range svrs {
 		if storeMeta, ok = d.store[store]; !ok {
-			log.Errorf("store cannot match store:", store)
+			log.Errorf("store cannot match store:%s", store)
 			continue
 		}
 		if !storeMeta.CanRead() {
@@ -283,8 +281,8 @@ func (d *Directory) UploadStores(bucket string, f *meta.File) (n *meta.Needle, s
 		storeMeta *meta.Store
 		ok        bool
 	)
-	if vid, err = d.dispatcher.VolumeId(d.group, d.storeVolume); err != nil {
-		log.Errorf("dispatcher.VolumeId error(%v)", err)
+	if vid, err = d.dispatcher.VolumeID(d.group, d.storeVolume); err != nil {
+		log.Errorf("dispatcher.VolumeID error(%v)", err)
 		err = errors.ErrStoreNotAvailable
 		return
 	}

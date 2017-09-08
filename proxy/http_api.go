@@ -1,6 +1,12 @@
 package main
 
 import (
+	"bfs/libs/errors"
+	"bfs/proxy/auth"
+	"bfs/proxy/bfs"
+	ibucket "bfs/proxy/bucket"
+	"bfs/proxy/cdn"
+	"bfs/proxy/conf"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -13,12 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"bfs/libs/errors"
-	"bfs/proxy/auth"
-	"bfs/proxy/bfs"
-	ibucket "bfs/proxy/bucket"
-	"bfs/proxy/conf"
 
 	log "github.com/golang/glog"
 )
@@ -36,6 +36,7 @@ type server struct {
 	bfs    *bfs.Bfs
 	bucket *ibucket.Bucket
 	auth   *auth.Auth
+	cdn    *cdn.CDN
 	c      *conf.Config
 	srv    *Service
 }
@@ -51,6 +52,9 @@ func StartAPI(c *conf.Config) (err error) {
 		return
 	}
 	if s.auth, err = auth.New(c); err != nil {
+		return
+	}
+	if s.cdn, err = cdn.New(c); err != nil {
 		return
 	}
 	go func() {
@@ -222,7 +226,7 @@ func (s *server) download(item *ibucket.Item, bucket, file string, wr http.Respo
 	} else {
 		if err == errors.ErrNeedleNotExist {
 			status = http.StatusNotFound
-		} else if err == errors.ErrStoreNotAvailable {
+		} else if err == errors.ErrStoreNotAvailable || err == errors.ErrServiceUnavailable {
 			status = http.StatusServiceUnavailable
 		} else {
 			status = http.StatusInternalServerError
@@ -241,6 +245,7 @@ func retCode(wr http.ResponseWriter, status *int) {
 func (s *server) upload(item *ibucket.Item, bucket, file string, wr http.ResponseWriter, r *http.Request) {
 	var (
 		ok       bool
+		nofile   bool
 		body     []byte
 		mine     string
 		location string
@@ -281,6 +286,7 @@ func (s *server) upload(item *ibucket.Item, bucket, file string, wr http.Respons
 	sha1sum = hex.EncodeToString(sha[:])
 	// if empty filename or endwith "/": dir
 	if file == "" || strings.HasSuffix(file, "/") {
+		nofile = true
 		file += sha1sum + "." + ext
 	}
 	if err = s.srv.Upload(bucket, file, mine, sha1sum, body); err != nil && err != errors.ErrNeedleExist {
@@ -292,6 +298,10 @@ func (s *server) upload(item *ibucket.Item, bucket, file string, wr http.Respons
 		return
 	}
 	location = s.getURI(bucket, file)
+	// if upload without filename, file context may be same, no need refresh cdn
+	if err == errors.ErrNeedleExist && !nofile {
+		s.cdn.Push(bucket, location, item.PurgeCDN)
+	}
 	wr.Header().Set("Location", location)
 	wr.Header().Set("ETag", sha1sum)
 	return
@@ -320,6 +330,7 @@ func (s *server) delete(item *ibucket.Item, bucket, file string, wr http.Respons
 		}
 	} else {
 		wr.Header().Set("Code", strconv.Itoa(status))
+		s.cdn.Push(bucket, s.getURI(bucket, file), item.PurgeCDN)
 	}
 	return
 }

@@ -9,7 +9,6 @@ import (
 	"bfs/libs/meta"
 
 	log "github.com/golang/glog"
-	gm "golang/gomemcache/memcache"
 )
 
 // Cache proxy cache.
@@ -127,14 +126,12 @@ func (c *Cache) set(key string, bs []byte, expire int32) (err error) {
 
 func (c *Cache) get(key string) (bs []byte, err error) {
 	var (
-		conn  = c.mc.Get()
-		reply *gm.Reply
+		conn = c.mc.Get()
 	)
 	defer conn.Close()
-	if reply, err = conn.Get2("get", key); err != nil {
+	if bs, err = conn.Get2("get", key); err != nil {
 		return
 	}
-	bs = reply.Value
 	return
 }
 
