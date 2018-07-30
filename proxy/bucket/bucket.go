@@ -31,14 +31,13 @@ type Item struct {
 	KeyId     string
 	KeySecret string
 	Domain    string
-	PurgeCDN  bool
 	Header    *Header
 	// property   第0位：读 (0表示共有，1表示私有)  第1位：写 (0表示共有，1表示私有)
 	property int
 }
 
 func (i *Item) String() string {
-	return fmt.Sprintf("{name: %s, purge: %v, property: %d}", i.Name, i.PurgeCDN, i.property)
+	return fmt.Sprintf("{name: %s, property: %d}", i.Name, i.property)
 }
 
 func (i *Item) writePublic() bool {
@@ -68,7 +67,6 @@ func New() (b *Bucket, err error) {
 	item.property = _privateWrite
 	item.KeyId = "221bce6492eba70f"
 	item.KeySecret = "6eb80603e85842542f9736eb13b7e3"
-	item.PurgeCDN = true
 	b.data[item.Name] = item
 	return
 }
