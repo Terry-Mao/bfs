@@ -184,6 +184,7 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) {
 		case <-time.After(p.config.Store.StoreCheckInterval.Duration):
 			break
 		}
+		storeReadOnly := true
 		status = store.Status
 		store.Status = meta.StoreStatusHealth
 		for i = 0; i < _retryCount; i++ {
@@ -198,9 +199,9 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) {
 					log.Infof("get store block.lastErr:%s host:%s", volume.Block.LastErr, store.Stat)
 					store.Status = meta.StoreStatusFail
 					break
-				} else if volume.Block.Full() {
+				} else if !volume.Block.Full() {
 					log.Infof("block: %s, offset: %d", volume.Block.File, volume.Block.Offset)
-					store.Status = meta.StoreStatusRead
+					storeReadOnly = false
 				}
 				if err = p.zk.SetVolumeState(volume); err != nil {
 					log.Errorf("zk.SetVolumeState() error(%v)", err)
@@ -209,6 +210,9 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) {
 		} else {
 			log.Errorf("get store info failed, retry host:%s", store.Stat)
 			store.Status = meta.StoreStatusFail
+		}
+		if storeReadOnly {
+			store.Status = meta.StoreStatusRead
 		}
 		if status != store.Status {
 			if err = p.zk.SetStore(store); err != nil {
