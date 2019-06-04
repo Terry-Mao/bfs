@@ -180,7 +180,7 @@ def bfsopsVolumesPost():
 	resp['errorMsg'] = ""
 	
 	need_break = False
-    global MAX_VOLUME_ID
+	global MAX_VOLUME_ID
 	for group_id_u in groups:
 		group_id = group_id_u.encode('utf-8')
 		stores = GROUP_STORE[group_id]
