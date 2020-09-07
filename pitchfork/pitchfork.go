@@ -210,6 +210,7 @@ func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) {
 		} else {
 			log.Errorf("get store info failed, retry host:%s", store.Stat)
 			store.Status = meta.StoreStatusFail
+			storeReadOnly = false
 		}
 		if storeReadOnly {
 			store.Status = meta.StoreStatusRead
