@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 
 	log "github.com/golang/glog"
@@ -16,12 +17,14 @@ const (
 	StoreStatusEnableBit = 31
 	StoreStatusReadBit   = 0
 	StoreStatusWriteBit  = 1
+	StoreStatusSyncBit   = 2
 	// status
 	StoreStatusInit   = 0
 	StoreStatusEnable = (1 << StoreStatusEnableBit)
 	StoreStatusRead   = StoreStatusEnable | (1 << StoreStatusReadBit)
 	StoreStatusWrite  = StoreStatusEnable | (1 << StoreStatusWriteBit)
 	StoreStatusHealth = StoreStatusRead | StoreStatusWrite
+	StoreStatusSync   = StoreStatusEnable | (1 << StoreStatusSyncBit) // 2147483652
 	StoreStatusFail   = StoreStatusEnable
 	// api
 	statAPI  = "http://%s/info"
@@ -101,10 +104,16 @@ func (s *Store) Info() (vs []*Volume, err error) {
 	)
 	if req, err = http.NewRequest("GET", url, nil); err != nil {
 		log.Info("http.NewRequest(GET,%s) error(%v)", url, err)
+		err = errors.ErrServiceTimeout
 		return
 	}
 	if resp, err = _client.Do(req); err != nil {
 		log.Errorf("_client.do(%s) error(%v)", url, err)
+		if strings.Contains(err.Error(), "connection refused") {
+			err = errors.ErrServiceUnavailable
+		} else {
+			err = errors.ErrServiceTimeout
+		}
 		return
 	}
 	defer resp.Body.Close()
@@ -154,5 +163,5 @@ func (s *Store) CanWrite() bool {
 
 // CanRead reports whether the store can read.
 func (s *Store) CanRead() bool {
-	return s.Status == StoreStatusRead || s.Status == StoreStatusHealth
+	return s.Status == StoreStatusRead || s.Status == StoreStatusHealth || s.Status == StoreStatusSync
 }

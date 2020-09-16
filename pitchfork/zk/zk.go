@@ -1,13 +1,16 @@
 package zk
 
 import (
-	"bfs/libs/meta"
-	"bfs/pitchfork/conf"
 	"encoding/json"
 	"fmt"
+	"path"
+	"path/filepath"
+
+	"bfs/libs/meta"
+	"bfs/pitchfork/conf"
+
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
-	"path"
 )
 
 type Zookeeper struct {
@@ -120,24 +123,56 @@ func (z *Zookeeper) Store(rack, store string) (data []byte, err error) {
 	return
 }
 
-// SetVolumeStat set volume stat
-func (z *Zookeeper) SetVolumeState(volume *meta.Volume) (err error) {
+// UpdateVolumeState update volume state if freeSpace less than old state
+func (z *Zookeeper) UpdateVolumeState(volume *meta.Volume) (err error) {
 	var (
-		d      []byte
-		spath  string
-		vstate = &meta.VolumeState{
+		d         []byte
+		spath     string
+		oldVstate = &meta.VolumeState{}
+		vstate    = &meta.VolumeState{
 			TotalWriteProcessed: volume.Stats.TotalWriteProcessed,
 			TotalWriteDelay:     volume.Stats.TotalWriteDelay,
+			Dir:                 filepath.Dir(volume.Block.File),
 		}
 	)
 	vstate.FreeSpace = volume.Block.FreeSpace()
 	spath = path.Join(z.config.Zookeeper.VolumeRoot, fmt.Sprintf("%d", volume.Id))
+	if d, _, err = z.c.Get(spath); err != nil {
+		log.Errorf("zk.Get(\"%s\") error(%v)", spath, err)
+		return
+	}
+	if len(d) > 0 {
+		if err = json.Unmarshal(d, oldVstate); err != nil {
+			log.Errorf("json.Unmarshal() error(%v)", err)
+			return
+		}
+		if oldVstate.FreeSpace < vstate.FreeSpace {
+			return
+		}
+	}
 	if d, err = json.Marshal(vstate); err != nil {
 		log.Errorf("json.Marshal() error(%v)", err)
 		return
 	}
 	if _, err = z.c.Set(spath, d, -1); err != nil {
 		log.Errorf("zk.Set(\"%s\") error(%v)", spath, err)
+	}
+	return
+}
+
+// Groups watch the group nodes.
+func (z *Zookeeper) Groups() (nodes []string, err error) {
+	if nodes, _, err = z.c.Children(z.config.Zookeeper.GroupRoot); err != nil {
+		log.Errorf("zk.Children(\"%s\") error(%v)", z.config.Zookeeper.GroupRoot, err)
+	}
+	return
+}
+
+// GroupStores get stores of group
+func (z *Zookeeper) GroupStores(group string) (nodes []string, err error) {
+	var spath = path.Join(z.config.Zookeeper.GroupRoot, group)
+	if nodes, _, err = z.c.Children(spath); err != nil {
+		log.Errorf("zk.Children(\"%s\") error(%v)", spath, err)
 	}
 	return
 }

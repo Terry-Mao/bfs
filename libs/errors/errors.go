@@ -10,9 +10,11 @@ var (
 	errorMsg = map[int]string{
 		/* ========================= Store ========================= */
 		// common
-		RetOK:          "ok",
-		RetParamErr:    "store param error",
-		RetInternalErr: "internal server error",
+		RetOK:                 "ok",
+		RetParamErr:           "store param error",
+		RetInternalErr:        "internal server error",
+		RetServiceTimeout:     "service timeout",
+		RetServiceUnavailable: "service unavailable",
 		// api
 		RetUploadMaxFile: "exceed upload max file num",
 		// block

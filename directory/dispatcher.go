@@ -13,8 +13,8 @@ import (
 // Dispatcher ,
 // get raw data and processed into memory for http reqs
 type Dispatcher struct {
-	gids    []int            // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
-	wrtVids map[string]int32 // choose most suitable written volume, always order by rest space.
+	gids    []int              // for write eg:  gid:1;2   gids: [1,1,2,2,2,2,2]
+	wrtVids map[string][]int32 // choose most suitable written volume of dir, always order by rest space.
 	rand    *rand.Rand
 	rlock   sync.Mutex
 }
@@ -44,7 +44,8 @@ func (d *Dispatcher) Update(group map[int][]string,
 		i                          int
 		vid                        int32
 		gids                       []int
-		wrtVids                    map[string]int32
+		wrtVids                    map[string][]int32
+		tmpWrtVids                 map[string]map[string]int32
 		sid                        string
 		stores                     []string
 		restSpace, minScore, score int
@@ -54,7 +55,8 @@ func (d *Dispatcher) Update(group map[int][]string,
 		volumeState                *meta.VolumeState
 	)
 	gids = []int{}
-	wrtVids = map[string]int32{}
+	wrtVids = map[string][]int32{}
+	tmpWrtVids = map[string]map[string]int32{}
 	for gid, stores = range group {
 		write = true
 		// check all stores can writeable by the group.
@@ -90,8 +92,13 @@ func (d *Dispatcher) Update(group map[int][]string,
 				totalAddDelay = totalAddDelay + volumeState.TotalWriteDelay
 				// cacl most suitable written vid
 				if volumeState.FreeSpace > minFreeSpace {
-					if value, ok := wrtVids[sid]; !ok || vid < value {
-						wrtVids[sid] = vid
+					v, ok := tmpWrtVids[sid]
+					if !ok {
+						tmpWrtVids[sid] = map[string]int32{volumeState.Dir: vid}
+					} else {
+						if value, ok := v[volumeState.Dir]; !ok || vid < value {
+							v[volumeState.Dir] = vid
+						}
 					}
 				}
 			}
@@ -104,8 +111,17 @@ func (d *Dispatcher) Update(group map[int][]string,
 			gids = append(gids, gid)
 		}
 	}
-	d.gids = gids
-	d.wrtVids = wrtVids
+	if len(gids) > 0 {
+		d.gids = gids
+	}
+	for sid, v := range tmpWrtVids {
+		for _, vid := range v {
+			wrtVids[sid] = append(wrtVids[sid], vid)
+		}
+	}
+	if len(wrtVids) > 0 {
+		d.wrtVids = wrtVids
+	}
 	return
 }
 
@@ -133,6 +149,7 @@ func (d *Dispatcher) VolumeID(group map[int][]string, storeVolume map[string][]i
 	var (
 		stores []string
 		gid    int
+		vids   []int32
 	)
 	if len(d.gids) == 0 {
 		err = errors.ErrStoreNotAvailable
@@ -146,6 +163,7 @@ func (d *Dispatcher) VolumeID(group map[int][]string, storeVolume map[string][]i
 		err = errors.ErrZookeeperDataError
 		return
 	}
-	vid = d.wrtVids[stores[0]]
+	vids = d.wrtVids[stores[0]]
+	vid = vids[d.rand.Intn(len(vids))]
 	return
 }

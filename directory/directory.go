@@ -27,8 +27,7 @@ type Directory struct {
 	storeVolume map[string][]int32     // store_server_id:volume_ids
 
 	// GROUP
-	storeGroup map[string]int   // store_server_id:group
-	group      map[int][]string // group_id:store_servers
+	group map[int][]string // group_id:store_servers
 
 	// VOLUME
 	volume      map[int32]*meta.VolumeState // volume_id:volume_state
@@ -161,30 +160,28 @@ func (d *Directory) syncGroups() (err error) {
 		str            string
 		groups, stores []string
 		group          map[int][]string
-		storeGroup     map[string]int
 	)
 	// get all groups
 	if groups, err = d.zk.Groups(); err != nil {
 		return
 	}
 	group = make(map[int][]string)
-	storeGroup = make(map[string]int)
 	for _, str = range groups {
 		// get all stores by the group
 		if stores, err = d.zk.GroupStores(str); err != nil {
 			return
+		}
+		if len(stores) == 0 {
+			log.Errorf("group:%s is empty", str)
+			continue
 		}
 		if gid, err = strconv.Atoi(str); err != nil {
 			log.Errorf("wrong group:%s", str)
 			continue
 		}
 		group[gid] = stores
-		for _, str = range stores {
-			storeGroup[str] = gid
-		}
 	}
 	d.group = group
-	d.storeGroup = storeGroup
 	return
 }
 
@@ -218,10 +215,8 @@ func (d *Directory) SyncZookeeper() {
 		select {
 		case <-sev:
 			log.Infof("stores status change or new store")
-			break
 		case <-time.After(d.config.Zookeeper.PullInterval.Duration):
 			log.Infof("pull from zk")
-			break
 		}
 	}
 }

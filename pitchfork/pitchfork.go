@@ -1,13 +1,17 @@
 package main
 
 import (
+	"encoding/json"
+	"math/rand"
+	"sort"
+	"sync"
+	"time"
+
 	"bfs/libs/errors"
 	"bfs/libs/meta"
+
 	"bfs/pitchfork/conf"
 	myzk "bfs/pitchfork/zk"
-	"encoding/json"
-	"sort"
-	"time"
 
 	log "github.com/golang/glog"
 	"github.com/samuel/go-zookeeper/zk"
@@ -56,8 +60,17 @@ func (p *Pitchfork) watch() (res []string, ev <-chan zk.Event, err error) {
 	return
 }
 
+func (p *Pitchfork) groups() (groups []string, err error) {
+	if groups, err = p.zk.Groups(); err != nil {
+		log.Errorf("zk.Groups() error(%v)", err)
+		return
+	}
+	sort.Sort(sort.StringSlice(groups))
+	return
+}
+
 // watchStores get all the store nodes and set up the watcher in the zookeeper.
-func (p *Pitchfork) watchStores() (res []*meta.Store, ev <-chan zk.Event, err error) {
+func (p *Pitchfork) watchStores() (res map[string]*meta.Store, ev <-chan zk.Event, err error) {
 	var (
 		rack, store   string
 		racks, stores []string
@@ -68,6 +81,7 @@ func (p *Pitchfork) watchStores() (res []*meta.Store, ev <-chan zk.Event, err er
 		log.Errorf("zk.WatchGetStore() error(%v)", err)
 		return
 	}
+	res = make(map[string]*meta.Store)
 	for _, rack = range racks {
 		if stores, err = p.zk.Stores(rack); err != nil {
 			return
@@ -81,26 +95,25 @@ func (p *Pitchfork) watchStores() (res []*meta.Store, ev <-chan zk.Event, err er
 				log.Errorf("json.Unmarshal() error(%v)", err)
 				return
 			}
-			res = append(res, storeMeta)
+			res[storeMeta.Id] = storeMeta
 		}
 	}
-	sort.Sort(meta.StoreList(res))
 	return
 }
 
 // Probe main flow of pitchfork server.
 func (p *Pitchfork) Probe() {
 	var (
-		stores     []*meta.Store
+		groups     []string
 		pitchforks []string
+		storeMetas map[string]*meta.Store
 		sev        <-chan zk.Event
 		pev        <-chan zk.Event
-		stop       chan struct{}
-		store      *meta.Store
 		err        error
+		wg         sync.WaitGroup
 	)
 	for {
-		if stores, sev, err = p.watchStores(); err != nil {
+		if storeMetas, sev, err = p.watchStores(); err != nil {
 			log.Errorf("watchGetStores() called error(%v)", err)
 			time.Sleep(_retrySleep)
 			continue
@@ -110,41 +123,49 @@ func (p *Pitchfork) Probe() {
 			time.Sleep(_retrySleep)
 			continue
 		}
-		if stores = p.divide(pitchforks, stores); err != nil || len(stores) == 0 {
+		if groups, err = p.groups(); err != nil {
+			log.Errorf("get groups() error(%v)", err)
 			time.Sleep(_retrySleep)
 			continue
 		}
-		stop = make(chan struct{})
-		for _, store = range stores {
-			go p.checkHealth(store, stop)
-			go p.checkNeedles(store, stop)
+		if groups = p.divide(pitchforks, groups); err != nil || len(groups) == 0 {
+			time.Sleep(_retrySleep)
+			continue
 		}
+		wg.Add(len(groups))
+		for _, group := range groups {
+			go p.healthCheck(group, storeMetas, &wg)
+		}
+		wg.Wait()
 		select {
 		case <-sev:
 			log.Infof("store nodes change, rebalance")
 		case <-pev:
 			log.Infof("pitchfork nodes change, rebalance")
+
 		case <-time.After(p.config.Store.RackCheckInterval.Duration):
 			log.Infof("pitchfork poll zk")
 		}
-		close(stop)
 	}
 }
 
 // divide a set of stores between a set of pitchforks.
-func (p *Pitchfork) divide(pitchforks []string, stores []*meta.Store) []*meta.Store {
+func (p *Pitchfork) divide(pitchforks []string, groups []string) []string {
 	var (
 		n, m        int
 		ss, ps      int
 		first, last int
 		node        string
-		store       *meta.Store
-		sm          = make(map[string][]*meta.Store)
+		sm          = make(map[string][]string)
 	)
-	ss = len(stores)
+	ss = len(groups)
 	ps = len(pitchforks)
-	if ss == 0 || ps == 0 || ss < ps {
+	if ss == 0 || ps == 0 {
 		return nil
+	}
+	if ss < ps {
+		// rand get a group
+		return []string{groups[rand.Intn(ss)]}
 	}
 	n = ss / ps
 	m = ss % ps
@@ -159,109 +180,104 @@ func (p *Pitchfork) divide(pitchforks []string, stores []*meta.Store) []*meta.St
 		if last > ss {
 			last = ss
 		}
-		for _, store = range stores[first:last] {
-			sm[node] = append(sm[node], store)
-		}
+		sm[node] = append(sm[node], groups[first:last]...)
 		first = last
 	}
 	return sm[p.ID]
 }
 
-// checkHealth check the store health.
-func (p *Pitchfork) checkHealth(store *meta.Store, stop chan struct{}) {
+// check the group health.
+func (p *Pitchfork) healthCheck(group string, sm map[string]*meta.Store, wg *sync.WaitGroup) {
 	var (
-		err       error
-		status, i int
-		volume    *meta.Volume
-		volumes   []*meta.Volume
+		err           error
+		nodes         []string
+		groupReadOnly = false
 	)
-	log.Infof("check_health job start")
-	for {
-		select {
-		case <-stop:
-			log.Infof("check_health job stop")
-			return
-		case <-time.After(p.config.Store.StoreCheckInterval.Duration):
-			break
+	defer func() {
+		wg.Done()
+		log.Infof("health check job stop")
+	}()
+	log.Infof("health check job start")
+	if nodes, err = p.zk.GroupStores(group); err != nil {
+		log.Errorf("zk.GroupStores(%s) error(%v)", group, err)
+		return
+	}
+	stores := make([]*meta.Store, 0, len(nodes))
+	for _, sid := range nodes {
+		if store, ok := sm[sid]; ok {
+			stores = append(stores, store)
 		}
-		storeReadOnly := true
-		status = store.Status
-		store.Status = meta.StoreStatusHealth
-		for i = 0; i < _retryCount; i++ {
-			if volumes, err = store.Info(); err == nil {
-				break
-			}
-			time.Sleep(_retrySleep)
+	}
+	for _, store := range stores {
+		p.syncStore(store)
+		if store.Status == meta.StoreStatusRead {
+			groupReadOnly = true
 		}
-		if err == nil {
-			for _, volume = range volumes {
-				if volume.Block.LastErr != nil {
-					log.Infof("get store block.lastErr:%s host:%s", volume.Block.LastErr, store.Stat)
-					store.Status = meta.StoreStatusFail
-					break
-				} else if !volume.Block.Full() {
-					log.Infof("block: %s, offset: %d", volume.Block.File, volume.Block.Offset)
-					storeReadOnly = false
-				}
-				if err = p.zk.SetVolumeState(volume); err != nil {
-					log.Errorf("zk.SetVolumeState() error(%v)", err)
-				}
-			}
-		} else {
-			log.Errorf("get store info failed, retry host:%s", store.Stat)
-			store.Status = meta.StoreStatusFail
-		}
-		if storeReadOnly {
+		log.Infof("after check, group:%s,store(%+v)", group, store)
+	}
+	if groupReadOnly {
+		for _, store := range stores {
 			store.Status = meta.StoreStatusRead
-		}
-		if status != store.Status {
 			if err = p.zk.SetStore(store); err != nil {
-				log.Errorf("update store zk status failed, retry")
-				continue
+				log.Errorf("zk.SetStore(%+v) error(%v)", store, err)
 			}
 		}
 	}
 }
 
-// checkNeedles check the store health.
-func (p *Pitchfork) checkNeedles(store *meta.Store, stop chan struct{}) {
+func (p *Pitchfork) syncStore(store *meta.Store) {
 	var (
 		err     error
 		status  int
 		volume  *meta.Volume
 		volumes []*meta.Volume
 	)
-	log.Infof("checkNeedles job start")
-	for {
-		select {
-		case <-stop:
-			log.Infof("checkNeedles job stop")
-			return
-		case <-time.After(p.config.Store.NeedleCheckInterval.Duration):
-			break
+	if store.Status == meta.StoreStatusSync {
+		log.Infof("store status is sync, health check will be ignored")
+		return
+	}
+	storeReadOnly := true
+	status = store.Status
+	store.Status = meta.StoreStatusHealth
+	if volumes, err = store.Info(); err == errors.ErrServiceTimeout {
+		// ignore timeout and no retry.
+		log.Errorf("store.Info() err:%v", err)
+		return
+	}
+	if err == errors.ErrServiceUnavailable {
+		log.Errorf("store.Info() err:%v", err)
+		store.Status = meta.StoreStatusFail
+		goto failed
+	} else if err != nil {
+		log.Errorf("get store info failed, retry host:%s", store.Stat)
+		store.Status = meta.StoreStatusFail
+		goto failed
+	}
+	for _, volume = range volumes {
+		if volume.Block.LastErr != nil {
+			log.Infof("get store block.lastErr:%s host:%s", volume.Block.LastErr, store.Stat)
+			store.Status = meta.StoreStatusFail
+			goto failed
+		} else if !volume.Block.Full() {
+			storeReadOnly = false
 		}
-		if volumes, err = store.Info(); err != nil {
-			log.Errorf("get store info failed, retry host:%s", store.Stat)
-			continue
+		if err = p.zk.UpdateVolumeState(volume); err != nil {
+			log.Errorf("zk.UpdateVolumeState() error(%v)", err)
 		}
-		status = store.Status
-		for _, volume = range volumes {
-			if err = volume.Block.LastErr; err != nil {
-				// ignore volume error
-				break
-			}
-			// ignore timeout
-			if err = store.Head(volume.Id); err == errors.ErrInternal {
-				store.Status = meta.StoreStatusFail
-				goto failed
-			}
+	}
+	if storeReadOnly {
+		store.Status = meta.StoreStatusRead
+	}
+	if len(volumes) > 0 {
+		volume = volumes[rand.Intn(len(volumes))]
+		if err = store.Head(volume.Id); err == errors.ErrInternal {
+			store.Status = meta.StoreStatusFail
 		}
-	failed:
-		if status != store.Status {
-			if err = p.zk.SetStore(store); err != nil {
-				log.Errorf("update store zk status failed, retry")
-				continue
-			}
+	}
+failed:
+	if status != store.Status {
+		if err = p.zk.SetStore(store); err != nil {
+			log.Errorf("update store zk status failed, retry")
 		}
 	}
 }

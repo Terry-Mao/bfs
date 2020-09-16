@@ -17,4 +17,5 @@ type VolumeState struct {
 	TotalWriteProcessed uint64 `json:"total_write_processed"`
 	TotalWriteDelay     uint64 `json:"total_write_delay"`
 	FreeSpace           uint32 `json:"free_space"`
+	Dir                 string `json:"dir"`
 }

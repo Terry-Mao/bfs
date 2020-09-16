@@ -1,10 +1,11 @@
 package conf
 
 import (
-	"github.com/BurntSushi/toml"
 	"io/ioutil"
 	"os"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
 type Config struct {
@@ -22,6 +23,7 @@ type Zookeeper struct {
 	VolumeRoot    string
 	StoreRoot     string
 	PitchforkRoot string
+	GroupRoot     string
 	Addrs         []string
 	Timeout       duration
 }
