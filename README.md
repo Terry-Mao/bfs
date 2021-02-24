@@ -27,8 +27,7 @@ bfs
 ### 二、搭建golang、python环境
 
  * 参考golang官网. 安装请查看[这里](https://golang.org/doc/install).
- * 参考python官网. 安装请查看[这里]
-(https://www.python.org/)
+ * 参考python官网. 安装请查看[这里](https://www.python.org/)
 
 ### 三、安装gosnowflake
 
